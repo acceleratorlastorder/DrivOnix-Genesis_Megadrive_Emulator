@@ -32,7 +32,7 @@ void BitReset(type& data, int position)
 }
 
 template <typename type> 
-void BitGetVal(type data, int position)
+int BitGetVal(type data, int position)
 {
 	type mask = 1 << position;
 	return (data & mask) ? 1 : 0;

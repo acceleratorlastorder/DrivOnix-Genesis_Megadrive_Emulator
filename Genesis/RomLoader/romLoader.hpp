@@ -31,25 +31,6 @@ H1C8:    MEMO                                               12
 H1F0:    Country in which the product                       13
 */
 
-typedef struct
-{
-	byte consoleName[0x10];
-	byte copyright[0x10];
-	byte domesticName[0x30];
-	byte overseasName[0x30];
-	byte production[0xE];
-	word checksum;
-	byte PCodeVNumber[0x10];
-	word romStart;
-	word romEnd;
-	word ramStart;
-	word ramEnd;
-	byte sram[0xC];
-	byte modem[0xC];
-	byte memo[0x28];
-	byte country[0x10];
-}HEADER;
-
 class RomLoader
 {
 public:
@@ -58,6 +39,26 @@ public:
 	static void PrintRomHeader();
 
 private:
+
+	typedef struct
+	{
+		byte consoleName[0x10];
+		byte copyright[0x10];
+		byte domesticName[0x30];
+		byte overseasName[0x30];
+		byte production[0xE];
+		word checksum;
+		byte PCodeVNumber[0x10];
+		word romStart;
+		word romEnd;
+		word ramStart;
+		word ramEnd;
+		byte sram[0xC];
+		byte modem[0xC];
+		byte memo[0x28];
+		byte country[0x10];
+	}HEADER;
+
 	HEADER header;
 	std::vector<byte> cartridgeMemory;
 	std::vector<byte> sram;
