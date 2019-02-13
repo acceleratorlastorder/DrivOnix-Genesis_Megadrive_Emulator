@@ -33,21 +33,21 @@ H1F0:    Country in which the product                       13
 
 typedef struct
 {
-	unsigned char consoleName[0x10];
-	unsigned char copyright[0x10];
-	unsigned char domesticName[0x30];
-	unsigned char overseasName[0x30];
-	unsigned char production[0xE];
+	byte consoleName[0x10];
+	byte copyright[0x10];
+	byte domesticName[0x30];
+	byte overseasName[0x30];
+	byte production[0xE];
 	word checksum;
-	unsigned char PCodeVNumber[0x10];
+	byte PCodeVNumber[0x10];
 	word romStart;
 	word romEnd;
 	word ramStart;
 	word ramEnd;
-	unsigned char sram[0xC];
-	unsigned char modem[0xC];
-	unsigned char memo[0x28];
-	unsigned char country[0x10];
+	byte sram[0xC];
+	byte modem[0xC];
+	byte memo[0x28];
+	byte country[0x10];
 }HEADER;
 
 class RomLoader
