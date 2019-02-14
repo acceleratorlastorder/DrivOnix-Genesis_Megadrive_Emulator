@@ -1080,7 +1080,6 @@ void M68k::OpcodeABCD(word opcode)
 	else
 	{
 		SetDataRegister(regx, (byte)result, BYTE);
+		//cycles
 	}
-
-
 }

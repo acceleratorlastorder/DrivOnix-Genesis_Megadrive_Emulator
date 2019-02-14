@@ -29,15 +29,21 @@ public:
 	static CPU_STATE_DEBUG GetCpuState();
 	//End UnitTests
 
-	//Start opcodes
-	static void OpcodeABCD(word opcode);
-	//End opcodes
-
 private:
 
 	static M68k& get(void);
 
+	void CheckPrivilege();
+	void SetDataRegister(int id, dword result, DATASIZE size);
+	void SetAddressRegister(int id, dword result, DATASIZE size);
+	word SignExtendWord(byte data);
+	dword SignExtendDWord(word data);
+	EA_DATA GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset);
+	EA_DATA SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset);	
 
+	//Start opcodes
+	void OpcodeABCD(word opcode);
+	//End opcodes
 
 	//Start EA
 	enum DATASIZE

@@ -1,29 +1,49 @@
-#include "emu.hpp"
+#include "genesis.hpp"
 
 int main(void)
 {
 
-	Emu::FileBrowser();
+	Genesis::FileBrowser();
 	RomLoader::LoadRomFile(Emu::GetRomName());
 	RomLoader::PrintRomHeader();
 
-	while(1);
+	Genesis::Init();
+	M68k::Init();
 
 	return 0;
 }
 
-Emu::Emu()
+Genesis::Emu()
 {
 
 }
 
-Emu& Emu::get(void)
+void Genesis::Init()
+{
+	get().M68kMemory.reserve(0x1000000);
+
+	get().M68kMemory[0xA10009] = 0x00;
+	get().M68kMemory[0xA1000B] = 0x00;
+	get().M68kMemory[0xA1000D] = 0x00;
+	get().M68kMemory[0xA1000F] = 0xFF;
+	get().M68kMemory[0xA10011] = 0x00;
+	get().M68kMemory[0xA10013] = 0x00;
+	get().M68kMemory[0xA10015] = 0xFF;
+	get().M68kMemory[0xA10017] = 0x00;
+	get().M68kMemory[0xA10019] = 0x00;
+	get().M68kMemory[0xA1001B] = 0xFB;
+	get().M68kMemory[0xA1001D] = 0x00;
+	get().M68kMemory[0xA1001F] = 0x00;
+
+}
+
+Emu& Genesis::get(void)
 {
 	static Emu instance;
 	return instance;
 }
 
-void Emu::FileBrowser()
+void Genesis::FileBrowser()
 {
 	OPENFILENAME ofn;
 	memset(&get().romName, 0, sizeof(get().romName));
@@ -39,7 +59,7 @@ void Emu::FileBrowser()
     GetOpenFileNameA(&ofn);
 }
 
-char* Emu::GetRomName()
+char* Genesis::GetRomName()
 {
 	return get().romName;
 }
