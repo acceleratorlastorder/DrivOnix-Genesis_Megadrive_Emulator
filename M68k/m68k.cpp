@@ -155,6 +155,23 @@ void M68k::SetDataRegister(int id, dword result, DATASIZE size)
 	}
 }
 
+void M68k::SetAddressRegister(int id, dword result, DATASIZE size)
+{
+	switch(size)
+	{
+		case BYTE:
+		std::cout << "M68k :: Error : Trying to write a byte to an address register" << std::endl;
+		break;
+
+		case WORD:
+		get().registerAddress[id] = result;
+		break;
+
+		case LONG:
+		get().registerAddress[id] = result;
+	}
+}
+
 word M68k::SignExtendWord(byte data)
 {
 	word result = data;
@@ -602,13 +619,13 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 
 						case WORD:
 						result.cycles = 4;
-						result.operand = //readmem16(programCounter + 1)
+						result.operand = //readmem16(programCounter)
 						result.PCadvance = 2;
 						break;
 
 						case LONG:
 						result.cycles = 8;
-						result.operand = //readmem32(programCounter + 1)
+						result.operand = //readmem32(programCounter)
 						result.PCadvance = 4;
 						break;
 					}
@@ -620,28 +637,450 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 	}
 	return result;
 }
-void M68k::SetAddressRegister(int id, dword result, DATASIZE size)
+
+EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset)
 {
-	switch(size)
+	EA_DATA result = EA_DATA();
+	result.dataSize = size;
+
+	switch(mode)
 	{
-		case BYTE:
-		std::cout << "M68k :: Error : Trying to write a byte to an address register" << std::endl;
+		case EA_DATA_REG:
+		SetDataRegister(reg, data, size)
+		result.eatype = EA_DATA_REG;
 		break;
 
-		case WORD:
-		get().registerAddress[id] = result;
+		case EA_ADDRESS_REG:
+		SetAddressRegister(reg, data, size);
+		result.eatype = EA_ADDRESS_REG;
 		break;
 
-		case LONG:
-		get().registerAddress[id] = result;
+		case EA_ADDRESS_REG_INDIRECT:
+		{
+			dword address = get().registerAddress[reg];
+			address += offset;
+			result.pointer = address;
+			result.eatype = EA_ADDRESS_REG_INDIRECT;
+
+			switch(size)
+			{
+				case BYTE:
+				result.cycles = 4;
+				//writemem8(address, (byte)data);
+				break;
+
+				case WORD:
+				result.cycles = 4;
+				//writemem16(address, (word)data);
+				break;
+
+				case LONG:
+				result.cycles = 8;
+				//writemem32(address, data);
+				break;
+			}
+		}
+		break;
+
+		case EA_ADDRESS_REG_INDIRECT_POST_INC:
+		{
+			dword address = get().registerAddress[reg];
+			result.pointer = address;
+			result.eatype = EA_ADDRESS_REG_INDIRECT_POST_INC;
+
+			switch(size)
+			{
+				case BYTE:
+				{
+					result.cycles = 4;
+					//writemem8(address, (byte)data);
+
+					get().registerAddress[reg] +=1;
+
+					if(reg == 7) //le stackPointer est incrémenté par deux ici, pour garder son alignement (word)
+					{
+						get().registerAddress[reg] += 1;
+					}
+				}
+				break;
+
+				case WORD:
+				{
+					result.cycles = 4;
+					//writemem16(address, (word)data);
+
+					get().registerAddress[reg] += 2;
+				}
+				break;
+
+				case LONG:
+				{
+					result.cycles = 8;
+					//writemem32(address, data);
+
+					get().registerAddress[reg] += 4;
+				}
+				break;
+			}
+		}
+		break;
+
+		case EA_ADDRESS_REG_INDIRECT_PRE_DEC:
+		{
+			result.eatype = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
+
+			switch(size)
+			{
+				case BYTE:
+				{
+					result.cycles = 6;
+
+					dword address = get().registerAddress[reg] - 1;
+
+					if(reg == 7)//stackpointer alignement
+					{
+						address -= 1;
+					}
+
+					get().registerAddress[reg] -= 1;
+
+					if(reg == 7)//stackpointer alignement
+					{
+						get().registerAddress[reg] -= 1;
+					}
+
+					result.pointer = address;
+					//writemem8(address, (byte)data);
+				}
+				break;
+
+				case WORD:
+				{
+					result.cycles = 6;
+
+					dword address = get().registerAddress[reg] - 2;
+
+					get().registerAddress[reg] -= 2;
+
+					result.pointer = address;
+					//writemem16(address, (word)data);
+				}
+				break;
+
+				case LONG:
+				{
+					result.cycles = 10;
+
+					dword address = get().registerAddress[reg] - 4;
+
+					get().registerAddress[reg] -= 4;
+
+					result.pointer = address;
+					//writemem32(address, data);
+				}
+				break;
+			}
+		}
+		break;
+
+		case EA_ADDRESS_REG_INDIRECT_DISPLACEMENT:
+		{
+			result.eatype = EA_ADDRESS_REG_INDIRECT_DISPLACEMENT;
+			result.PCadvance = 2;
+
+			dword address = get().registerAddress[reg] + offset;
+
+			signed_dword displacement = get().SignExtendDWord(/*readmem16(programcounter))*/);
+
+			address += displacement;
+
+			result.pointer = address;
+
+			switch(size)
+			{
+				case BYTE:
+				result.cycles = 8;
+				//writemem8(address, (byte)data);
+				break;
+
+				case WORD:
+				result.cycles = 8;
+				//writemem16(address, (word)data);
+				break;
+
+				case LONG:
+				result.cycles = 12;
+				//writemem32(address, data);
+				break;
+			}
+		}
+		break;
+
+		case EA_ADDRESS_REG_INDIRECT_INDEX:
+		{
+			result.eatype = EA_ADDRESS_REG_INDIRECT_INDEX;
+			result.PCadvance = 2;
+
+			word Data = /*readmem16(programcounter)*/;
+
+			bool inDataReg = !TestBit(Data, 15);
+
+			int regIndex = (Data >> 12) & 0x7;
+
+			bool isLong = TestBit(Data, 11)
+
+			byte displacementData = Data & 0xFF;
+
+			dword displacement = SignExtendDWord(SignExtendWord(displacementData));
+
+			result.pointer = inDataReg ? get().registerData[regIndex] : get().registerAddress[regIndex];
+
+			if(!isLong)
+			{
+				word pointer = result.pointer & 0xFFFF;
+				result.pointer = SignExtendDWord(pointer);
+			}
+
+			int scale = (Data >> 9) & 0x3;
+
+			switch(scale)
+			{
+				case 1:
+				result.pointer *= 2;
+				break;
+
+				case 2:
+				result.pointer *= 4;
+				break;
+
+				case 3:
+				result.pointer *= 8;
+				break;
+			}
+
+			result.pointer += get().registerAddress[reg];
+			result.pointer += displacement;
+			result.pointer += offset;
+
+			switch(size)
+			{
+				case BYTE:
+				result.cycles = 10;
+				//writemem8(result.pointer, (byte)data);
+				break;
+
+				case WORD:
+				result.cycles = 10;
+				//writemem16(result.pointer, (word)data);
+				break;
+
+				case LONG:
+				result.cycles = 14;
+				//writemem32(result.pointer, data);
+				break;
+			}
+		}
+		break;
+
+		case EA_MODE_7:
+		{
+			result.eatype = EA_MODE_7;
+
+			switch(reg)
+			{
+				case EA_MODE_7_ABS_ADDRESS_WORD:
+				{
+					result.mode7Type = EA_MODE_7_ABS_ADDRESS_WORD;
+					result.pointer = SignExtendDWord(/*readmem16(programCounter)*/) + offset;
+					result.PCadvance = 2;
+
+					switch(size)
+					{
+						case BYTE:
+						result.cycles = 8;
+						//writemem8(result.pointer, (byte)data);
+						break;
+
+						case WORD:
+						result.cycles = 8;
+						//writemem16(result.pointer, (word)data);
+						break;
+
+						case LONG:
+						result.cycles = 12;
+						//writemem32(result.pointer, data);
+						break;
+					}
+				}
+				break;
+
+				case EA_MODE_7_ABS_ADDRESS_LONG:
+				{
+					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
+					result.pointer = (/*readmem16(programcounter)*/ << 16) | /*readmem16(programcounter + 2)*/;
+					result.pointer += offset;
+					result.PCadvance = 4;
+
+					switch(size)
+					{
+						case BYTE:
+						result.cycles = 12;
+						//writemem8(result.pointer, (byte)data);
+						break;
+
+						case WORD:
+						result.cycles = 12;
+						//writemem16(result.pointer, (word)data);
+						break;
+
+						case LONG:
+						result.cycles = 16;
+						//writemem32(result.pointer, data);
+						break;
+					}
+				}
+				break;
+
+				case EA_MODE_7_PC_WITH_DISPLACEMENT:
+				//Que pour le read
+				break;
+
+				case EA_MODE_7_PC_WITH_PREINDEX:
+				{
+					result.eatype = EA_MODE_7_PC_WITH_PREINDEX;
+					result.PCadvance = 2;
+
+					word Data = /*readmem16(programcounter)*/;
+
+					bool inDataReg = !TestBit(Data, 15);
+
+					int regIndex = (Data >> 12) & 0x7;
+
+					bool isLong = TestBit(Data, 11)
+
+					byte displacementData = Data & 0xFF;
+
+					dword displacement = SignExtendDWord(SignExtendWord(displacementData));
+
+					result.pointer = inDataReg ? get().registerData[regIndex] : get().registerAddress[regIndex];
+
+					if(!isLong)
+					{
+						word pointer = result.pointer & 0xFFFF;
+						result.pointer = SignExtendDWord(pointer);
+					}
+
+					int scale = (Data >> 9) & 0x3;
+
+					switch(scale)
+					{
+						case 1:
+						result.pointer *= 2;
+						break;
+
+						case 2:
+						result.pointer *= 4;
+						break;
+
+						case 3:
+						result.pointer *= 8;
+						break;
+					}
+
+					result.pointer += get().programCounter;
+					result.pointer += displacement;
+					result.pointer += offset;
+
+					switch(size)
+					{
+						case BYTE:
+						result.cycles = 10;
+						//writemem8(result.pointer, (byte)data);
+						break;
+
+						case WORD:
+						result.cycles = 10;
+						//writemem16(result.pointer, (word)data);
+						break;
+
+						case LONG:
+						result.cycles = 14;
+						//writemem32(result.pointer, data);
+						break;
+					}
+				}
+				break;
+
+				case EA_MODE_7_IMMEDIATE_DATA:
+				//que pour le read
+				break;
+			}
+		}
+		break;
 	}
+	return result;
 }
 
 void M68k::OpcodeABCD(word opcode)
 {
 	byte rx = (opcode >> 9) & 0x7;
-	byte rm = (opcode >> 3) & 0x7;
+	byte rm = (opcode >> 3) & 0x1;
 	byte ry = opcode & 0x7;
+
+	byte src;
+	byte dest;
+
+	if(rm)
+	{
+		dest = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regx, BYTE, true).operand;
+		src = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regy, BYTE, false).operand;
+	}
+	else
+	{
+		dest = (byte)get().registerData[regx];
+		src = (byte)get().registerData[regy];
+	}
+
+	byte xflag = TestBit(get().CCR, get().X_FLAG);
+
+	word result = dest + src + xflag;
+
+	//BCD OVERFLOW CORRECTION
+	if(((dest & 0xF) + (src & 0xF) + xflag) > 9)
+	{
+		result += 0x6;
+	}
+
+	if((result >> 4) > 9)
+	{
+		result += 0x60;
+	}
+
+	if(result > 0x99)
+	{
+		BitSet(get().CCR, get().C_FLAG);
+		BitSet(get().CCR, get().X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, get().C_FLAG);
+		BitReset(get().CCR, get().X_FLAG);
+	}
+
+	if((result & 0xFF) != 0)
+	{
+		BitReset(get().CCR, get().Z_FLAG);
+	}
+
+	if(rm)
+	{
+		EA_DATA data = SetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regx, (byte)result, BYTE);
+		//cycles
+	}
+	else
+	{
+		SetDataRegister(regx, (byte)result, BYTE);
+	}
 
 
 }
