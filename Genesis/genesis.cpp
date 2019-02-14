@@ -37,9 +37,9 @@ void Genesis::Init()
 
 }
 
-Emu& Genesis::get(void)
+Genesis& Genesis::get(void)
 {
-	static Emu instance;
+	static Genesis instance;
 	return instance;
 }
 
