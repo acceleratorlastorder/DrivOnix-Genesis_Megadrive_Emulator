@@ -1,2 +1,2 @@
-g++ -g -Wall unitTests.cpp ../M68k/m68k.cpp -o UnitTests.exe
+g++ -g -Wall unitTests.cpp ../Genesis/genesis.cpp ../Bits/bitsUtils.cpp ../Genesis/RomLoader/romLoader.cpp ../M68k/m68k.cpp -o UnitTests.exe -lmingw32 -lcomdlg32 -static-libgcc -static-libstdc++ -Wno-unused-variable -Wno-unused-but-set-variable
 pause

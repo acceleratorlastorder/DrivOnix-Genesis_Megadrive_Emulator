@@ -34,12 +34,12 @@ void M68k::Init()
 		get().registerAddress[i] = 0x0;
 	}
 
-	get().registerAddress[0x7] = 0x0; //get().registerAddress[0x7] = readmem32(0x0);
+	get().registerAddress[0x7] = Genesis::M68KReadMemoryLONG(0x0);
 
 	get().supervisorStackPointer = get().registerAddress[0x7];
 	get().userStackPointer = get().registerAddress[0x7];
 	get().superVisorModeActivated = true;
-	get().programCounter = 0x0; //get().programCounter = readmem32(0x4);
+	get().programCounter = Genesis::M68KReadMemoryLONG(0x4);
 
 	get().programCounterStart = get().programCounter; 
 
@@ -125,7 +125,7 @@ int M68k::Update()
 	}
 
 	get().opcodeClicks = 0;
-	const word opcode = 0x0; //readmem16(programcounter);
+	const word opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
 
 	get().programCounterStart = get().programCounter;
 	get().programCounter += 2;
@@ -189,12 +189,12 @@ dword M68k::SignExtendDWord(word data)
 	{
 		result |= 0xFFFF0000;
 	}
-	return res;
+	return result;
 }
 
-EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset)
+M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset)
 {
-	EA_DATA result = EA_DATA();
+	EA_DATA result;
 	result.dataSize = size;
 
 	switch(mode)
@@ -220,17 +220,17 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 			{
 				case BYTE:
 				result.cycles = 4;
-				result.operand = //readMem8(address);
+				result.operand = Genesis::M68KReadMemoryBYTE(address);
 				break;
 
 				case WORD:
 				result.cycles = 4;
-				result.operand = //readmem16(address);
+				result.operand = Genesis::M68KReadMemoryWORD(address);
 				break;
 
 				case LONG:
 				result.cycles = 8;
-				result.operand = //readmem32(address);
+				result.operand = Genesis::M68KReadMemoryLONG(address);
 				break;
 			}
 		}
@@ -247,7 +247,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case BYTE:
 				{
 					result.cycles = 4;
-					result.operand = //readmem8(address)
+					result.operand = Genesis::M68KReadMemoryBYTE(address);
 
 					if(!readOnly)
 					{
@@ -264,7 +264,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case WORD:
 				{
 					result.cycles = 4;
-					result.operand = //readmem16
+					result.operand = Genesis::M68KReadMemoryWORD(address);
 					if(!readOnly)
 					{
 						get().registerAddress[reg] += 2;
@@ -275,7 +275,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case LONG:
 				{
 					result.cycles = 8;
-					result.operand = //readmem32()
+					result.operand = Genesis::M68KReadMemoryLONG(address);
 
 					if(!readOnly)
 					{
@@ -315,7 +315,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 					}
 
 					result.pointer = address;
-					result.operand = //readmem8(address);
+					result.operand = Genesis::M68KReadMemoryBYTE(address);
 				}
 				break;
 
@@ -331,7 +331,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 					}
 
 					result.pointer = address;
-					result.operand = //readmem16(address)
+					result.operand = Genesis::M68KReadMemoryWORD(address);
 				}
 				break;
 
@@ -347,7 +347,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 					}
 
 					result.pointer = address;
-					result.operand = //readmem32(address);
+					result.operand = Genesis::M68KReadMemoryLONG(address);
 				}
 				break;
 			}
@@ -361,7 +361,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 
 			dword address = get().registerAddress[reg] + offset;
 
-			signed_dword displacement = get().SignExtendDWord(/*readmem16(programcounter))*/);
+			signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
 
 			address += displacement;
 
@@ -371,17 +371,17 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 			{
 				case BYTE:
 				result.cycles = 8;
-				result.operand = //readmem8(address)
+				result.operand = Genesis::M68KReadMemoryBYTE(address);
 				break;
 
 				case WORD:
 				result.cycles = 8;
-				result.operand = //readmem16(address)
+				result.operand = Genesis::M68KReadMemoryWORD(address);
 				break;
 
 				case LONG:
 				result.cycles = 12;
-				result.operand = //readmem32(address)
+				result.operand = Genesis::M68KReadMemoryLONG(address);
 				break;
 			}
 		}
@@ -392,13 +392,13 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 			result.eatype = EA_ADDRESS_REG_INDIRECT_INDEX;
 			result.PCadvance = 2;
 
-			word data = /*readmem16(programcounter)*/;
+			word data = Genesis::M68KReadMemoryWORD(get().programCounter);
 
 			bool inDataReg = !TestBit(data, 15);
 
 			int regIndex = (data >> 12) & 0x7;
 
-			bool isLong = TestBit(data, 11)
+			bool isLong = TestBit(data, 11);
 
 			byte displacementData = data & 0xFF;
 
@@ -437,17 +437,17 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 			{
 				case BYTE:
 				result.cycles = 10;
-				result.operand = //readmem8(result.pointer);
+				result.operand = Genesis::M68KReadMemoryBYTE(result.pointer);
 				break;
 
 				case WORD:
 				result.cycles = 10;
-				result.operand = //readmem16(result.pointer);
+				result.operand = Genesis::M68KReadMemoryWORD(result.pointer);
 				break;
 
 				case LONG:
 				result.cycles = 14;
-				result.operand = //readmem32(result.pointer);
+				result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 				break;
 			}
 		}
@@ -462,24 +462,24 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case EA_MODE_7_ABS_ADDRESS_WORD:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_WORD;
-					result.pointer = SignExtendDWord(/*readmem16(programCounter)*/) + offset;
+					result.pointer = SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
 					{
 						case BYTE:
 						result.cycles = 8;
-						result.operand = //readmem8(result.pointer);
+						result.operand = Genesis::M68KReadMemoryBYTE(result.pointer);
 						break;
 
 						case WORD:
 						result.cycles = 8;
-						result.operand = //readmem16(result.pointer);
+						result.operand = Genesis::M68KReadMemoryWORD(result.pointer);
 						break;
 
 						case LONG:
 						result.cycles = 12;
-						result.operand = //readmem32(result.pointer);
+						result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 						break;
 					}
 				}
@@ -488,7 +488,7 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case EA_MODE_7_ABS_ADDRESS_LONG:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
-					result.pointer = (/*readmem16(programcounter)*/ << 16) | /*readmem16(programcounter + 2)*/;
+					result.pointer = (Genesis::M68KReadMemoryWORD(get().programCounter) << 16) | Genesis::M68KReadMemoryWORD(get().programCounter + 2);
 					result.pointer += offset;
 					result.PCadvance = 4;
 
@@ -496,17 +496,17 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 					{
 						case BYTE:
 						result.cycles = 12;
-						result.operand = //readmem8(result.pointer)
+						result.operand = Genesis::M68KReadMemoryBYTE(result.pointer);
 						break;
 
 						case WORD:
 						result.cycles = 12;
-						result.operand = //readmem16(result.pointer)
+						result.operand = Genesis::M68KReadMemoryWORD(result.pointer);
 						break;
 
 						case LONG:
 						result.cycles = 16;
-						result.operand = //readmem32(result.pointer);
+						result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 						break;
 					}
 				}
@@ -515,24 +515,24 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 				case EA_MODE_7_PC_WITH_DISPLACEMENT:
 				{
 					result.mode7Type = EA_MODE_7_PC_WITH_DISPLACEMENT;
-					result.pointer = get().programCounter + SignExtendDWord(/*readmem16(programcounter)*/) + offset;
+					result.pointer = get().programCounter + SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
 					{
 						case BYTE:
 						result.cycles = 8;
-						result.operand = //readmem8(result.pointer);
+						result.operand = Genesis::M68KReadMemoryBYTE(result.pointer);
 						break;
 
 						case WORD:
 						result.cycles = 8;
-						result.operand = //readmem16(result.pointer);
+						result.operand = Genesis::M68KReadMemoryWORD(result.pointer);
 						break;
 
 						case LONG:
 						result.cycles = 8;
-						result.operand = //readmem32(result.pointer);
+						result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 						break;
 					}
 				}
@@ -540,16 +540,16 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 
 				case EA_MODE_7_PC_WITH_PREINDEX:
 				{
-					result.eatype = EA_MODE_7_PC_WITH_PREINDEX;
+					result.mode7Type = EA_MODE_7_PC_WITH_PREINDEX;
 					result.PCadvance = 2;
 
-					word data = /*readmem16(programcounter)*/;
+					word data = Genesis::M68KReadMemoryWORD(get().programCounter);
 
 					bool inDataReg = !TestBit(data, 15);
 
 					int regIndex = (data >> 12) & 0x7;
 
-					bool isLong = TestBit(data, 11)
+					bool isLong = TestBit(data, 11);
 
 					byte displacementData = data & 0xFF;
 
@@ -588,44 +588,44 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 					{
 						case BYTE:
 						result.cycles = 10;
-						result.operand = //readmem8(result.pointer);
+						result.operand = Genesis::M68KReadMemoryBYTE(result.pointer);
 						break;
 
 						case WORD:
 						result.cycles = 10;
-						result.operand = //readmem16(result.pointer);
+						result.operand = Genesis::M68KReadMemoryWORD(result.pointer);
 						break;
 
 						case LONG:
 						result.cycles = 14;
-						result.operand = //readmem32(result.pointer);
+						result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 						break;
 					}
 				}
 				break;
 
-				case EA_MODE_7_IMMEDIATE_DATA:
+				case EA_MODE_7_IMMEDIATE:
 				{
-					result.mode7Type = EA_MODE_7_IMMEDIATE_DATA;
+					result.mode7Type = EA_MODE_7_IMMEDIATE;
 					result.pointer = get().programCounter;
 
 					switch(size)
 					{
 						case BYTE:
 						result.cycles = 4;
-						result.operand = //readmem8(programCounter + 1)
+						result.operand = Genesis::M68KReadMemoryBYTE(get().programCounter + 1);
 						result.PCadvance = 2;
 						break;
 
 						case WORD:
 						result.cycles = 4;
-						result.operand = //readmem16(programCounter)
+						result.operand = Genesis::M68KReadMemoryWORD(get().programCounter);
 						result.PCadvance = 2;
 						break;
 
 						case LONG:
 						result.cycles = 8;
-						result.operand = //readmem32(programCounter)
+						result.operand = Genesis::M68KReadMemoryLONG(get().programCounter);
 						result.PCadvance = 4;
 						break;
 					}
@@ -638,15 +638,15 @@ EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly
 	return result;
 }
 
-EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset)
+M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATASIZE size, dword offset)
 {
-	EA_DATA result = EA_DATA();
+	EA_DATA result;
 	result.dataSize = size;
 
 	switch(mode)
 	{
 		case EA_DATA_REG:
-		SetDataRegister(reg, data, size)
+		SetDataRegister(reg, data, size);
 		result.eatype = EA_DATA_REG;
 		break;
 
@@ -666,17 +666,17 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 			{
 				case BYTE:
 				result.cycles = 4;
-				//writemem8(address, (byte)data);
+				Genesis::M68KWriteMemoryBYTE(address, (byte)data);
 				break;
 
 				case WORD:
 				result.cycles = 4;
-				//writemem16(address, (word)data);
+				Genesis::M68KWriteMemoryWORD(address, (word)data);
 				break;
 
 				case LONG:
 				result.cycles = 8;
-				//writemem32(address, data);
+				Genesis::M68KWriteMemoryLONG(address, data);
 				break;
 			}
 		}
@@ -693,7 +693,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 				case BYTE:
 				{
 					result.cycles = 4;
-					//writemem8(address, (byte)data);
+					Genesis::M68KWriteMemoryBYTE(address, (byte)data);
 
 					get().registerAddress[reg] +=1;
 
@@ -707,7 +707,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 				case WORD:
 				{
 					result.cycles = 4;
-					//writemem16(address, (word)data);
+					Genesis::M68KWriteMemoryWORD(address, (word)data);
 
 					get().registerAddress[reg] += 2;
 				}
@@ -716,7 +716,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 				case LONG:
 				{
 					result.cycles = 8;
-					//writemem32(address, data);
+					Genesis::M68KWriteMemoryLONG(address, data);
 
 					get().registerAddress[reg] += 4;
 				}
@@ -750,7 +750,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 					}
 
 					result.pointer = address;
-					//writemem8(address, (byte)data);
+					Genesis::M68KWriteMemoryBYTE(address, (byte)data);
 				}
 				break;
 
@@ -763,7 +763,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 					get().registerAddress[reg] -= 2;
 
 					result.pointer = address;
-					//writemem16(address, (word)data);
+					Genesis::M68KWriteMemoryWORD(address, (word)data);
 				}
 				break;
 
@@ -776,7 +776,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 					get().registerAddress[reg] -= 4;
 
 					result.pointer = address;
-					//writemem32(address, data);
+					Genesis::M68KWriteMemoryLONG(address, data);
 				}
 				break;
 			}
@@ -790,7 +790,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 
 			dword address = get().registerAddress[reg] + offset;
 
-			signed_dword displacement = get().SignExtendDWord(/*readmem16(programcounter))*/);
+			signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
 
 			address += displacement;
 
@@ -800,17 +800,17 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 			{
 				case BYTE:
 				result.cycles = 8;
-				//writemem8(address, (byte)data);
+				Genesis::M68KWriteMemoryBYTE(address, (byte)data);
 				break;
 
 				case WORD:
 				result.cycles = 8;
-				//writemem16(address, (word)data);
+				Genesis::M68KWriteMemoryWORD(address, (word)data);
 				break;
 
 				case LONG:
 				result.cycles = 12;
-				//writemem32(address, data);
+				Genesis::M68KWriteMemoryLONG(address, data);
 				break;
 			}
 		}
@@ -821,13 +821,13 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 			result.eatype = EA_ADDRESS_REG_INDIRECT_INDEX;
 			result.PCadvance = 2;
 
-			word Data = /*readmem16(programcounter)*/;
+			word Data = Genesis::M68KReadMemoryWORD(get().programCounter);
 
 			bool inDataReg = !TestBit(Data, 15);
 
 			int regIndex = (Data >> 12) & 0x7;
 
-			bool isLong = TestBit(Data, 11)
+			bool isLong = TestBit(Data, 11);
 
 			byte displacementData = Data & 0xFF;
 
@@ -866,17 +866,17 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 			{
 				case BYTE:
 				result.cycles = 10;
-				//writemem8(result.pointer, (byte)data);
+				Genesis::M68KWriteMemoryBYTE(result.pointer, (byte)data);
 				break;
 
 				case WORD:
 				result.cycles = 10;
-				//writemem16(result.pointer, (word)data);
+				Genesis::M68KWriteMemoryWORD(result.pointer, (word)data);
 				break;
 
 				case LONG:
 				result.cycles = 14;
-				//writemem32(result.pointer, data);
+				Genesis::M68KWriteMemoryLONG(result.pointer, data);
 				break;
 			}
 		}
@@ -891,24 +891,24 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 				case EA_MODE_7_ABS_ADDRESS_WORD:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_WORD;
-					result.pointer = SignExtendDWord(/*readmem16(programCounter)*/) + offset;
+					result.pointer = SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
 					{
 						case BYTE:
 						result.cycles = 8;
-						//writemem8(result.pointer, (byte)data);
+						Genesis::M68KWriteMemoryBYTE(result.pointer, (byte)data);
 						break;
 
 						case WORD:
 						result.cycles = 8;
-						//writemem16(result.pointer, (word)data);
+						Genesis::M68KWriteMemoryWORD(result.pointer, (word)data);
 						break;
 
 						case LONG:
 						result.cycles = 12;
-						//writemem32(result.pointer, data);
+						Genesis::M68KWriteMemoryLONG(result.pointer, data);
 						break;
 					}
 				}
@@ -917,7 +917,7 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 				case EA_MODE_7_ABS_ADDRESS_LONG:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
-					result.pointer = (/*readmem16(programcounter)*/ << 16) | /*readmem16(programcounter + 2)*/;
+					result.pointer = (Genesis::M68KReadMemoryWORD(get().programCounter) << 16) | Genesis::M68KReadMemoryWORD(get().programCounter + 2);
 					result.pointer += offset;
 					result.PCadvance = 4;
 
@@ -925,17 +925,17 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 					{
 						case BYTE:
 						result.cycles = 12;
-						//writemem8(result.pointer, (byte)data);
+						Genesis::M68KWriteMemoryBYTE(result.pointer, (byte)data);
 						break;
 
 						case WORD:
 						result.cycles = 12;
-						//writemem16(result.pointer, (word)data);
+						Genesis::M68KWriteMemoryWORD(result.pointer, (word)data);
 						break;
 
 						case LONG:
 						result.cycles = 16;
-						//writemem32(result.pointer, data);
+						Genesis::M68KWriteMemoryLONG(result.pointer, data);
 						break;
 					}
 				}
@@ -947,16 +947,16 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 
 				case EA_MODE_7_PC_WITH_PREINDEX:
 				{
-					result.eatype = EA_MODE_7_PC_WITH_PREINDEX;
+					result.mode7Type = EA_MODE_7_PC_WITH_PREINDEX;
 					result.PCadvance = 2;
 
-					word Data = /*readmem16(programcounter)*/;
+					word Data = Genesis::M68KReadMemoryWORD(get().programCounter);
 
 					bool inDataReg = !TestBit(Data, 15);
 
 					int regIndex = (Data >> 12) & 0x7;
 
-					bool isLong = TestBit(Data, 11)
+					bool isLong = TestBit(Data, 11);
 
 					byte displacementData = Data & 0xFF;
 
@@ -995,23 +995,23 @@ EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, d
 					{
 						case BYTE:
 						result.cycles = 10;
-						//writemem8(result.pointer, (byte)data);
+						Genesis::M68KWriteMemoryBYTE(result.pointer, (byte)data);
 						break;
 
 						case WORD:
 						result.cycles = 10;
-						//writemem16(result.pointer, (word)data);
+						Genesis::M68KWriteMemoryWORD(result.pointer, (word)data);
 						break;
 
 						case LONG:
 						result.cycles = 14;
-						//writemem32(result.pointer, data);
+						Genesis::M68KWriteMemoryLONG(result.pointer, data);
 						break;
 					}
 				}
 				break;
 
-				case EA_MODE_7_IMMEDIATE_DATA:
+				case EA_MODE_7_IMMEDIATE:
 				//que pour le read
 				break;
 			}
@@ -1032,13 +1032,13 @@ void M68k::OpcodeABCD(word opcode)
 
 	if(rm)
 	{
-		dest = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regx, BYTE, true).operand;
-		src = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regy, BYTE, false).operand;
+		dest = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, rx, BYTE, true, 0).operand;
+		src = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, ry, BYTE, false, 0).operand;
 	}
 	else
 	{
-		dest = (byte)get().registerData[regx];
-		src = (byte)get().registerData[regy];
+		dest = (byte)get().registerData[rx];
+		src = (byte)get().registerData[ry];
 	}
 
 	byte xflag = TestBit(get().CCR, get().X_FLAG);
@@ -1074,12 +1074,12 @@ void M68k::OpcodeABCD(word opcode)
 
 	if(rm)
 	{
-		EA_DATA data = SetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, regx, (byte)result, BYTE);
+		EA_DATA data = SetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, rx, (byte)result, BYTE, 0);
 		//cycles
 	}
 	else
 	{
-		SetDataRegister(regx, (byte)result, BYTE);
+		SetDataRegister(rx, (byte)result, BYTE);
 		//cycles
 	}
 }

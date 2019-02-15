@@ -4,8 +4,6 @@ RomLoader::RomLoader()
 {
 	this->cartridgeSize = 0x0;
 	this->haveSram = false;
-	this->sramStart = 0x0;
-	this->sramEnd = 0x0;
 }
 
 RomLoader& RomLoader::get()
@@ -112,10 +110,29 @@ void RomLoader::LoadHeader()
 	get().header = *((HEADER*)&get().cartridgeMemory[0x100]);
 
 	InvertWordEndian(get().header.checksum);
-	InvertWordEndian(get().header.romStart);
-	InvertWordEndian(get().header.romEnd);
-	InvertWordEndian(get().header.romStart);
-	InvertWordEndian(get().header.romEnd);
+	InvertDWordEndian(get().header.romStart);
+	InvertDWordEndian(get().header.romEnd);
+	InvertDWordEndian(get().header.sramStart);
+	InvertDWordEndian(get().header.sramEnd);
+
+	get().version = 0x0;
+
+	BitSet(version, 7); //overseas
+	BitReset(version, 6); //NTSC
+
+	if(get().header.romEnd > 0x3FFFFF)
+	{
+		BitReset(version, 5); //Expansion unit activated 
+	}
+	else
+	{
+		BitSet(version, 5);
+	}
+}
+
+byte RomLoader::GetVersion()
+{
+	return get().version;
 }
 
 void RomLoader::Checksum()
@@ -167,8 +184,8 @@ void RomLoader::PrintRomHeader()
 	std::cout << "Production Code / Version Number : " << PCodeVNumber << std::endl;
 	std::cout << std::hex << "Rom Start : 0x" << get().header.romStart << std::endl;
 	std::cout << std::hex << "Rom End : 0x" << get().header.romEnd << std::endl;
-	std::cout << std::hex << "Ram Start : 0x" << get().header.ramStart << std::endl;
-	std::cout << std::hex << "Ram End : 0x" << get().header.ramStart << std::endl;
+	std::cout << std::hex << "Sram Start : 0x" << get().header.sramStart << std::endl;
+	std::cout << std::hex << "Sram End : 0x" << get().header.sramEnd << std::endl;
 	std::cout << "Modem : " << modem << std::endl;
 	std::cout << "Memo : " << memo << std::endl;
 	std::cout << "Country : " << country << std::endl;

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include "../Bits/bitsUtils.hpp"
+#include "../Genesis/genesis.hpp"
 
 typedef struct
 {
@@ -28,22 +29,6 @@ public:
 	static void SetCpuState(CPU_STATE_DEBUG cpuState);
 	static CPU_STATE_DEBUG GetCpuState();
 	//End UnitTests
-
-private:
-
-	static M68k& get(void);
-
-	void CheckPrivilege();
-	void SetDataRegister(int id, dword result, DATASIZE size);
-	void SetAddressRegister(int id, dword result, DATASIZE size);
-	word SignExtendWord(byte data);
-	dword SignExtendDWord(word data);
-	EA_DATA GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset);
-	EA_DATA SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset);	
-
-	//Start opcodes
-	void OpcodeABCD(word opcode);
-	//End opcodes
 
 	//Start EA
 	enum DATASIZE
@@ -97,6 +82,22 @@ private:
 				   dataSize(WORD){}
 	};
 	//End EA
+
+private:
+
+	static M68k& get(void);
+
+	void CheckPrivilege();
+	void SetDataRegister(int id, dword result, DATASIZE size);
+	void SetAddressRegister(int id, dword result, DATASIZE size);
+	word SignExtendWord(byte data);
+	dword SignExtendDWord(word data);
+	EA_DATA GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset);
+	EA_DATA SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset);	
+
+	//Start opcodes
+	void OpcodeABCD(word opcode);
+	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
 	static const dword clockCyclesPerSecond = 7670000;

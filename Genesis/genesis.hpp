@@ -7,21 +7,28 @@
 #include "RomLoader/romLoader.hpp"
 #include "../M68k/m68k.hpp"
 
+#define M68K_MEM_SIZE 0x1000000
+
 class Genesis
 {
 public:
 	Genesis();
+	static void Init();
 	static void FileBrowser();
 	static char* GetRomName();
+	static byte M68KReadMemoryBYTE(dword address);
+	static void M68KWriteMemoryBYTE(dword address, byte data);
+	static word M68KReadMemoryWORD(dword address);
+	static void M68KWriteMemoryWORD(dword address, word data);
+	static dword M68KReadMemoryLONG(dword address);
+	static void M68KWriteMemoryLONG(dword address, dword data);
 
 private:
-	std::vector<byte> M68kMemory;
-
 	char romName[2048];
 
-	static Genesis& get(void);
+	std::vector<byte> M68kMemory;
 
-	void Init()
+	static Genesis& get(void);
 };
 
 #endif

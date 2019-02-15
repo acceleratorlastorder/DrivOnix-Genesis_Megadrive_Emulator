@@ -37,6 +37,7 @@ public:
 	RomLoader();
 	static void LoadRomFile(std::string romName);
 	static void PrintRomHeader();
+	static byte GetVersion();
 
 private:
 
@@ -49,10 +50,10 @@ private:
 		byte production[0xE];
 		word checksum;
 		byte PCodeVNumber[0x10];
-		word romStart;
-		word romEnd;
-		word ramStart;
-		word ramEnd;
+		dword romStart;
+		dword romEnd;
+		dword sramStart;
+		dword sramEnd;
 		byte sram[0xC];
 		byte modem[0xC];
 		byte memo[0x28];
@@ -64,9 +65,8 @@ private:
 	std::vector<byte> sram;
 	long cartridgeSize;
 	bool haveSram;
-	word sramStart;
-	word sramEnd;
-	word sramSize;
+	dword sramSize;
+	byte version;
 
 	static RomLoader& get(void);
 

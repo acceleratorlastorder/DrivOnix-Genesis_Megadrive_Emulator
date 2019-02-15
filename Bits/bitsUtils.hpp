@@ -20,7 +20,6 @@ void BitSet(type& data, int position)
 {
 	type mask = 1 << position;
 	data |= mask;
-	return data;
 }
 
 template <typename type> 
@@ -28,7 +27,6 @@ void BitReset(type& data, int position)
 {
 	type mask = 1 << position;
 	data &= ~mask;
-	return data;
 }
 
 template <typename type> 

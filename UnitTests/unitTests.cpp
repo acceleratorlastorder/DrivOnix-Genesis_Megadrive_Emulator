@@ -53,7 +53,7 @@ void Test_ABCD()
 	}
 	else
 	{
-		std::cout << "\tTest Complete" << std::endl;
+		std::cout << "\tTest Flag Fail" << std::endl;
 		while(1);
 	}
 
@@ -76,4 +76,6 @@ int main()
 	std::cout << "!!!!!!All Test Completed!!!!!!" << std::endl;
 
 	while(1);
+	
+	return 0;
 }
