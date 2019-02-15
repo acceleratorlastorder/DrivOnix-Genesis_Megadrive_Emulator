@@ -41,8 +41,6 @@ void M68k::Init()
 	get().superVisorModeActivated = true;
 	get().programCounter = Genesis::M68KReadMemoryLONG(0x4);
 
-	get().programCounterStart = get().programCounter; 
-
 }
 
 void M68k::SetCpuState(CPU_STATE_DEBUG cpuState)
@@ -1041,7 +1039,7 @@ void M68k::OpcodeABCD(word opcode)
 		src = (byte)get().registerData[ry];
 	}
 
-	byte xflag = TestBit(get().CCR, get().X_FLAG);
+	byte xflag = TestBit(get().CCR, X_FLAG);
 
 	word result = dest + src + xflag;
 
@@ -1058,18 +1056,18 @@ void M68k::OpcodeABCD(word opcode)
 
 	if(result > 0x99)
 	{
-		BitSet(get().CCR, get().C_FLAG);
-		BitSet(get().CCR, get().X_FLAG);
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
 	}
 	else
 	{
-		BitReset(get().CCR, get().C_FLAG);
-		BitReset(get().CCR, get().X_FLAG);
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
 	}
 
 	if((result & 0xFF) != 0)
 	{
-		BitReset(get().CCR, get().Z_FLAG);
+		BitReset(get().CCR, Z_FLAG);
 	}
 
 	if(rm)

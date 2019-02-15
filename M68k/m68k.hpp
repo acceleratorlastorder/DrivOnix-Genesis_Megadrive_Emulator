@@ -5,6 +5,15 @@
 #include "../Bits/bitsUtils.hpp"
 #include "../Genesis/genesis.hpp"
 
+#define C_FLAG 0
+#define V_FLAG 1
+#define Z_FLAG 2
+#define N_FLAG 3
+#define X_FLAG 4
+
+#define CYCLES_PER_SECOND 7670000
+
+
 typedef struct
 {
 	dword programCounter;
@@ -100,16 +109,8 @@ private:
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
-	static const dword clockCyclesPerSecond = 7670000;
-
-	static const int C_FLAG = 0;
-	static const int V_FLAG = 1;
-	static const int Z_FLAG = 2;
-	static const int N_FLAG = 3;
-	static const int X_FLAG = 4;
 
 	dword programCounter;
-	dword programCounterStart;
 	dword opcodeClicks;
 	word  CCR;
 	bool  stop;
