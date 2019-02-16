@@ -125,7 +125,6 @@ int M68k::Update()
 	get().opcodeClicks = 0;
 	const word opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
 
-	get().programCounterStart = get().programCounter;
 	get().programCounter += 2;
 
 	get().ExecuteOpcode(opcode);

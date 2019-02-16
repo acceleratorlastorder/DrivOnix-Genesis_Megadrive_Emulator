@@ -105,7 +105,7 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 	{
 		if(address < 0xC00004)
 		{
-			word vdpword = /*YM7101::readdataport16()*/ 0;
+			word vdpword = YM7101::ReadDataPortWORD();
 
 			if((address % 2) == 0)
 			{
@@ -118,7 +118,7 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 		}
 		else if(address < 0xC00008)
 		{
-			word vdpword = /*YM7101::readcontrolport16()*/ 0;
+			word vdpword = YM7101::ReadControlPortWORD();
 
 			if((address % 2) == 0)
 			{
@@ -133,11 +133,11 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 		{
 			if((address % 2) == 0)
 			{
-				return 0; //return YM7101::GetVCounter()
+				return YM7101::GetVCounter();
 			}
 			else
 			{
-				return 0; //return YM7101::GetHCounter()
+				return YM7101::GetHCounter();
 			}
 		}
 		else if(address == 0xC00011)
@@ -207,11 +207,11 @@ void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
 	{
 		if(address < 0xC00004)
 		{
-			//YM7101::Writedataport8(data);
+			YM7101::WriteDataPortBYTE(data);
 		}
 		else if(address < 0xC00008)
 		{
-			//YM7101::Writecontrolport8(data);
+			YM7101::WriteControlPortBYTE(data);
 		}
 		else if(address < 0xC00010)
 		{
@@ -289,15 +289,15 @@ word Genesis::M68KReadMemoryWORD(dword address)
 	{
 		if(address < 0xC00004)
 		{
-			return /*YM7101::readdataport16()*/ 0;
+			return YM7101::ReadDataPortWORD();
 		}
 		else if(address < 0xC00008)
 		{
-			return /*YM7101::readcontrolport16()*/ 0;
+			return YM7101::ReadControlPortWORD();
 		}
 		else if(address < 0xC0000F)
 		{
-			return /*YM7101::GetHVCounter();*/ 0;
+			return YM7101::GetHVCounter();
 		}
 		else if(address == 0xC00011 || address == 0xC00013 || address == 0xC00015 || address == 0xC00017)
 		{
@@ -366,11 +366,11 @@ void Genesis::M68KWriteMemoryWORD(dword address, word data)
 	{
 		if(address < 0xC00004)
 		{
-			//YM7101::Writedataport16(data);
+			YM7101::WriteDataPortWORD(data);
 		}
 		else if(address < 0xC00008)
 		{
-			//YM7101::Writecontrolport16(data);
+			YM7101::WriteControlPortWORD(data);
 		}
 		else if(address < 0xC00010)
 		{

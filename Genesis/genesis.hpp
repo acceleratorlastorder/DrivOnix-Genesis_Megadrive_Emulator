@@ -6,6 +6,7 @@
 
 #include "RomLoader/romLoader.hpp"
 #include "../M68k/m68k.hpp"
+#include "../YM7101/ym7101.hpp"
 
 #define M68K_MEM_SIZE 0x1000000
 
