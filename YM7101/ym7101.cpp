@@ -1253,7 +1253,7 @@ void YM7101::Render()
 
 	for(int i = 0; i < 2; ++i)
 	{
-		get().maxSprites = cell40 ? 80 : 60;
+		get().maxSprites = cell40 ? 80 : 64;
 		bool priority;
 		if(i == 0)
 		{
