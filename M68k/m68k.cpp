@@ -1031,6 +1031,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADD_ADDA(opcode);
 	}
+	else if((opcode & 0x0600) == 0x0600)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeADDI" << std::endl;
+		}
+
+		get().OpcodeADDI(opcode);
+	}
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -1388,4 +1397,127 @@ void M68k::OpcodeADD_ADDA(word opcode)
 
 		//cycles
 	}
+}
+
+void M68k::OpcodeADDI(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+
+	byte eaMode = (opcode >> 3) & 0x7;
+
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	//C_FLAG & X_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = ((uint64_t)dest.operand & maxTypeSize) + ((uint64_t)src.operand & maxTypeSize);
+
+	if(sonic > maxTypeSize)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)dest.operand + (signed_byte)src.operand;
+
+			if(eggman > INT8_MAX)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)dest.operand + (signed_word)src.operand;
+
+			if(eggman > INT16_MAX)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)dest.operand + (signed_dword)src.operand;
+
+			if(eggman > INT32_MAX)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	dword result = dest.operand + src.operand;
+
+	//Z_FLAG
+	if(result == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(result, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().SetEAOperand(type, eaReg, result, size, 0);
+
+	get().programCounter += src.PCadvance;
+
+	//cycles
 }

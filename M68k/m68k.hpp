@@ -111,6 +111,7 @@ private:
 	//Start opcodes
 	void OpcodeABCD(word opcode);
 	void OpcodeADD_ADDA(word opcode);
+	void OpcodeADDI(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
