@@ -1104,7 +1104,7 @@ void M68k::OpcodeABCD(word opcode)
 	}
 
 	
-	EA_DATA data = get().SetEAOperand(type, rx, result, BYTE, 0);
+	EA_DATA data = get().SetEAOperand(type, rx, (byte)result, BYTE, 0);
 	//cycles
 }
 
