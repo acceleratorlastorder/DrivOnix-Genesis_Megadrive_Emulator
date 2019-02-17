@@ -63,33 +63,6 @@ CPU_STATE_DEBUG M68k::GetCpuState()
 	return get().cpuStateDebug;
 }
 
-void M68k::ExecuteOpcode(word opcode)
-{
-	if((opcode & 0xC100) == 0xC100)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Launch OpcodeABCD" << std::endl;
-		}
-
-		get().OpcodeABCD(opcode);
-	}
-
-	//copy state for unit test
-	if(get().unitTests)
-	{
-		get().cpuStateDebug.programCounter = get().programCounter;
-		get().cpuStateDebug.CCR = get().CCR;
-		get().cpuStateDebug.stop = get().stop;
-
-		for(int i = 0; i < 8; ++i)
-		{
-			get().cpuStateDebug.registerData[i] = get().registerData[i];
-			get().cpuStateDebug.registerAddress[i] = get().registerAddress[i];
-		}
-	}
-}
-
 void M68k::CheckPrivilege()
 {
 	bool oldSuperVisorMode = get().superVisorModeActivated;
@@ -1018,6 +991,62 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 	return result;
 }
 
+dword M68k::GetTypeMaxSize(DATASIZE size)
+{
+	switch(size)
+	{
+		case BYTE:
+		return (dword)0xFF;
+		break;
+
+		case WORD:
+		return (dword)0xFFFF;
+		break;
+
+		case LONG:
+		return 0xFFFFFFFF;
+		break;
+	}
+
+	return 0xFFFFFFFF;
+}
+
+void M68k::ExecuteOpcode(word opcode)
+{
+	if((opcode & 0xC100) == 0xC100)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeABCD" << std::endl;
+		}
+
+		get().OpcodeABCD(opcode);
+	}
+	else if((opcode & 0xD000) == 0xD000)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeADD_ADDA" << std::endl;
+		}
+
+		get().OpcodeADD_ADDA(opcode);
+	}
+
+	//copy state for unit test
+	if(get().unitTests)
+	{
+		get().cpuStateDebug.programCounter = get().programCounter;
+		get().cpuStateDebug.CCR = get().CCR;
+		get().cpuStateDebug.stop = get().stop;
+
+		for(int i = 0; i < 8; ++i)
+		{
+			get().cpuStateDebug.registerData[i] = get().registerData[i];
+			get().cpuStateDebug.registerAddress[i] = get().registerAddress[i];
+		}
+	}
+}
+
 void M68k::OpcodeABCD(word opcode)
 {
 	byte rx = (opcode >> 9) & 0x7;
@@ -1027,16 +1056,21 @@ void M68k::OpcodeABCD(word opcode)
 	byte src;
 	byte dest;
 
+	EA_TYPES type;
+
 	if(rm)
 	{
-		dest = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, rx, BYTE, true, 0).operand;
-		src = (byte)GetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, ry, BYTE, false, 0).operand;
+		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
 	}
 	else
 	{
-		dest = (byte)get().registerData[rx];
-		src = (byte)get().registerData[ry];
+		type = EA_DATA_REG;
 	}
+
+	
+	dest = (byte)get().GetEAOperand(type, rx, BYTE, true, 0).operand;
+	src = (byte)get().GetEAOperand(type, ry, BYTE, false, 0).operand;
+	
 
 	byte xflag = TestBit(get().CCR, X_FLAG);
 
@@ -1069,14 +1103,289 @@ void M68k::OpcodeABCD(word opcode)
 		BitReset(get().CCR, Z_FLAG);
 	}
 
-	if(rm)
+	
+	EA_DATA data = get().SetEAOperand(type, rx, result, BYTE, 0);
+	//cycles
+}
+
+void M68k::OpcodeADD_ADDA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	if(!TestBit(opmode, 2))
 	{
-		EA_DATA data = SetEAOperand(EA_ADDRESS_REG_INDIRECT_PRE_DEC, rx, (byte)result, BYTE, 0);
+		//<EA> + DN -> DN
+		DATASIZE size;
+		switch(opmode)
+		{
+			case 0:
+			size = BYTE;
+			break;
+
+			case 1:
+			size = WORD;
+			break;
+
+			case 2:
+			size = LONG;
+			break;
+		}
+
+		EA_TYPES type = (EA_TYPES)eaMode;
+
+		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
+
+		//C_FLAG & X_FLAG
+		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+		uint64_t sonic = ((uint64_t)src.operand & maxTypeSize) + ((uint64_t)dest.operand & maxTypeSize);
+
+		if(sonic > maxTypeSize)
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
+		}
+
+		//V_FLAG
+		switch(size)
+		{
+			case BYTE:
+			{
+				signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
+
+				if(eggman > INT8_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+
+			case WORD:
+			{
+				signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
+
+				if(eggman > INT16_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+
+			case LONG:
+			{
+				int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
+
+				if(eggman > INT32_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+		}
+
+		dword result = src.operand + dest.operand;
+
+		//Z_FLAG
+		if(result == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+
+		//N_FLAG
+		int bit;
+
+		switch(size)
+		{
+			case BYTE:
+			bit = 7;
+			break;
+
+			case WORD:
+			bit = 15;
+			break;
+
+			case LONG:
+			bit = 31;
+			break;
+		}
+
+		if(TestBit(result, bit))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		get().SetEAOperand(type, eaReg, result, size, 0);
+
+		get().programCounter += src.PCadvance;
+
 		//cycles
+
 	}
 	else
 	{
-		SetDataRegister(rx, (byte)result, BYTE);
+		//DN + <EA> -> <EA>
+		DATASIZE size;
+		switch(opmode)
+		{
+			case 4:
+			size = BYTE;
+			break;
+
+			case 5:
+			size = WORD;
+			break;
+
+			case 6:
+			size = LONG;
+			break;
+		}
+
+		EA_TYPES type = (EA_TYPES)eaMode;
+
+		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
+
+		//C_FLAG & X_FLAG
+		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+		uint64_t sonic = ((uint64_t)dest.operand & maxTypeSize) + ((uint64_t)src.operand & maxTypeSize);
+
+		if(sonic > maxTypeSize)
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
+		}
+
+		//V_FLAG
+		switch(size)
+		{
+			case BYTE:
+			{
+				signed_word eggman = (signed_byte)dest.operand + (signed_byte)src.operand;
+
+				if(eggman > INT8_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+
+			case WORD:
+			{
+				signed_dword eggman = (signed_word)dest.operand + (signed_word)src.operand;
+
+				if(eggman > INT16_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+
+			case LONG:
+			{
+				int64_t eggman = (signed_dword)dest.operand + (signed_dword)src.operand;
+
+				if(eggman > INT32_MAX)
+				{
+					BitSet(get().CCR, V_FLAG);
+				}
+				else
+				{
+					BitReset(get().CCR, V_FLAG);
+				}
+			}
+			break;
+		}
+
+		dword result = dest.operand + src.operand;
+
+		//ADDA Opcode
+		if(size == WORD && type == EA_ADDRESS_REG)
+		{
+			result = SignExtendDWord((word)dest.operand) + SignExtendDWord((word)src.operand);
+		}
+
+		//Z_FLAG
+		if(result == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+
+		//N_FLAG
+		int bit;
+
+		switch(size)
+		{
+			case BYTE:
+			bit = 7;
+			break;
+
+			case WORD:
+			bit = 15;
+			break;
+
+			case LONG:
+			bit = 31;
+			break;
+		}
+
+		if(TestBit(result, bit))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		get().SetEAOperand(type, reg, result, size, 0);
+
+		get().programCounter += src.PCadvance;
+
 		//cycles
 	}
 }

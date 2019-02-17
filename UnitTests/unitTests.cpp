@@ -54,12 +54,23 @@ void Test_ABCD()
 	else
 	{
 		std::cout << "\tTest Flag Fail" << std::endl;
-		while(1);
 	}
 
 	//indique la fin du test
 	std::cout << "End Test_ABCD()" << std::endl;
+}
 
+void Test_ADD_ADDA()
+{
+	std::cout << "Start Test_ADD_ADDA()" << std::endl;
+
+	CPU_STATE_DEBUG state;
+
+	M68k::SetCpuState(state);
+
+	M68k::ExecuteOpcode(0xD000);
+
+	std::cout << "End Test_ADD_ADDA()" << std::endl;
 }
 
 ////////////////////////////////////////
@@ -71,6 +82,7 @@ int main()
 
 	//on execute nos tests un par un
 	Test_ABCD();
+	Test_ADD_ADDA();
 
 
 	std::cout << "!!!!!!All Test Completed!!!!!!" << std::endl;

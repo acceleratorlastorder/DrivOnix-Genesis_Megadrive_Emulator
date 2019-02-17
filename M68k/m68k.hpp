@@ -104,8 +104,13 @@ private:
 	EA_DATA GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset);
 	EA_DATA SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset);	
 
+	//Start opcodes Utils
+	dword GetTypeMaxSize(DATASIZE size);
+	//End opcodes Utils
+
 	//Start opcodes
 	void OpcodeABCD(word opcode);
+	void OpcodeADD_ADDA(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var

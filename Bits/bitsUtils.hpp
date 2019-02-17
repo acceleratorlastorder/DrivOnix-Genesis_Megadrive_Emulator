@@ -1,12 +1,14 @@
 #ifndef BITSUTILS_HPP
 #define BITSUTILS_HPP
 
-typedef unsigned char byte;
-typedef unsigned short word;
-typedef unsigned int dword;
-typedef signed char signed_byte;
-typedef signed short signed_word;
-typedef signed int signed_dword;
+#include <stdint.h>
+
+typedef uint8_t byte;
+typedef uint16_t word;
+typedef uint32_t dword;
+typedef int8_t signed_byte;
+typedef int16_t signed_word;
+typedef int32_t signed_dword;
 
 template <typename type> 
 bool TestBit(type data, int position)
