@@ -26,6 +26,7 @@ bool TestFlag(word CCR, int C, int V, int Z, int N, int X)
 bool Test_ABCD()
 {
 	std::cout << "Start Test_ABCD()" << std::endl;
+	bool testResult = false;
 
 	CPU_STATE_DEBUG state;
 
@@ -43,10 +44,12 @@ bool Test_ABCD()
 	if(state.registerData[6] == 0x13)
 	{
 		std::cout << "\t\tTest BCD Operation with X Reset Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest BCD Operation with X Reset Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test BCD Operation with X Set
@@ -64,10 +67,12 @@ bool Test_ABCD()
 	if(state.registerData[6] == 0x14)
 	{
 		std::cout << "\t\tTest BCD Operation with X Set Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest BCD Operation with X Set Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test C_FLAG and X_FLAG
@@ -85,10 +90,12 @@ bool Test_ABCD()
 	if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
 	{
 		std::cout << "\t\tTest C_FLAG and X_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest C_FLAG and X_FLAG Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test Z_FLAG
@@ -107,14 +114,18 @@ bool Test_ABCD()
 	if(TestFlag(state.CCR, 0, 0, 0, 0, 0))
 	{
 		std::cout << "\t\tTest Z_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest Z_FLAG Failed" << std::endl;
+		testResult = false;
 	}
 
 	//indique la fin du test
 	std::cout << "End Test_ABCD()" << std::endl;
+
+	return testResult;
 }
 
 bool Test_ADD()
