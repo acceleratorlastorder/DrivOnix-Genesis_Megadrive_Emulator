@@ -116,6 +116,7 @@ private:
 	void OpcodeADDX(word opcode);
 	void OpcodeAND(word opcode);
 	void OpcodeANDI(word opcode);
+	void OpcodeANDI_To_CCR();
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var

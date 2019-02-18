@@ -1049,7 +1049,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDQ_ADDA(opcode);
 	}
-	else if((opcode & 0xD100))
+	else if((opcode & 0xD100) == 0xD100)
 	{
 		if(get().unitTests)
 		{
@@ -1058,7 +1058,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDX(opcode);
 	}
-	else if((opcode & 0xC000))
+	else if((opcode & 0xC000) == 0xC000)
 	{
 		if(get().unitTests)
 		{
@@ -1067,7 +1067,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeAND(opcode);
 	}
-	else if((opcode & 0x0200))
+	else if((opcode & 0x0200) == 0x0200)
 	{
 		if(get().unitTests)
 		{
@@ -1075,6 +1075,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeANDI(opcode);
+	}
+	else if(opcode == 0x023C)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeANDI_To_CCR" << std::endl;
+		}
+
+		get().OpcodeANDI_To_CCR();
 	}
 
 	//copy state for unit test
@@ -2047,6 +2056,21 @@ void M68k::OpcodeANDI(word opcode)
 	get().SetEAOperand(type, eaReg, result, size, 0);
 
 	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeANDI_To_CCR()
+{
+	word data = Genesis::M68KReadMemoryWORD(get().programCounter);
+	get().programCounter +=2;
+
+	byte loCCR = (byte)get().CCR;
+	byte loData = (byte)data;
+
+	loCCR &= loData;
+	get().CCR &= 0xFF00;
+	get().CCR |= loCCR;
 
 	//cycles
 }
