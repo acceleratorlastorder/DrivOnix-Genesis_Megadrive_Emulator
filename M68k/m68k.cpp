@@ -1058,6 +1058,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDX(opcode);
 	}
+	else if((opcode & 0xC000))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeAND" << std::endl;
+		}
+
+		get().OpcodeAND(opcode);
+	}
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -1806,4 +1815,164 @@ void M68k::OpcodeADDX(word opcode)
 	
 	EA_DATA data = get().SetEAOperand(type, rx, result, size, 0);
 	//cycles
+}
+
+void M68k::OpcodeAND(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	if(!TestBit(opmode, 2))
+	{
+		//<EA> & DN -> DN
+		DATASIZE size;
+		switch(opmode)
+		{
+			case 0:
+			size = BYTE;
+			break;
+
+			case 1:
+			size = WORD;
+			break;
+
+			case 2:
+			size = LONG;
+			break;
+		}
+
+		EA_TYPES type = (EA_TYPES)eaMode;
+
+		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
+
+		//C_FLAG
+		BitReset(get().CCR, C_FLAG);
+
+		//V_FLAG
+		BitReset(get().CCR, V_FLAG);
+
+		dword result = src.operand & dest.operand;
+
+		//Z_FLAG
+		if(result == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+
+		//N_FLAG
+		int bit;
+
+		switch(size)
+		{
+			case BYTE:
+			bit = 7;
+			break;
+
+			case WORD:
+			bit = 15;
+			break;
+
+			case LONG:
+			bit = 31;
+			break;
+		}
+
+		if(TestBit(result, bit))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		get().SetEAOperand(type, eaReg, result, size, 0);
+
+		get().programCounter += src.PCadvance;
+
+		//cycles
+
+	}
+	else
+	{
+		//DN & <EA> -> <EA>
+		DATASIZE size;
+		switch(opmode)
+		{
+			case 4:
+			size = BYTE;
+			break;
+
+			case 5:
+			size = WORD;
+			break;
+
+			case 6:
+			size = LONG;
+			break;
+		}
+
+		EA_TYPES type = (EA_TYPES)eaMode;
+
+		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
+
+		//C_FLAG
+		BitReset(get().CCR, C_FLAG);
+
+		//V_FLAG
+		BitReset(get().CCR, V_FLAG);
+
+		dword result = dest.operand & src.operand;
+
+		//Z_FLAG
+		if(result == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+
+		//N_FLAG
+		int bit;
+
+		switch(size)
+		{
+			case BYTE:
+			bit = 7;
+			break;
+
+			case WORD:
+			bit = 15;
+			break;
+
+			case LONG:
+			bit = 31;
+			break;
+		}
+
+		if(TestBit(result, bit))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		get().SetEAOperand(type, reg, result, size, 0);
+
+		get().programCounter += src.PCadvance;
+
+		//cycles
+	}
 }
