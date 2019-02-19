@@ -127,12 +127,17 @@ bool Test_ABCD()
 bool Test_ADD()
 {
 	//Indique le debut du test
-	std::cout << "Start Test_ABCD()" << std::endl;
+	std::cout << "Start Test_ADD()" << std::endl;
+	bool testResult = true;
 
 	//on declare un state
 	//et on met les values qu'il doit avoir avant l'execution de l'opcode
 	CPU_STATE_DEBUG state;
+
 	state.CCR = 0x0000;
+	state.registerData[4] = 0x4;
+	state.registerData[6] = 0x9;
+
 	M68k::SetCpuState(state);
 
 	//on execute l'opcode désiré
@@ -144,6 +149,7 @@ bool Test_ADD()
 
 	return false;
 }
+
 
 ////////////////////////////////////////
 //MAIN
