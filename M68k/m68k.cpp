@@ -1085,6 +1085,25 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeANDI_To_CCR();
 	}
+	else if((opcode & 0xE000) == 0xE000)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeASL_ASR_Register" << std::endl;
+		}
+
+		get().OpcodeASL_ASR_Register(opcode);
+	}
+	else if((opcode & 0xE0C0) == 0xE0C0)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeASL_ASR_Memory" << std::endl;
+		}
+
+		get().OpcodeASL_ASR_Memory(opcode);
+	}
+
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -1258,9 +1277,24 @@ void M68k::OpcodeADD_ADDA(word opcode)
 		}
 
 		dword result = src.operand + dest.operand;
+		dword vectorman = result;
+		switch(size)
+		{
+			case BYTE:
+			vectorman &= 0xFF;
+			break;
+
+			case WORD:
+			vectorman &= 0xFFFF;
+			break;
+
+			case LONG:
+			vectorman &= 0xFFFFFFFF;
+			break;
+		}
 
 		//Z_FLAG
-		if(result == 0)
+		if(vectorman == 0)
 		{
 			BitSet(get().CCR, Z_FLAG);
 		}
@@ -1287,7 +1321,7 @@ void M68k::OpcodeADD_ADDA(word opcode)
 			break;
 		}
 
-		if(TestBit(result, bit))
+		if(TestBit(vectorman, bit))
 		{
 			BitSet(get().CCR, N_FLAG);
 		}
@@ -1399,8 +1433,24 @@ void M68k::OpcodeADD_ADDA(word opcode)
 			result = get().SignExtendDWord((word)dest.operand) + get().SignExtendDWord((word)src.operand);
 		}
 
+		dword vectorman = result;
+		switch(size)
+		{
+			case BYTE:
+			vectorman &= 0xFF;
+			break;
+
+			case WORD:
+			vectorman &= 0xFFFF;
+			break;
+
+			case LONG:
+			vectorman &= 0xFFFFFFFF;
+			break;
+		}
+
 		//Z_FLAG
-		if(result == 0)
+		if(vectorman == 0)
 		{
 			BitSet(get().CCR, Z_FLAG);
 		}
@@ -1427,7 +1477,7 @@ void M68k::OpcodeADD_ADDA(word opcode)
 			break;
 		}
 
-		if(TestBit(result, bit))
+		if(TestBit(vectorman, bit))
 		{
 			BitSet(get().CCR, N_FLAG);
 		}
@@ -1523,8 +1573,24 @@ void M68k::OpcodeADDI(word opcode)
 
 	dword result = src.operand + dest.operand;
 
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
 	//Z_FLAG
-	if(result == 0)
+	if(vectorman == 0)
 	{
 		BitSet(get().CCR, Z_FLAG);
 	}
@@ -1551,7 +1617,7 @@ void M68k::OpcodeADDI(word opcode)
 		break;
 	}
 
-	if(TestBit(result, bit))
+	if(TestBit(vectorman, bit))
 	{
 		BitSet(get().CCR, N_FLAG);
 	}
@@ -1664,8 +1730,24 @@ void M68k::OpcodeADDQ_ADDA(word opcode)
 			break;
 		}
 
+		dword vectorman = result;
+		switch(size)
+		{
+			case BYTE:
+			vectorman &= 0xFF;
+			break;
+
+			case WORD:
+			vectorman &= 0xFFFF;
+			break;
+
+			case LONG:
+			vectorman &= 0xFFFFFFFF;
+			break;
+		}
+
 		//Z_FLAG
-		if(result == 0)
+		if(vectorman == 0)
 		{
 			BitSet(get().CCR, Z_FLAG);
 		}
@@ -1692,7 +1774,7 @@ void M68k::OpcodeADDQ_ADDA(word opcode)
 			break;
 		}
 
-		if(TestBit(result, bit))
+		if(TestBit(vectorman, bit))
 		{
 			BitSet(get().CCR, N_FLAG);
 		}
@@ -1798,8 +1880,24 @@ void M68k::OpcodeADDX(word opcode)
 
 	dword result = src.operand + dest.operand + xflag;
 
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
 	//Z_FLAG
-	if(result != 0)
+	if(vectorman != 0)
 	{
 		BitReset(get().CCR, Z_FLAG);
 	}
@@ -1822,7 +1920,7 @@ void M68k::OpcodeADDX(word opcode)
 		break;
 	}
 
-	if(TestBit(result, bit))
+	if(TestBit(vectorman, bit))
 	{
 		BitSet(get().CCR, N_FLAG);
 	}
@@ -1874,8 +1972,24 @@ void M68k::OpcodeAND(word opcode)
 
 		dword result = src.operand & dest.operand;
 
+		dword vectorman = result;
+		switch(size)
+		{
+			case BYTE:
+			vectorman &= 0xFF;
+			break;
+
+			case WORD:
+			vectorman &= 0xFFFF;
+			break;
+
+			case LONG:
+			vectorman &= 0xFFFFFFFF;
+			break;
+		}
+
 		//Z_FLAG
-		if(result == 0)
+		if(vectorman == 0)
 		{
 			BitSet(get().CCR, Z_FLAG);
 		}
@@ -1902,7 +2016,7 @@ void M68k::OpcodeAND(word opcode)
 			break;
 		}
 
-		if(TestBit(result, bit))
+		if(TestBit(vectorman, bit))
 		{
 			BitSet(get().CCR, N_FLAG);
 		}
@@ -1950,8 +2064,24 @@ void M68k::OpcodeAND(word opcode)
 
 		dword result = dest.operand & src.operand;
 
+		dword vectorman = result;
+		switch(size)
+		{
+			case BYTE:
+			vectorman &= 0xFF;
+			break;
+
+			case WORD:
+			vectorman &= 0xFFFF;
+			break;
+
+			case LONG:
+			vectorman &= 0xFFFFFFFF;
+			break;
+		}
+
 		//Z_FLAG
-		if(result == 0)
+		if(vectorman == 0)
 		{
 			BitSet(get().CCR, Z_FLAG);
 		}
@@ -1978,7 +2108,7 @@ void M68k::OpcodeAND(word opcode)
 			break;
 		}
 
-		if(TestBit(result, bit))
+		if(TestBit(vectorman, bit))
 		{
 			BitSet(get().CCR, N_FLAG);
 		}
@@ -2016,8 +2146,24 @@ void M68k::OpcodeANDI(word opcode)
 
 	dword result = src.operand & dest.operand;
 
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
 	//Z_FLAG
-	if(result == 0)
+	if(vectorman == 0)
 	{
 		BitSet(get().CCR, Z_FLAG);
 	}
@@ -2044,7 +2190,7 @@ void M68k::OpcodeANDI(word opcode)
 		break;
 	}
 
-	if(TestBit(result, bit))
+	if(TestBit(vectorman, bit))
 	{
 		BitSet(get().CCR, N_FLAG);
 	}
@@ -2071,6 +2217,268 @@ void M68k::OpcodeANDI_To_CCR()
 	loCCR &= loData;
 	get().CCR &= 0xFF00;
 	get().CCR |= loCCR;
+
+	//cycles
+}
+
+void M68k::OpcodeASL_ASR_Register(word opcode)
+{
+	byte count_reg = (opcode >> 9) & 0x7;
+
+	byte dr = (opcode >> 8) & 0x1;
+
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+
+	byte ir = (opcode >> 5) & 0x1;
+
+	byte reg = opcode & 0x7;
+
+	int shiftCount;
+
+	if(ir)
+	{
+		shiftCount = get().registerData[count_reg] % 64;
+	}
+	else
+	{
+		shiftCount = (count_reg == 0) ? 8 : count_reg;  
+	}
+
+	signed_dword toShift = (signed_dword)get().registerData[reg];
+
+	int numBits = 0;
+
+	switch(size)
+	{
+		case BYTE:
+		numBits = 8;
+		toShift &= 0xFF;
+		break;
+
+		case WORD:
+		numBits = 16;
+		toShift &= 0xFFFF;
+		break;
+
+		case LONG:
+		numBits = 32;
+		break;
+	}
+
+	signed_dword result = 0;
+
+	if(dr) //ShiftLeft
+	{
+		bool bitSet = TestBit(toShift, numBits - shiftCount);
+
+		if(shiftCount == 0)
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+		else
+		{
+			if(bitSet)
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+			else
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+		}
+
+		switch(size)
+		{
+			case BYTE:
+			result = ((byte)toShift) << ((byte)shiftCount);
+			break;
+
+			case WORD:
+			result = ((word)toShift) << ((word)shiftCount);
+			break;
+
+			case LONG:
+			result = ((dword)toShift) << ((dword)shiftCount);
+			break;
+		}
+	}
+	else //ShiftRight
+	{
+		bool bitSet = TestBit(toShift, shiftCount - 1);
+
+		if(shiftCount == 0)
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+		else
+		{
+			if(bitSet)
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+			else
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+		}
+
+		switch(size)
+		{
+			case BYTE:
+			result = ((byte)toShift) >> ((byte)shiftCount);
+			break;
+
+			case WORD:
+			result = ((word)toShift) >> ((word)shiftCount);
+			break;
+
+			case LONG:
+			result = ((dword)toShift) >> ((dword)shiftCount);
+			break;
+		}
+	}
+
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	SetDataRegister(reg, (dword)result, size);
+
+	//cycles
+}
+
+void M68k::OpcodeASL_ASR_Memory(word opcode)
+{
+	byte dr = (opcode >> 8) & 0x1;
+
+	byte eaMode = (opcode >> 3) & 0x7;
+
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	signed_dword toShift = (signed_dword)get().GetEAOperand(type, eaReg, WORD, true, 0).operand;
+
+	signed_dword result = 0;
+
+	if(dr) //ShiftLeft
+	{
+		bool bitSet = TestBit(toShift, 15);
+
+		if(bitSet)
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+
+		result = ((signed_word)toShift) << ((signed_word)1);
+	}
+	else //ShiftRight
+	{
+		bool bitSet = TestBit(toShift, 0);
+
+		if(bitSet)
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+
+		result = ((signed_word)toShift) >> ((signed_word)1);
+	}
+
+	BitReset(get().CCR, V_FLAG);
+
+	word vectorman = (word)result;
+	vectorman &= 0xFFFF;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 15))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	EA_DATA set = SetEAOperand(type, eaReg, (word)result, WORD, 0);
+
+	get().programCounter += set.PCadvance;
 
 	//cycles
 }

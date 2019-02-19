@@ -117,6 +117,8 @@ private:
 	void OpcodeAND(word opcode);
 	void OpcodeANDI(word opcode);
 	void OpcodeANDI_To_CCR();
+	void OpcodeASL_ASR_Register(word opcode);
+	void OpcodeASL_ASR_Memory(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
