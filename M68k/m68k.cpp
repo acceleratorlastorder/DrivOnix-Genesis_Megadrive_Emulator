@@ -2284,8 +2284,8 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 			}
 			else
 			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
+				BitReset(get().CCR, C_FLAG);
+				BitReset(get().CCR, X_FLAG);
 			}
 		}
 
@@ -2321,8 +2321,8 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 			}
 			else
 			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
+				BitReset(get().CCR, C_FLAG);
+				BitReset(get().CCR, X_FLAG);
 			}
 		}
 
@@ -2427,8 +2427,8 @@ void M68k::OpcodeASL_ASR_Memory(word opcode)
 		}
 		else
 		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
 		}
 
 		result = ((signed_word)toShift) << ((signed_word)1);
@@ -2444,8 +2444,8 @@ void M68k::OpcodeASL_ASR_Memory(word opcode)
 		}
 		else
 		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
 		}
 
 		result = ((signed_word)toShift) >> ((signed_word)1);
