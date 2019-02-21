@@ -1011,6 +1011,78 @@ dword M68k::GetTypeMaxSize(DATASIZE size)
 	return 0xFFFFFFFF;
 }
 
+bool M68k::ConditionTable(byte condition)
+{
+	switch(condition)
+	{
+		case 0:
+		return true;
+		break;
+
+		case 1:
+		return false;
+		break;
+
+		case 2:
+		return (!TestBit(get().CCR, C_FLAG) && !TestBit(get().CCR, Z_FLAG));
+		break;
+
+		case 3:
+		return (TestBit(get().CCR, C_FLAG) || TestBit(get().CCR, Z_FLAG));
+		break;
+
+		case 4:
+		return !TestBit(get().CCR, C_FLAG);
+		break;
+
+		case 5:
+		return TestBit(get().CCR, C_FLAG);
+		break;
+
+		case 6:
+		return !TestBit(get().CCR, Z_FLAG);
+		break;
+
+		case 7:
+		return TestBit(get().CCR, Z_FLAG);
+		break;
+
+		case 8:
+		return !TestBit(get().CCR, V_FLAG);
+		break;
+
+		case 9:
+		return TestBit(get().CCR, V_FLAG);
+		break;
+
+		case 10:
+		return !TestBit(get().CCR, N_FLAG);
+		break;
+
+		case 11:
+		return TestBit(get().CCR, N_FLAG);
+		break;
+
+		case 12:
+		return (TestBit(get().CCR, N_FLAG) == TestBit(get().CCR, V_FLAG));
+		break;
+
+		case 13:
+		return (TestBit(get().CCR, N_FLAG) != TestBit(get().CCR, V_FLAG));
+		break;
+
+		case 14:
+		return ((TestBit(get().CCR, N_FLAG) == TestBit(get().CCR, V_FLAG)) && !TestBit(get().CCR, Z_FLAG));
+		break;
+
+		case 15:
+		return ((TestBit(get().CCR, N_FLAG) != TestBit(get().CCR, V_FLAG)) || TestBit(get().CCR, Z_FLAG));
+		break;
+	}
+
+	return false;
+}
+
 void M68k::ExecuteOpcode(word opcode)
 {
 	if((opcode & 0xC100) == 0xC100)
@@ -1103,6 +1175,16 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Memory(opcode);
 	}
+	else if((opcode & 0x6000) == 0x6000)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Launch OpcodeBCC" << std::endl;
+		}
+
+		get().OpcodeBCC(opcode);
+	}
+
 
 
 	//copy state for unit test
@@ -2397,7 +2479,7 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 		BitReset(get().CCR, N_FLAG);
 	}
 
-	SetDataRegister(reg, (dword)result, size);
+	get().SetDataRegister(reg, (dword)result, size);
 
 	//cycles
 }
@@ -2476,9 +2558,42 @@ void M68k::OpcodeASL_ASR_Memory(word opcode)
 		BitReset(get().CCR, N_FLAG);
 	}
 
-	EA_DATA set = SetEAOperand(type, eaReg, (word)result, WORD, 0);
+	EA_DATA set = get().SetEAOperand(type, eaReg, (word)result, WORD, 0);
 
 	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBCC(word opcode)
+{
+	byte condition = (opcode >> 8) & 0xF;
+	byte displacement8 = opcode & 0xFF;
+
+	dword pcAdvance; 
+
+	dword displacement = get().SignExtendDWord(get().SignExtendWord(displacement8));
+
+	if(displacement8 == 0)
+	{
+		word displacement16 = Genesis::M68KReadMemoryWORD(get().programCounter);
+		pcAdvance = 2;
+		displacement = get().SignExtendDWord(displacement16);
+	}
+	else if(displacement8 == 0xFF)
+	{
+		displacement = Genesis::M68KReadMemoryLONG(programCounter);
+		pcAdvance = 4;
+	}
+
+	if(get().ConditionTable(condition))
+	{
+		programCounter += displacement;
+	}
+	else
+	{
+		programCounter += pcAdvance;
+	}
 
 	//cycles
 }

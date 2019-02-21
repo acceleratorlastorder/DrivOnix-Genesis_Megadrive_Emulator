@@ -106,6 +106,7 @@ private:
 
 	//Start opcodes Utils
 	dword GetTypeMaxSize(DATASIZE size);
+	bool ConditionTable(byte condition);
 	//End opcodes Utils
 
 	//Start opcodes
@@ -119,6 +120,7 @@ private:
 	void OpcodeANDI_To_CCR();
 	void OpcodeASL_ASR_Register(word opcode);
 	void OpcodeASL_ASR_Memory(word opcode);
+	void OpcodeBCC(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
