@@ -159,10 +159,11 @@ bool Test_ADD()
 		//on recupère notre state modifié par l'opcode
 		state = M68k::GetCpuState();
 
-		std::cout << "\t\tstate.registerData[7]" << state.registerData[7] << std::endl;
-		std::cout << "\t\tstate.registerData[6]" << state.registerData[6] << std::endl;
+		std::cout << "\t\tstate.registerData[6]" << std::hex <<state.registerData[6] << std::endl;
+		std::cout << "\t\tstate.registerData[7]" << std::hex <<state.registerData[7] << std::endl;
 
-		if(state.registerData[6] == (0x9 + 0x8))
+
+		if(state.registerData[7] == (0x9 + 0x8))
 		{
 			std::cout << "\t\tTest normal byte add Operation Passed" << std::endl;
 		}
@@ -188,7 +189,7 @@ bool Test_ADD()
 		BitSet(state.CCR, C_FLAG);
 		*/
 
-		return false;
+		return testResult;
 	}
 
 
