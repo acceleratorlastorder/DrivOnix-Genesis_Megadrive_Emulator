@@ -1085,7 +1085,7 @@ bool M68k::ConditionTable(byte condition)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	if((opcode & 0xC100) == 0xC100)
+	if((opcode & 0xF1F0) == 0xC100)
 	{
 		if(get().unitTests)
 		{
@@ -1094,7 +1094,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeABCD(opcode);
 	}
-	else if((opcode & 0xD000) == 0xD000)
+	else if((opcode & 0xF000) == 0xD000)
 	{
 		if(get().unitTests)
 		{
@@ -1103,7 +1103,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADD_ADDA(opcode);
 	}
-	else if((opcode & 0x0600) == 0x0600)
+	else if((opcode & 0xFF00) == 0x0600)
 	{
 		if(get().unitTests)
 		{
@@ -1112,7 +1112,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDI(opcode);
 	}
-	else if((opcode & 0x5000) == 0x5000)
+	else if((opcode & 0xF100) == 0x5000)
 	{
 		if(get().unitTests)
 		{
@@ -1121,7 +1121,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDQ_ADDA(opcode);
 	}
-	else if((opcode & 0xD100) == 0xD100)
+	else if((opcode & 0xF130) == 0xD100)
 	{
 		if(get().unitTests)
 		{
@@ -1130,7 +1130,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDX(opcode);
 	}
-	else if((opcode & 0xC000) == 0xC000)
+	else if((opcode & 0xF000) == 0xC000)
 	{
 		if(get().unitTests)
 		{
@@ -1139,7 +1139,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeAND(opcode);
 	}
-	else if((opcode & 0x0200) == 0x0200)
+	else if((opcode & 0xFF00) == 0x0200)
 	{
 		if(get().unitTests)
 		{
@@ -1157,7 +1157,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeANDI_To_CCR();
 	}
-	else if((opcode & 0xE000) == 0xE000)
+	else if((opcode & 0xF018) == 0xE000)
 	{
 		if(get().unitTests)
 		{
@@ -1166,7 +1166,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Register(opcode);
 	}
-	else if((opcode & 0xE0C0) == 0xE0C0)
+	else if((opcode & 0xFEC0) == 0xE0C0)
 	{
 		if(get().unitTests)
 		{
@@ -1175,7 +1175,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Memory(opcode);
 	}
-	else if((opcode & 0x6000) == 0x6000)
+	else if((opcode & 0xF000) == 0x6000)
 	{
 		if(get().unitTests)
 		{
@@ -1184,7 +1184,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeBCC(opcode);
 	}
-	else if((opcode & 0x0140) == 0x0140)
+	else if((opcode & 0xF1C0) == 0x0140)
 	{
 		if(get().unitTests)
 		{
@@ -1193,7 +1193,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeBCHGDynamic(opcode);
 	}
-	else if((opcode & 0x0840) == 0x0840)
+	else if((opcode & 0xFFC0) == 0x0840)
 	{
 		if(get().unitTests)
 		{
