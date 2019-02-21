@@ -121,6 +121,8 @@ private:
 	void OpcodeASL_ASR_Register(word opcode);
 	void OpcodeASL_ASR_Memory(word opcode);
 	void OpcodeBCC(word opcode);
+	void OpcodeBCHGDynamic(word opcode);
+	void OpcodeBCHGStatic(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var

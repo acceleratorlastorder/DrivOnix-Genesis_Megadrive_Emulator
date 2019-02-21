@@ -1089,7 +1089,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeABCD" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
 		}
 
 		get().OpcodeABCD(opcode);
@@ -1098,7 +1098,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeADD_ADDA" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeADD_ADDA" << std::endl;
 		}
 
 		get().OpcodeADD_ADDA(opcode);
@@ -1107,7 +1107,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeADDI" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeADDI" << std::endl;
 		}
 
 		get().OpcodeADDI(opcode);
@@ -1116,7 +1116,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeADDQ_ADDA" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeADDQ_ADDA" << std::endl;
 		}
 
 		get().OpcodeADDQ_ADDA(opcode);
@@ -1125,7 +1125,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeADDX" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeADDX" << std::endl;
 		}
 
 		get().OpcodeADDX(opcode);
@@ -1134,7 +1134,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeAND" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeAND" << std::endl;
 		}
 
 		get().OpcodeAND(opcode);
@@ -1143,7 +1143,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeANDI" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
 		}
 
 		get().OpcodeANDI(opcode);
@@ -1152,7 +1152,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeANDI_To_CCR" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
 		}
 
 		get().OpcodeANDI_To_CCR();
@@ -1161,7 +1161,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeASL_ASR_Register" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeASL_ASR_Register" << std::endl;
 		}
 
 		get().OpcodeASL_ASR_Register(opcode);
@@ -1170,7 +1170,7 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeASL_ASR_Memory" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeASL_ASR_Memory" << std::endl;
 		}
 
 		get().OpcodeASL_ASR_Memory(opcode);
@@ -1179,10 +1179,28 @@ void M68k::ExecuteOpcode(word opcode)
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Launch OpcodeBCC" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeBCC" << std::endl;
 		}
 
 		get().OpcodeBCC(opcode);
+	}
+	else if((opcode & 0x0140) == 0x0140)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBCHGDynamic" << std::endl;
+		}
+
+		get().OpcodeBCHGDynamic(opcode);
+	}
+	else if((opcode & 0x0840) == 0x0840)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBCHGStatic" << std::endl;
+		}
+
+		get().OpcodeBCHGStatic(opcode);
 	}
 
 
@@ -2594,6 +2612,73 @@ void M68k::OpcodeBCC(word opcode)
 	{
 		programCounter += pcAdvance;
 	}
+
+	//cycles
+}
+
+void M68k::OpcodeBCHGDynamic(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = get().registerData[reg] % modulo;
+	
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+		BitSet(dest.operand, bit);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+		BitReset(dest.operand, bit);
+	}
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBCHGStatic(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
+	get().programCounter += 2;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+		BitSet(dest.operand, bit);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+		BitReset(dest.operand, bit);
+	}
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
 
 	//cycles
 }
