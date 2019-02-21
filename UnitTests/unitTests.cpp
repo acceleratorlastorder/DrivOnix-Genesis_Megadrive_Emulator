@@ -26,7 +26,7 @@ bool TestFlag(word CCR, int C, int V, int Z, int N, int X)
 bool Test_ABCD()
 {
 	std::cout << "Start Test_ABCD()" << std::endl;
-	bool testResult = true;
+	bool testResult = false;
 
 	CPU_STATE_DEBUG state;
 
@@ -44,6 +44,7 @@ bool Test_ABCD()
 	if(state.registerData[6] == 0x13)
 	{
 		std::cout << "\t\tTest BCD Operation with X Reset Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
@@ -66,6 +67,7 @@ bool Test_ABCD()
 	if(state.registerData[6] == 0x14)
 	{
 		std::cout << "\t\tTest BCD Operation with X Set Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
@@ -88,6 +90,7 @@ bool Test_ABCD()
 	if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
 	{
 		std::cout << "\t\tTest C_FLAG and X_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
@@ -111,6 +114,7 @@ bool Test_ABCD()
 	if(TestFlag(state.CCR, 0, 0, 0, 0, 0))
 	{
 		std::cout << "\t\tTest Z_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
@@ -122,6 +126,33 @@ bool Test_ABCD()
 	std::cout << "End Test_ABCD()" << std::endl;
 
 	return testResult;
+}
+
+bool Test_ADD()
+{
+	//Indique le debut du test
+	std::cout << "Start Test_ABCD()" << std::endl;
+
+	//on declare un state
+	//et on met les values qu'il doit avoir avant l'execution de l'opcode
+	CPU_STATE_DEBUG state;
+	state.CCR = 0x0000;
+	M68k::SetCpuState(state);
+
+	//on execute l'opcode désiré
+	M68k::ExecuteOpcode(0xD000);
+
+	//on recupère notre state modifié par l'opcode
+	state = M68k::GetCpuState();
+
+
+	return false;
+}
+
+bool Test_ADD()
+{
+
+	return false;
 }
 
 bool Test_ADD()
