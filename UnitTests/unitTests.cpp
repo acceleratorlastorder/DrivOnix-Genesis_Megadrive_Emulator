@@ -125,30 +125,71 @@ bool Test_ABCD()
 }
 
 bool Test_ADD()
-{
-	//Indique le debut du test
-	std::cout << "Start Test_ADD()" << std::endl;
-	bool testResult = true;
+	{
+		/*	EMPTY SIGNATURE
+		 *  1101 (register)000 (opmode)000 ((effective address)(mode)000 (register)000)
+		 */
+		//Indique le debut du test
+		std::cout << "Start Test_ADD()" << std::endl;
+		bool testResult = true;
 
-	//on declare un state
-	//et on met les values qu'il doit avoir avant l'execution de l'opcode
-	CPU_STATE_DEBUG state;
-
-	state.CCR = 0x0000;
-	state.registerData[4] = 0x4;
-	state.registerData[6] = 0x9;
-
-	M68k::SetCpuState(state);
-
-	//on execute l'opcode désiré
-	M68k::ExecuteOpcode(0xD000);
-
-	//on recupère notre state modifié par l'opcode
-	state = M68k::GetCpuState();
+		//on declare un state
+		//et on met les values qu'il doit avoir avant l'execution de l'opcode
 
 
-	return false;
-}
+		CPU_STATE_DEBUG state;
+
+		//Test BCD Operation with X Reset
+		state.CCR = 0x0000;
+		state.registerData[6] = 0x9;
+		state.registerData[7] = 0x8;
+
+		M68k::SetCpuState(state);
+
+
+		/*	USED OPCODE
+		 *  1101 (register)111(7) (opmode)100 ((effective address)(mode)000 (register)110(6))
+		 *  binary: 1101111100000110
+		 *  hex: DF06
+		 */
+
+		//on execute l'opcode désiré
+		M68k::ExecuteOpcode(0xDF06);
+
+		//on recupère notre state modifié par l'opcode
+		state = M68k::GetCpuState();
+
+		std::cout << "\t\tstate.registerData[7]" << state.registerData[7] << std::endl;
+		std::cout << "\t\tstate.registerData[6]" << state.registerData[6] << std::endl;
+
+		if(state.registerData[6] == (0x9 + 0x8))
+		{
+			std::cout << "\t\tTest normal byte add Operation Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tTest normal byte add Operation Failed" << std::endl;
+			testResult = false;
+		}
+
+
+		/*
+
+
+
+		BitSet(state.CCR, X_FLAG);
+
+		BitSet(state.CCR, N_FLAG);
+
+		BitSet(state.CCR, Z_FLAG);
+
+		BitSet(state.CCR, V_FLAG);
+
+		BitSet(state.CCR, C_FLAG);
+		*/
+
+		return false;
+	}
 
 
 ////////////////////////////////////////
