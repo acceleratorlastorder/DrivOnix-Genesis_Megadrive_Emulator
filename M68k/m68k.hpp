@@ -130,6 +130,7 @@ private:
 	void OpcodeBTSTDynamic(word opcode);
 	void OpcodeBTSTStatic(word opcode);
 	void OpcodeCHK(word opcode);
+	void OpcodeCLR(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var

@@ -1265,6 +1265,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCHK(opcode);
 	}
+	else if((opcode & 0xFF00) == 0x4200)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeCLR" << std::endl;
+		}
+
+		get().OpcodeCLR(opcode);
+	}
 
 
 
@@ -2966,6 +2975,25 @@ void M68k::OpcodeCHK(word opcode)
 		//OpcodeTRAP(6);
 		BitReset(get().CCR, N_FLAG);
 	}
+}
 
+void M68k::OpcodeCLR(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, 0, size, 0);
+
+	BitReset(get().CCR, N_FLAG);
+	BitSet(get().CCR, Z_FLAG);
+	BitReset(get().CCR, V_FLAG);
+	BitReset(get().CCR, C_FLAG);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
 
 }
