@@ -123,6 +123,10 @@ private:
 	void OpcodeBCC(word opcode);
 	void OpcodeBCHGDynamic(word opcode);
 	void OpcodeBCHGStatic(word opcode);
+	void OpcodeBCLRDynamic(word opcode);
+	void OpcodeBCLRStatic(word opcode);
+	void OpcodeBSETDynamic(word opcode);
+	void OpcodeBSETStatic(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var

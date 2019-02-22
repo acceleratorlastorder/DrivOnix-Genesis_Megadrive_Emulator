@@ -1202,6 +1202,42 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeBCHGStatic(opcode);
 	}
+	else if((opcode & 0xF1C0) == 0x0180)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBCLRDynamic" << std::endl;
+		}
+
+		get().OpcodeBCLRDynamic(opcode);
+	}
+	else if((opcode & 0xFFC0) == 0x0880)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBCLRStatic" << std::endl;
+		}
+
+		get().OpcodeBCLRStatic(opcode);
+	}
+	else if((opcode & 0xF1C0) == 0x01C0)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBSETDynamic" << std::endl;
+		}
+
+		get().OpcodeBSETDynamic(opcode);
+	}
+	else if((opcode & 0xFFC0) == 0x08C0)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeBSETStatic" << std::endl;
+		}
+
+		get().OpcodeBSETStatic(opcode);
+	}
 
 
 
@@ -2675,6 +2711,140 @@ void M68k::OpcodeBCHGStatic(word opcode)
 		BitReset(get().CCR, Z_FLAG);
 		BitReset(dest.operand, bit);
 	}
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBCLRDynamic(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = get().registerData[reg] % modulo;
+	
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	BitReset(dest.operand, bit);
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBCLRStatic(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
+	get().programCounter += 2;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	BitReset(dest.operand, bit);
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBSETDynamic(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = get().registerData[reg] % modulo;
+	
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	BitSet(dest.operand, bit);
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeBSETStatic(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+
+	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+
+	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
+	get().programCounter += 2;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	if(!TestBit(dest.operand, bit))
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	BitSet(dest.operand, bit);
 
 	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
 
