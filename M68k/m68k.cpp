@@ -1274,6 +1274,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCLR(opcode);
 	}
+	else if((opcode & 0xF000) == 0xB000)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeCMP_CMPA" << std::endl;
+		}
+
+		get().OpcodeCMP_CMPA(opcode);
+	}
 
 
 
@@ -2995,5 +3004,172 @@ void M68k::OpcodeCLR(word opcode)
 	get().programCounter += set.PCadvance;
 
 	//cycles
+}
+
+void M68k::OpcodeCMP_CMPA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	DATASIZE size;
+
+	if(opmode > 2) //CMPA
+	{
+		switch(opmode)
+		{
+			case 3:
+			size = WORD;
+			break;
+
+			case 7:
+			size = LONG;
+			break;
+		}
+	}
+	else
+	{
+		size = (DATASIZE)opmode;
+	}
+
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	dword dest;
+
+	if(opmode > 2) //CMPA
+	{
+		dest = get().registerAddress[reg];
+
+		if(size == WORD)
+		{
+			src.operand = get().SignExtendDWord((word)src.operand);
+			size = LONG;
+		}
+	}
+	else
+	{
+		dest = get().registerData[reg];
+	}
+
+	//C_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = (uint64_t)dest & maxTypeSize;
+	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
+	if(sonic < tails)
+	{
+		BitSet(get().CCR, C_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)dest - (signed_byte)src.operand;
+
+			if(eggman < INT8_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)dest - (signed_word)src.operand;
+
+			if(eggman < INT16_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)dest - (signed_dword)src.operand;
+
+			if(eggman < INT32_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	dword result = dest - src.operand;
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
 
 }
