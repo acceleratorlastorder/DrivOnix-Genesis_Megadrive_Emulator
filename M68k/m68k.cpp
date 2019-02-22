@@ -1256,6 +1256,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeBTSTStatic(opcode);
 	}
+	else if((opcode & 0xF040) == 0x4000)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeCHK" << std::endl;
+		}
+
+		get().OpcodeCHK(opcode);
+	}
 
 
 
@@ -2928,4 +2937,35 @@ void M68k::OpcodeBTSTStatic(word opcode)
 	get().programCounter += dest.PCadvance;
 
 	//cycles
+}
+
+void M68k::OpcodeCHK(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	DATASIZE size = WORD; //long est juste dispo pour les M68020-30-40
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	signed_word Dn = get().registerData[reg];
+
+	EA_DATA bounds = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	get().programCounter += bounds.PCadvance;
+
+	//cycles
+
+	if(Dn < 0)
+	{
+		//OpcodeTRAP(6);
+		BitSet(get().CCR, N_FLAG);
+	}
+	else if(Dn > ((signed_word)bounds.operand))
+	{
+		//OpcodeTRAP(6);
+		BitReset(get().CCR, N_FLAG);
+	}
+
+
 }
