@@ -149,6 +149,7 @@ int M68k::Update()
 
 	get().ExecuteOpcode(opcode);
 
+	get().opcodeClicks = 10; //temporaire
 	return get().opcodeClicks;
 }
 
@@ -1132,6 +1133,7 @@ bool M68k::ConditionTable(byte condition)
 
 void M68k::ExecuteOpcode(word opcode)
 {
+	//get().SetUnitTestsMode();
 	//std::cout << "\t ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
 
 	if((opcode & 0xF1F0) == 0xC100)
@@ -1383,6 +1385,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeDBcc(opcode);
+	}
+	else if((opcode & 0xFF00) == 0x4A00)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeTST" << std::endl;
+		}
+
+		get().OpcodeTST(opcode);
 	}
 	else
 	{
@@ -3612,6 +3623,77 @@ void M68k::OpcodeDBcc(word opcode)
 	{
 		get().programCounter += 2;
 	}
+
+	//cycles
+}
+
+void M68k::OpcodeTST(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = dest.operand;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
