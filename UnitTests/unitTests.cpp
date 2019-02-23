@@ -7,9 +7,9 @@ bool TestFlag(word CCR, int C, int V, int Z, int N, int X)
 	int res = 0;
 
 	res += (C == BitGetVal(CCR, 0));
-	res += (V == BitGetVal(CCR, 1)); 
-	res += (Z == BitGetVal(CCR, 2)); 
-	res += (N == BitGetVal(CCR, 3)); 
+	res += (V == BitGetVal(CCR, 1));
+	res += (Z == BitGetVal(CCR, 2));
+	res += (N == BitGetVal(CCR, 3));
 	res += (X == BitGetVal(CCR, 4));
 
 	if(res == 5)
@@ -20,18 +20,13 @@ bool TestFlag(word CCR, int C, int V, int Z, int N, int X)
 	return false;
 }
 
-
-
-
-
-
-
 ////////////////////////////////////////
 //OPCODE TESTS
 ////////////////////////////////////////
-void Test_ABCD()
+bool Test_ABCD()
 {
 	std::cout << "Start Test_ABCD()" << std::endl;
+	bool testResult = false;
 
 	CPU_STATE_DEBUG state;
 
@@ -49,10 +44,12 @@ void Test_ABCD()
 	if(state.registerData[6] == 0x13)
 	{
 		std::cout << "\t\tTest BCD Operation with X Reset Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest BCD Operation with X Reset Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test BCD Operation with X Set
@@ -70,10 +67,12 @@ void Test_ABCD()
 	if(state.registerData[6] == 0x14)
 	{
 		std::cout << "\t\tTest BCD Operation with X Set Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest BCD Operation with X Set Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test C_FLAG and X_FLAG
@@ -91,10 +90,12 @@ void Test_ABCD()
 	if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
 	{
 		std::cout << "\t\tTest C_FLAG and X_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest C_FLAG and X_FLAG Failed" << std::endl;
+		testResult = false;
 	}
 
 	//Test Z_FLAG
@@ -113,29 +114,150 @@ void Test_ABCD()
 	if(TestFlag(state.CCR, 0, 0, 0, 0, 0))
 	{
 		std::cout << "\t\tTest Z_FLAG Passed" << std::endl;
+		testResult = true;
 	}
 	else
 	{
 		std::cout << "\t\tTest Z_FLAG Failed" << std::endl;
+		testResult = false;
 	}
 
 	//indique la fin du test
 	std::cout << "End Test_ABCD()" << std::endl;
+
+	return testResult;
 }
+
+bool Test_ADD()
+{
+	//Indique le debut du test
+	std::cout << "Start Test_ABCD()" << std::endl;
+
+	//on declare un state
+	//et on met les values qu'il doit avoir avant l'execution de l'opcode
+	CPU_STATE_DEBUG state;
+	state.CCR = 0x0000;
+	M68k::SetCpuState(state);
+
+	//on execute l'opcode désiré
+	M68k::ExecuteOpcode(0xD000);
+
+	//on recupère notre state modifié par l'opcode
+	state = M68k::GetCpuState();
+
+
+	return false;
+}
+
+bool Test_ADD()
+{
+
+	return false;
+}
+
+bool Test_ADD()
+	{
+		/*	EMPTY SIGNATURE
+		 *  1101 (register)000 (opmode)000 ((effective address)(mode)000 (register)000)
+		 */
+		//Indique le debut du test
+		std::cout << "Start Test_ADD()" << std::endl;
+		bool testResult = true;
+
+		//on declare un state
+		//et on met les values qu'il doit avoir avant l'execution de l'opcode
+
+
+		CPU_STATE_DEBUG state;
+
+		//Test BCD Operation with X Reset
+		state.CCR = 0x0000;
+		state.registerData[6] = 0x9;
+		state.registerData[7] = 0x8;
+
+		M68k::SetCpuState(state);
+
+
+		/*	USED OPCODE
+		 *  1101 (register)111(7) (opmode)100 ((effective address)(mode)000 (register)110(6))
+		 *  binary: 1101111100000110
+		 *  hex: DF06
+		 */
+
+		//on execute l'opcode désiré
+		M68k::ExecuteOpcode(0xDF06);
+
+		//on recupère notre state modifié par l'opcode
+		state = M68k::GetCpuState();
+
+		std::cout << "\t\tstate.registerData[6]" << std::hex <<state.registerData[6] << std::endl;
+		std::cout << "\t\tstate.registerData[7]" << std::hex <<state.registerData[7] << std::endl;
+
+
+		if(state.registerData[7] == (0x9 + 0x8))
+		{
+			std::cout << "\t\tTest normal byte add Operation Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tTest normal byte add Operation Failed" << std::endl;
+			testResult = false;
+		}
+
+
+		/*
+
+
+
+		BitSet(state.CCR, X_FLAG);
+
+		BitSet(state.CCR, N_FLAG);
+
+		BitSet(state.CCR, Z_FLAG);
+
+		BitSet(state.CCR, V_FLAG);
+
+		BitSet(state.CCR, C_FLAG);
+		*/
+
+		return testResult;
+	}
+
 
 ////////////////////////////////////////
 //MAIN
 ////////////////////////////////////////
 int main()
 {
+	std::map<std::string, bool> TestResults;
+
 	M68k::SetUnitTestsMode();
 
-	//on execute nos tests un par un
-	Test_ABCD();
 
+	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
+
+
+
+
+
+	/**
+	 * END
+	 **/
 	std::cout << "!!!!!!All Test Completed!!!!!!" << std::endl;
+	int testErrorCount = 0;
+	for(auto iterator = TestResults.begin(); iterator != TestResults.end(); iterator++) {
+		if(!iterator->second){
+			testErrorCount++;
+			std::cout << iterator->first << " did not pass the test" << std::endl;
+		}
+	}
+
+	if(testErrorCount == 0){
+		std::cout << "There is no known error GOOD JOB !" << std::endl;
+	}else{
+		std::cout << "There is " << testErrorCount << " known errors !" << std::endl;
+	}
 
 	while(1);
-	
-	return 0;
 }
