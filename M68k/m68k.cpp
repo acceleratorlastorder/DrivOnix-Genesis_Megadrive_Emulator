@@ -1138,25 +1138,12 @@ void M68k::ExecuteOpcode(word opcode)
 
 	if((opcode & 0xF1F0) == 0xC100)
 	{
-		if(((opcode >> 3) & 0x1F) > 1)
+		if(get().unitTests)
 		{
-			if(get().unitTests)
-			{
-				std::cout << "\tM68k :: Execute OpcodeEXG" << std::endl;
-			}
-
-			std::cout << "\tM68k:: Unimplemented EXG Opcode" << std::endl;
-			while(1);
+			std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
 		}
-		else
-		{
-			if(get().unitTests)
-			{
-				std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
-			}
 
-			get().OpcodeABCD(opcode);
-		}
+		get().OpcodeABCD(opcode);
 	}
 	else if((opcode & 0xF000) == 0xD000)
 	{
@@ -1385,6 +1372,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeDBcc(opcode);
+	}
+	else if((opcode & 0xF1C0) == 0x41C0)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeLEA" << std::endl;
+		}
+
+		get().OpcodeLEA(opcode);
 	}
 	else if((opcode & 0xFF00) == 0x4A00)
 	{
@@ -3694,6 +3690,23 @@ void M68k::OpcodeTST(word opcode)
 	}
 
 	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeLEA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, LONG, false, 0);
+
+	get().registerAddress[reg] = src.pointer;
+
+	get().programCounter += src.PCadvance;
 
 	//cycles
 }

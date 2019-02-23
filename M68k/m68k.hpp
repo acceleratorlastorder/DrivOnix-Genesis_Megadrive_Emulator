@@ -156,6 +156,7 @@ private:
 	void OpcodeCMPM(word opcode);
 	void OpcodeDBcc(word opcode);
 
+	void OpcodeLEA(word opcode);
 	void OpcodeTST(word opcode);
 	//End opcodes
 	//---------------------------
