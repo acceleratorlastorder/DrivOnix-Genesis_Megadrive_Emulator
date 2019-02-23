@@ -18,7 +18,7 @@ void M68k::SetUnitTestsMode()
 
 void M68k::Init()
 {
-	get().unitTests = false;
+	get().unitTests = true;
 	get().CCR = 0x2700;
 	get().stop = false;
 	get().servicingInt = false;
@@ -1132,7 +1132,7 @@ bool M68k::ConditionTable(byte condition)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	//std::cout << "\t ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
+	std::cout << "\t ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
 
 	if((opcode & 0xF1F0) == 0xC100)
 	{
@@ -1330,7 +1330,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeBTSTStatic(opcode);
 	}
-	else if((opcode & 0xF040) == 0x4000)
+	else if((opcode & 0xF1C0) == 0x4180)
 	{
 		if(get().unitTests)
 		{
@@ -1390,7 +1390,7 @@ void M68k::ExecuteOpcode(word opcode)
 		while(1);
 	}
 
-	//std::cout << "\t 0x" << std::hex << opcode << std::endl;
+	std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
 	//copy state for unit test
 	if(get().unitTests)
