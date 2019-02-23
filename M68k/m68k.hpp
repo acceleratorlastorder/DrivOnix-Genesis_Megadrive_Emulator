@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <map>
+#include <string>
 #include "../Bits/bitsUtils.hpp"
 #include "../Genesis/genesis.hpp"
 
@@ -126,6 +127,7 @@ private:
 	//Start opcodes Utils
 	dword GetTypeMaxSize(DATASIZE size);
 	bool ConditionTable(byte condition);
+	bool IsOpcode(word opcode, std::string mask);
 	//End opcodes Utils
 
 	//Start opcodes
@@ -139,7 +141,7 @@ private:
 	void OpcodeANDI_To_CCR();
 	void OpcodeASL_ASR_Register(word opcode);
 	void OpcodeASL_ASR_Memory(word opcode);
-	void OpcodeBCC(word opcode);
+	void OpcodeBcc(word opcode);
 	void OpcodeBCHGDynamic(word opcode);
 	void OpcodeBCHGStatic(word opcode);
 	void OpcodeBCLRDynamic(word opcode);
@@ -157,6 +159,13 @@ private:
 	void OpcodeDBcc(word opcode);
 
 	void OpcodeLEA(word opcode);
+	void OpcodeMOVE(word opcode);
+	void OpcodeMOVE_To_CCR(word opcode);
+	void OpcodeMOVE_To_SR(word opcode);
+	void OpcodeMOVE_From_SR(word opcode);
+	void OpcodeMOVE_USP(word opcode);
+	void OpcodeMOVEA(word opcode);
+	void OpcodeMOVEQ(word opcode);
 	void OpcodeTST(word opcode);
 	//End opcodes
 	//---------------------------

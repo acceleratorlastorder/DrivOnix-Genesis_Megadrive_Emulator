@@ -46,18 +46,18 @@ LSL      Logical Shift Left                 Dx,Dy      BWL        * * * 0 *
                                         #<1-8>,Dy
                                         < ea >
 LSR      Logical Shift Right                 ...       BWL        * * * 0 *
-MOVE     Between Effective Addresses    < ea >,< ea >  BWL        - * * 0 0
-MOVE     To CCR                         < ea >,CCR     -W-        I I I I I
-MOVE     To SR                          < ea >,SR      -W-        I I I I I
-MOVE     From SR                            SR,< ea >  -W-        - - - - -
-MOVE     USP to/from Address Register      USP,An      --L        - - - - -
+!!!Done!!! MOVE     Between Effective Addresses    < ea >,< ea >  BWL        - * * 0 0
+!!!Done!!! MOVE     To CCR                         < ea >,CCR     -W-        I I I I I
+!!!Done!!! MOVE     To SR                          < ea >,SR      -W-        I I I I I
+!!!Done!!! MOVE     From SR                            SR,< ea >  -W-        - - - - -
+!!!Done!!! MOVE     USP to/from Address Register      USP,An      --L        - - - - -
                                             An,USP
-MOVEA    MOVE Address                   < ea >,An      -WL        - - - - -
+!!!Done!!! MOVEA    MOVE Address                   < ea >,An      -WL        - - - - -
 MOVEM    MOVE Multiple         <register list>,< ea >  -WL        - - - - -
                                           < ea >,<register list>
 MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
                                          x(An),Dn
-MOVEQ    MOVE 8-bit immediate     #<-128.+127>,Dn      --L        - * * 0 0
+!!!Done!!! MOVEQ    MOVE 8-bit immediate     #<-128.+127>,Dn      --L        - * * 0 0
 MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0
 MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
 NBCD     Negate BCD                     < ea >         B--        * U * U *

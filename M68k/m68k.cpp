@@ -1131,39 +1131,275 @@ bool M68k::ConditionTable(byte condition)
 	return false;
 }
 
+bool M68k::IsOpcode(word opcode, std::string mask)
+{
+	for(int i = 0; i < 16; i++)
+	{
+		char bit = '0' + BitGetVal(opcode, 15-i);
+
+		if(mask[i] == 'x')
+		{
+			continue;
+		}
+
+		if(mask[i] != bit)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void M68k::ExecuteOpcode(word opcode)
 {
 	//get().SetUnitTestsMode();
-	//std::cout << "\t ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
+	//std::cout << "ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
 
-	if((opcode & 0xF1F0) == 0xC100)
+	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
+	{//00
+
+		if(get().IsOpcode(opcode, "00000010xxxxxxxx"))
+		{//00000010
+
+			if(get().IsOpcode(opcode, "0000001000111100"))
+			{
+				if(get().unitTests)
+				{
+					std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
+				}
+
+				get().OpcodeANDI_To_CCR();
+			}
+			else
+			{
+				if(get().unitTests)
+				{
+					std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
+				}
+
+				get().OpcodeANDI(opcode);
+			}
+		}
+
+		else if(get().IsOpcode(opcode, "0000100001xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBCHGStatic" << std::endl;
+			}
+
+			get().OpcodeBCHGStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000100010xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBCLRStatic" << std::endl;
+			}
+
+			get().OpcodeBCLRStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000100011xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBSETStatic" << std::endl;
+			}
+
+			get().OpcodeBSETStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000100000xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBTSTStatic" << std::endl;
+			}
+
+			get().OpcodeBTSTStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "00001100xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeCMPI" << std::endl;
+			}
+
+			get().OpcodeCMPI(opcode);
+		}
+		else if(get().IsOpcode(opcode, "00000110xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeADDI" << std::endl;
+			}
+
+			get().OpcodeADDI(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000xxx101xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBCHGDynamic" << std::endl;
+			}
+
+			get().OpcodeBCHGDynamic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000xxx110xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBCLRDynamic" << std::endl;
+			}
+
+			get().OpcodeBCLRDynamic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000xxx111xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBSETDynamic" << std::endl;
+			}
+
+			get().OpcodeBSETDynamic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "0000xxx100xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBTSTDynamic" << std::endl;
+			}
+
+			get().OpcodeBTSTDynamic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "001xxxx001xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeMOVEA" << std::endl;
+			}
+
+			get().OpcodeMOVEA(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeMOVE" << std::endl;
+			}
+
+			get().OpcodeMOVE(opcode);
+		}
+	}
+
+
+	else if(get().IsOpcode(opcode, "1101xxxxxxxxxxxx"))
+	{//1101
+
+		if(get().IsOpcode(opcode, "1101xxx1xx00xxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeADDX" << std::endl;
+			}
+
+			get().OpcodeADDX(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeADD_ADDA" << std::endl;
+			}
+
+			get().OpcodeADD_ADDA(opcode);
+		}
+	}
+
+
+	else if(get().IsOpcode(opcode, "1100xxxxxxxxxxxx"))
+	{//1100
+
+		if(get().IsOpcode(opcode, "1100xxx10000xxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
+			}
+
+			get().OpcodeABCD(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeAND" << std::endl;
+			}
+
+			get().OpcodeAND(opcode);
+		}
+	}
+
+
+	else if(get().IsOpcode(opcode, "0110xxxxxxxxxxxx"))
+	{//0110
+
+		if(get().IsOpcode(opcode, "01100001xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBSR" << std::endl;
+			}
+
+			get().OpcodeBSR(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeBcc" << std::endl;
+			}
+
+			get().OpcodeBcc(opcode);
+		}
+	}
+
+
+	else if(get().IsOpcode(opcode, "1011xxxxxxxxxxxx"))
+	{//1011
+
+		if(get().IsOpcode(opcode, "1011xxx1xx001xxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeCMPM" << std::endl;
+			}
+
+			get().OpcodeCMPM(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeCMP_CMPA" << std::endl;
+			}
+
+			get().OpcodeCMP_CMPA(opcode);
+		}
+	}
+
+
+	//other
+	else if(get().IsOpcode(opcode, "0111xxx0xxxxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeMOVEQ" << std::endl;
 		}
 
-		get().OpcodeABCD(opcode);
+		get().OpcodeMOVEQ(opcode);
 	}
-	else if((opcode & 0xF000) == 0xD000)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeADD_ADDA" << std::endl;
-		}
-
-		get().OpcodeADD_ADDA(opcode);
-	}
-	else if((opcode & 0xFF00) == 0x0600)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeADDI" << std::endl;
-		}
-
-		get().OpcodeADDI(opcode);
-	}
-	else if((opcode & 0xF100) == 0x5000)
+	else if(get().IsOpcode(opcode, "0101xxx0xxxxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1172,46 +1408,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeADDQ_ADDA(opcode);
 	}
-	else if((opcode & 0xF130) == 0xD100)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeADDX" << std::endl;
-		}
-
-		get().OpcodeADDX(opcode);
-	}
-	else if((opcode & 0xF000) == 0xC000)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeAND" << std::endl;
-		}
-
-		get().OpcodeAND(opcode);
-	}
-	else if((opcode & 0xFF00) == 0x0200)
-	{
-		if(opcode == 0x023C)
-		{
-			if(get().unitTests)
-			{
-				std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
-			}
-
-			get().OpcodeANDI_To_CCR();
-		}
-		else
-		{
-			if(get().unitTests)
-			{
-				std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
-			}
-
-			get().OpcodeANDI(opcode);
-		}
-	}
-	else if((opcode & 0xF018) == 0xE000)
+	else if(get().IsOpcode(opcode, "1110xxxxxxx00xxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1220,7 +1417,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Register(opcode);
 	}
-	else if((opcode & 0xFEC0) == 0xE0C0)
+	else if(get().IsOpcode(opcode, "1110000x11xxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1229,97 +1426,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Memory(opcode);
 	}
-	else if((opcode & 0xF000) == 0x6000)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBCC" << std::endl;
-		}
-
-		get().OpcodeBCC(opcode);
-	}
-	else if((opcode & 0xF1C0) == 0x0140)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBCHGDynamic" << std::endl;
-		}
-
-		get().OpcodeBCHGDynamic(opcode);
-	}
-	else if((opcode & 0xFFC0) == 0x0840)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBCHGStatic" << std::endl;
-		}
-
-		get().OpcodeBCHGStatic(opcode);
-	}
-	else if((opcode & 0xF1C0) == 0x0180)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBCLRDynamic" << std::endl;
-		}
-
-		get().OpcodeBCLRDynamic(opcode);
-	}
-	else if((opcode & 0xFFC0) == 0x0880)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBCLRStatic" << std::endl;
-		}
-
-		get().OpcodeBCLRStatic(opcode);
-	}
-	else if((opcode & 0xF1C0) == 0x01C0)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBSETDynamic" << std::endl;
-		}
-
-		get().OpcodeBSETDynamic(opcode);
-	}
-	else if((opcode & 0xFFC0) == 0x08C0)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBSETStatic" << std::endl;
-		}
-
-		get().OpcodeBSETStatic(opcode);
-	}
-	else if((opcode & 0xFF00) == 0x6100)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBSR" << std::endl;
-		}
-
-		get().OpcodeBSR(opcode);
-	}
-	else if((opcode & 0xF1C0) == 0x0100)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBTSTDynamic" << std::endl;
-		}
-
-		get().OpcodeBTSTDynamic(opcode);
-	}
-	else if((opcode & 0xFFC0) == 0x0800)
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeBTSTStatic" << std::endl;
-		}
-
-		get().OpcodeBTSTStatic(opcode);
-	}
-	else if((opcode & 0xF1C0) == 0x4180)
+	else if(get().IsOpcode(opcode, "0100xxx110xxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1328,7 +1435,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCHK(opcode);
 	}
-	else if((opcode & 0xFF00) == 0x4200)
+	else if(get().IsOpcode(opcode, "01000010xxxxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1337,34 +1444,43 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCLR(opcode);
 	}
-	else if((opcode & 0xF100) == 0xB000)
+	else if(get().IsOpcode(opcode, "0100010011xxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeCMP_CMPA" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeMOVE_To_CCR" << std::endl;
 		}
 
-		get().OpcodeCMP_CMPA(opcode);
+		get().OpcodeMOVE_To_CCR(opcode);
 	}
-	else if((opcode & 0xFF00) == 0x0C00)
+	else if(get().IsOpcode(opcode, "0100011011xxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeCMPI" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeMOVE_To_SR" << std::endl;
 		}
 
-		get().OpcodeCMPI(opcode);
+		get().OpcodeMOVE_To_SR(opcode);
 	}
-	else if((opcode & 0xF138) == 0xB108)
+	else if(get().IsOpcode(opcode, "0100000011xxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeCMPM" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeMOVE_From_SR" << std::endl;
 		}
 
-		get().OpcodeCMPM(opcode);
+		get().OpcodeMOVE_From_SR(opcode);
 	}
-	else if((opcode & 0xF0F8) == 0x50C8)
+	else if(get().IsOpcode(opcode, "010011100110xxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeMOVE_USP" << std::endl;
+		}
+
+		get().OpcodeMOVE_USP(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0101xxxx11001xxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1373,7 +1489,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeDBcc(opcode);
 	}
-	else if((opcode & 0xF1C0) == 0x41C0)
+	else if(get().IsOpcode(opcode, "0100xxx111xxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1382,7 +1498,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeLEA(opcode);
 	}
-	else if((opcode & 0xFF00) == 0x4A00)
+	else if(get().IsOpcode(opcode, "01001010xxxxxxxx"))
 	{
 		if(get().unitTests)
 		{
@@ -2779,7 +2895,7 @@ void M68k::OpcodeASL_ASR_Memory(word opcode)
 	//cycles
 }
 
-void M68k::OpcodeBCC(word opcode)
+void M68k::OpcodeBcc(word opcode)
 {
 	byte condition = (opcode >> 8) & 0xF;
 	byte displacement8 = opcode & 0xFF;
@@ -3623,6 +3739,267 @@ void M68k::OpcodeDBcc(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeLEA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, LONG, false, 0);
+
+	get().registerAddress[reg] = src.pointer;
+
+	get().programCounter += src.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVE(word opcode)
+{
+	byte tempSize = (opcode >> 12) & 0x3;
+	byte destReg = (opcode >> 9) & 0x7;
+	byte destMode = (opcode >> 6) & 0x7;
+	byte srcMode = (opcode >> 3) & 0x7;
+	byte srcReg = (opcode & 0x7);
+
+	EA_TYPES destType = (EA_TYPES)destMode;
+	EA_TYPES srcType = (EA_TYPES)srcMode;
+
+	DATASIZE size;
+	switch(tempSize)
+	{
+		case 1:
+		size = BYTE;
+		break;
+
+		case 2:
+		size = LONG;
+		break;
+
+		case 3:
+		size = WORD;
+		break;
+	}
+
+	EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
+	EA_DATA dest = get().SetEAOperand(destType, destReg, src.operand, size, 0);
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = dest.operand;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().programCounter += src.PCadvance;
+	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVE_To_CCR(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = (opcode & 0x7);
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
+
+	get().CCR &= 0xFF00;
+	get().CCR |= (byte)src.operand;
+
+	get().programCounter += src.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVE_To_SR(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = (opcode & 0x7);
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	if(get().superVisorModeActivated)
+	{
+		EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
+
+		get().CCR = (word)src.operand;
+
+		get().programCounter += src.PCadvance;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeMOVE_From_SR(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = (opcode & 0x7);
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	if(get().superVisorModeActivated)
+	{
+		EA_DATA src = get().SetEAOperand(type, eaReg, get().CCR, WORD, 0);
+		get().programCounter += src.PCadvance;
+	}
+	else
+	{
+		get().RequestInt(M68k::INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeMOVE_USP(word opcode)
+{
+	byte dr = (opcode >> 3) & 0x1;
+	byte reg = opcode & 0x7;
+
+	if(get().superVisorModeActivated)
+	{
+		if(dr == 0)
+		{
+			get().userStackPointer = get().registerAddress[reg];
+		}
+		else
+		{
+			get().registerAddress[reg] = get().userStackPointer;
+		}
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeMOVEA(word opcode)
+{
+	byte tempSize = (opcode >> 12) & 0x3;
+	byte destReg = (opcode >> 9) & 0x7;
+	byte srcMode = (opcode >> 3) & 0x7;
+	byte srcReg = (opcode & 0x7);
+
+	EA_TYPES srcType = (EA_TYPES)srcMode;
+
+	DATASIZE size;
+	switch(tempSize)
+	{
+		case 2:
+		size = LONG;
+		break;
+
+		case 3:
+		size = WORD;
+		break;
+	}
+
+	EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
+	
+	if(size == WORD)
+	{
+		src.operand = get().SignExtendDWord((word)src.operand);
+	}
+
+	get().registerAddress[destReg] = src.operand;
+
+	get().programCounter += src.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVEQ(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte data = opcode & 0xF;
+
+	dword extendData = get().SignExtendDWord(get().SignExtendWord(data));
+
+	get().registerData[reg] = extendData;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = extendData;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 31))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles
+}
+
 void M68k::OpcodeTST(word opcode)
 {
 	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
@@ -3690,23 +4067,6 @@ void M68k::OpcodeTST(word opcode)
 	}
 
 	get().programCounter += dest.PCadvance;
-
-	//cycles
-}
-
-void M68k::OpcodeLEA(word opcode)
-{
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(type, eaReg, LONG, false, 0);
-
-	get().registerAddress[reg] = src.pointer;
-
-	get().programCounter += src.PCadvance;
 
 	//cycles
 }
