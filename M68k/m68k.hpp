@@ -127,6 +127,7 @@ private:
 	void OpcodeBCLRStatic(word opcode);
 	void OpcodeBSETDynamic(word opcode);
 	void OpcodeBSETStatic(word opcode);
+	void OpcodeBSR(word opcode);
 	void OpcodeBTSTDynamic(word opcode);
 	void OpcodeBTSTStatic(word opcode);
 	void OpcodeCHK(word opcode);
