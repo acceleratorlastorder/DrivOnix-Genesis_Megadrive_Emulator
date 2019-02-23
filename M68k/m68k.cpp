@@ -1310,6 +1310,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCMPM(opcode);
 	}
+	else if((opcode & 0xF0F8) == 0x50C8)
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeDBcc" << std::endl;
+		}
+
+		get().OpcodeDBcc(opcode);
+	}
 
 
 
@@ -3497,6 +3506,42 @@ void M68k::OpcodeCMPM(word opcode)
 	}
 
 	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeDBcc(word opcode)
+{
+	byte condition = (opcode >> 8) & 0xF;
+	byte reg = opcode & 0x7;
+
+	if(!get().ConditionTable(condition))
+	{
+		bool negOne = (get().registerData[reg] == 0);
+
+		word lo = (word)((word)(get().registerData[reg] & 0xFFFF) - 1);
+		word hi = (word)((word)((get().registerData[reg] >> 16) & 0xFFFF));
+
+		get().registerData[reg] = (hi << 16) | lo;
+
+		if(negOne)
+		{
+			get().registerData[reg] &= 0xFFFF0000;
+			get().registerData[reg] |= 0xFFFF;
+
+			get().programCounter += 2; 
+		}
+		else
+		{
+			dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
+
+			get().programCounter += displacement;
+		}
+	}
+	else
+	{
+		get().programCounter += 2;
+	}
 
 	//cycles
 }

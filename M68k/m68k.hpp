@@ -135,6 +135,7 @@ private:
 	void OpcodeCMP_CMPA(word opcode);
 	void OpcodeCMPI(word opcode);
 	void OpcodeCMPM(word opcode);
+	void OpcodeDBcc(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
