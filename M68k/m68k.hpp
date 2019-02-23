@@ -2,6 +2,7 @@
 #define M68K_HPP
 
 #include <iostream>
+#include <map>
 #include "../Bits/bitsUtils.hpp"
 #include "../Genesis/genesis.hpp"
 
@@ -11,7 +12,7 @@
 #define N_FLAG 3
 #define X_FLAG 4
 
-#define CYCLES_PER_SECOND 7670000
+#define M68K_CYCLES_PER_SECOND 7670000
 
 
 typedef struct
@@ -28,11 +29,27 @@ typedef struct
 class M68k
 {
 public:
+
+	enum INT_TYPE
+	{
+		INT_AUTOVECTOR_0,
+		INT_AUTOVECTOR_1,
+		INT_AUTOVECTOR_2,
+		INT_AUTOVECTOR_3,
+		INT_AUTOVECTOR_4,
+		INT_AUTOVECTOR_5,
+		INT_AUTOVECTOR_6,
+		INT_AUTOVECTOR_7,
+		INT_TRAP,
+		INT_PRIV_VIO 
+	};
+
 	M68k();
 	static void SetUnitTestsMode();
 	static void Init();
 	static int Update();
 	static void ExecuteOpcode(word opcode);
+	static void RequestAutoVectorInt(INT_TYPE level);
 
 	//Start UnitTests
 	static void SetCpuState(CPU_STATE_DEBUG cpuState);
@@ -96,6 +113,8 @@ private:
 
 	static M68k& get(void);
 
+	void RequestInt(INT_TYPE level, int address);
+	void CheckInt();
 	void CheckPrivilege();
 	void SetDataRegister(int id, dword result, DATASIZE size);
 	void SetAddressRegister(int id, dword result, DATASIZE size);
@@ -150,6 +169,9 @@ private:
 	dword supervisorStackPointer;
 	dword userStackPointer;
 	bool  superVisorModeActivated;
+
+	std::multimap<INT_TYPE, int> interrupts;
+	bool servicingInt;
 	//End CPU Reg, Flags, Var
 	//--------------------------
 	//Start CPU Unit Test

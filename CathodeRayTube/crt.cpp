@@ -22,6 +22,33 @@ void CRT::Init()
 	sfSprite_setPosition(get().screenSpr, (sfVector2f){ 0.0f, 0.0f });
 }
 
+void CRT::Render()
+{
+	for(int y = 0; y < 224; y++)
+    {
+        for(int x = 0; x < 320; x++)
+        {
+          	sfColor color;
+          	color.r = get().screenData[x][y][0];
+          	color.g = get().screenData[x][y][1];
+          	color.b = get().screenData[x][y][2];
+          	color.a = 255;
+
+          	byte ix;
+          	byte iy;
+          	byte pixelSize = 1;
+          	
+          	for(ix = 0; ix < pixelSize; ++ix)
+          	{
+            	for(iy = 0; iy < pixelSize; ++iy)
+            	{
+              		sfImage_setPixel(get().screenImg, x * pixelSize + ix, y * pixelSize + iy, color);
+            	}
+          	}
+        }
+    }
+}
+
 void CRT::ResetScreen()
 {
 	memset(get().screenData, 1, sizeof(get().screenData));
@@ -59,3 +86,9 @@ void CRT::ApplyIntensity(int x, int y, int intensity)
 	get().screenData[x][y][1] = green;
 	get().screenData[x][y][2] = blue;
 }
+
+sfRenderWindow* CRT::GetWindow()
+{
+	return get().window;
+}
+

@@ -7,8 +7,6 @@ Genesis::Genesis()
 
 void Genesis::Init()
 {
-	get().M68kMemory.reserve(M68K_MEM_SIZE);
-
 	get().M68kMemory[0xA10009] = 0x00;
 	get().M68kMemory[0xA1000B] = 0x00;
 	get().M68kMemory[0xA1000D] = 0x00;
@@ -22,6 +20,74 @@ void Genesis::Init()
 	get().M68kMemory[0xA1001D] = 0x00;
 	get().M68kMemory[0xA1001F] = 0x00;
 
+	get().FPS = 60;
+}
+
+void Genesis::InsertCartridge()
+{
+	get().M68kMemory.reserve(M68K_MEM_SIZE);
+
+	RomLoader::PageMemory(0, 0x400000, 0, get().M68kMemory);
+}
+
+void Genesis::Run()
+{
+
+	sfClock* clock;
+    clock = sfClock_create();
+
+    sfEvent event;
+
+	const double VdpUpdateInterval = 1000/get().FPS;
+
+    double lastFrameTime = 0;
+    
+    get().powerOff = 0;
+
+    while(sfRenderWindow_isOpen(CRT::GetWindow()) && !get().powerOff) //emu loop
+    {
+
+        while (sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
+        {
+      		/* Close window : exit */
+      		if (event.type == sfEvtClosed)
+      		{
+          		sfRenderWindow_close(CRT::GetWindow());
+      		}
+    	}
+
+    	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
+
+    	if((lastFrameTime + VdpUpdateInterval) <= currentTime)
+    	{
+      		lastFrameTime = currentTime;
+      
+      		get().Update();
+
+      		CRT::Render();
+    	}
+  	}
+}
+
+void Genesis::Update()
+{
+	int cycleThisUpdate = 0;
+	int cycleThisFrame = M68K_CYCLES_PER_SECOND / get().FPS;
+
+	while(cycleThisUpdate < cycleThisFrame)
+	{
+		int CPUcycles = M68k::Update();
+		
+		YM7101::Update(CPUcycles);
+
+		if(YM7101::GetRequestInt())
+		{
+			int type = YM7101::GetIntType();
+			M68k::RequestAutoVectorInt((M68k::INT_TYPE)type);
+		}
+
+		cycleThisUpdate += CPUcycles;
+	}
 }
 
 Genesis& Genesis::get(void)

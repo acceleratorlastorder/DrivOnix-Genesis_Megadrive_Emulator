@@ -38,6 +38,7 @@ public:
 	static void LoadRomFile(std::string romName);
 	static void PrintRomHeader();
 	static byte GetVersion();
+	static void PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest);
 
 private:
 

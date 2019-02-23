@@ -10,11 +10,13 @@ int main(void)
 
 	CRT::Init();
 
+	Genesis::InsertCartridge();
+
 	Genesis::Init();
 	M68k::Init();
 	YM7101::Init();
 
-	while(1);
+	Genesis::Run();
 
 	return 0;
 }

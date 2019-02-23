@@ -415,6 +415,11 @@ word YM7101::ReadVsram()
 	return get().vsram[address];
 }
 
+bool YM7101::GetRequestInt()
+{
+	return get().requestInt;
+}
+
 int YM7101::GetIntType()
 {
 	int result = -1;
@@ -1390,7 +1395,7 @@ void YM7101::Update(int clicks)
 
 		if(get().vCounter < get().vdpResolution.second)
 		{
-			Render();
+			get().Render();
 		}
 
 		if(get().vCounter <= get().vdpResolution.second)

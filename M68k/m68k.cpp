@@ -2,13 +2,7 @@
 
 M68k::M68k()
 {
-	this->programCounter = 0x200;
-	this->CCR = 0;
-	this->stop = false;
-	this->supervisorStackPointer = 0;
-	this->userStackPointer = 0;
-	this->superVisorModeActivated = true;
-	this->unitTests = false;
+
 }
 
 M68k& M68k::get()
@@ -27,6 +21,7 @@ void M68k::Init()
 	get().unitTests = false;
 	get().CCR = 0x2700;
 	get().stop = false;
+	get().servicingInt = false;
 
 	for(int i = 0; i < 8; ++i)
 	{
@@ -63,6 +58,58 @@ CPU_STATE_DEBUG M68k::GetCpuState()
 	return get().cpuStateDebug;
 }
 
+void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
+{
+	int address = Genesis::M68KReadMemoryLONG(((int)level * 4) + 0x60);
+	get().RequestInt(level, address);
+}
+
+void M68k::RequestInt(M68k::INT_TYPE level, int address)
+{
+	get().interrupts.insert(std::make_pair(level, address));
+}
+
+void M68k::CheckInt()
+{
+	if(get().interrupts.empty())
+	{
+		return;
+	}
+
+	std::pair<INT_TYPE, int> type = (*get().interrupts.rbegin());
+
+	int intLevel = (get().CCR >> 8) & 0x7;
+
+	if(type.first > INT_AUTOVECTOR_6 || type.first > intLevel)
+	{
+		word oldCCR = get().CCR;
+
+		get().interrupts.erase(--get().interrupts.rbegin().base());
+
+		BitSet(get().CCR, 13);
+
+		get().CheckPrivilege();
+
+		get().servicingInt = true;
+
+		get().stop = false;
+
+		get().registerAddress[0x7] -= 4;
+		Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().programCounter);
+
+		get().registerAddress[0x7] -= 2;
+		Genesis::M68KWriteMemoryWORD(get().registerAddress[0x7], oldCCR);
+
+		if(type.first <= INT_AUTOVECTOR_7)
+		{
+			get().CCR &= 0xF8FF;
+			get().CCR |= type.first << 8;
+		}
+
+		get().programCounter = type.second;
+	}
+}
+
 void M68k::CheckPrivilege()
 {
 	bool oldSuperVisorMode = get().superVisorModeActivated;
@@ -86,7 +133,7 @@ void M68k::CheckPrivilege()
 
 int M68k::Update()
 {
-	//check Interrupt()
+	get().CheckInt();
 
 	get().CheckPrivilege();
 
@@ -1085,14 +1132,29 @@ bool M68k::ConditionTable(byte condition)
 
 void M68k::ExecuteOpcode(word opcode)
 {
+	//std::cout << "\t ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
+
 	if((opcode & 0xF1F0) == 0xC100)
 	{
-		if(get().unitTests)
+		if(((opcode >> 3) & 0x1F) > 1)
 		{
-			std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
-		}
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEXG" << std::endl;
+			}
 
-		get().OpcodeABCD(opcode);
+			std::cout << "\tM68k:: Unimplemented EXG Opcode" << std::endl;
+			while(1);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeABCD" << std::endl;
+			}
+
+			get().OpcodeABCD(opcode);
+		}
 	}
 	else if((opcode & 0xF000) == 0xD000)
 	{
@@ -1141,21 +1203,24 @@ void M68k::ExecuteOpcode(word opcode)
 	}
 	else if((opcode & 0xFF00) == 0x0200)
 	{
-		if(get().unitTests)
+		if(opcode == 0x023C)
 		{
-			std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
-		}
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
+			}
 
-		get().OpcodeANDI(opcode);
-	}
-	else if(opcode == 0x023C)
-	{
-		if(get().unitTests)
+			get().OpcodeANDI_To_CCR();
+		}
+		else
 		{
-			std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
-		}
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
+			}
 
-		get().OpcodeANDI_To_CCR();
+			get().OpcodeANDI(opcode);
+		}
 	}
 	else if((opcode & 0xF018) == 0xE000)
 	{
@@ -1283,7 +1348,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeCLR(opcode);
 	}
-	else if((opcode & 0xF000) == 0xB000)
+	else if((opcode & 0xF100) == 0xB000)
 	{
 		if(get().unitTests)
 		{
@@ -1319,8 +1384,13 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeDBcc(opcode);
 	}
+	else
+	{
+		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
+		while(1);
+	}
 
-
+	//std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
 	//copy state for unit test
 	if(get().unitTests)

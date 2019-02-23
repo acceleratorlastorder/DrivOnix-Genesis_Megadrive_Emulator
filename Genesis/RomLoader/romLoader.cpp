@@ -12,6 +12,20 @@ RomLoader& RomLoader::get()
 	return instance;
 }
 
+void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest)
+{
+	uint64_t copySize = std::min<uint64_t>(pageSize, get().cartridgeSize);
+
+	if((number * pageSize) > (uint64_t)get().cartridgeSize)
+	{
+		std::cout << "Error: PageMemory" << std::endl;
+	}
+	else
+	{
+		std::memcpy(&dest[0] + start, &get().cartridgeMemory[0] + (pageSize * number), copySize);
+	}
+}
+
 void RomLoader::LoadRomFile(std::string romName)
 {
 	std::string extension = romName.substr(romName.find_last_of("."));

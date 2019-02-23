@@ -30,6 +30,9 @@ class YM7101
 public:
 	YM7101();
 	static void Init();
+	static void Update(int clicks);
+	static bool GetRequestInt();
+	static int GetIntType();
 	static byte GetHCounter();
 	static byte GetVCounter();
 	static word GetHVCounter();
@@ -83,7 +86,6 @@ private:
 	word ReadVram();
 	word ReadCram();
 	word ReadVsram();
-	int GetIntType();
 	word GetBaseLayerA();
 	word GetBaseLayerB();
 	word GetBaseWindow();
@@ -100,7 +102,6 @@ private:
 	void RenderWindow(word baseAddress, bool priority);
 	void RenderSprite(bool priority);
 	void Render();
-	void Update(int clicks);
 
 };
 

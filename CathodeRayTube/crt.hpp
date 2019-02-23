@@ -17,15 +17,16 @@ class CRT
 public:
 	CRT();
 	static void Init();
+	static void Render();
 	static void ResetScreen();
 	static void Write(int x, int y, byte red, byte green, byte blue);
 	static void ApplyIntensity(int x, int y, int intensity);
+	static sfRenderWindow* GetWindow();
 
 private:
 	static CRT& get(void);
 
 	sfRenderWindow* window;
-	sfEvent event;
 	sfVideoMode mode;
 
 	sfImage* screenImg;
