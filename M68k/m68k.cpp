@@ -2698,7 +2698,7 @@ void M68k::OpcodeBCC(word opcode)
 	byte condition = (opcode >> 8) & 0xF;
 	byte displacement8 = opcode & 0xFF;
 
-	dword pcAdvance; 
+	dword pcAdvance = 0; 
 
 	dword displacement = get().SignExtendDWord(get().SignExtendWord(displacement8));
 
@@ -2931,7 +2931,7 @@ void M68k::OpcodeBSR(word opcode)
 {
 	byte displacement8 = opcode & 0xFF;
 
-	dword pcAdvance; 
+	dword pcAdvance = 0; 
 
 	dword displacement = get().SignExtendDWord(get().SignExtendWord(displacement8));
 
