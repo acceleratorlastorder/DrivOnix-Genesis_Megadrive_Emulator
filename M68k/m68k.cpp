@@ -4312,7 +4312,7 @@ void M68k::OpcodeMOVE(word opcode)
 	BitReset(get().CCR, C_FLAG);
 	BitReset(get().CCR, V_FLAG);
 
-	dword vectorman = dest.operand;
+	dword vectorman = src.operand;
 	switch(size)
 	{
 		case BYTE:
