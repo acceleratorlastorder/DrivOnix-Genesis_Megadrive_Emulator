@@ -38,7 +38,7 @@ EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
 EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
 EXT      Sign EXTend                        Dn         -WL        - * * 0 0
 ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
-JMP      JuMP to Affective Address      < ea >                    - - - - -
+!!!Done!!! JMP      JuMP to Affective Address      < ea >                    - - - - -
 !!!Done!!! JSR      Jump to SubRoutine             < ea >                    - - - - -
 !!!Done!!! LEA      Load Effective Address         < ea >,An      --L        - - - - -
 LINK     Allocate Stack Frame               An,#< displacement>   - - - - -
