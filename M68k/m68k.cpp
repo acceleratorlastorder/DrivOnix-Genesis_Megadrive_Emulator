@@ -1391,6 +1391,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "0100111001110011"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeRTE" << std::endl;
+		}
+
+		get().OpcodeRTE();
+	}
 	else if(get().IsOpcode(opcode, "0100111001110001"))
 	{
 		if(get().unitTests)
@@ -1408,6 +1417,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeRTS();
+	}
+	else if(get().IsOpcode(opcode, "0100111010xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeJSR" << std::endl;
+		}
+
+		get().OpcodeJSR(opcode);
 	}
 	else if(get().IsOpcode(opcode, "01001x001xxxxxxx"))
 	{
@@ -1582,7 +1600,7 @@ void M68k::ExecuteOpcode(word opcode)
 	}
 	else
 	{
-		//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
 		while(1);
 	}
@@ -3814,6 +3832,20 @@ void M68k::OpcodeDBcc(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeJSR(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	get().registerAddress[0x7] -= 4;
+	EA_DATA data = get().GetEAOperand(type, eaReg, LONG, false, 0);
+	get().programCounter += data.PCadvance;
+	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().programCounter);
+	get().programCounter = data.pointer;
+}
+
 void M68k::OpcodeLEA(word opcode)
 {
 	byte reg = (opcode >> 9) & 0x7;
@@ -4658,6 +4690,24 @@ void M68k::OpcodeROXL_ROXR_Memory(word opcode)
 	}
 
 	get().programCounter += set.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeRTE()
+{
+	if(get().superVisorModeActivated)
+	{
+		get().CCR = Genesis::M68KReadMemoryWORD(get().registerAddress[0x7]);
+		get().registerAddress[0x7] += 2;
+		get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
+		get().registerAddress[0x7] += 4;
+		get().servicingInt = false;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
 
 	//cycles
 }

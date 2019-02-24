@@ -158,6 +158,7 @@ private:
 	void OpcodeCMPM(word opcode);
 	void OpcodeDBcc(word opcode);
 
+	void OpcodeJSR(word opcode);
 	void OpcodeLEA(word opcode);
 	void OpcodeLSL_LSR_Register(word opcode);
 	void OpcodeLSL_LSR_Memory(word opcode);
@@ -172,6 +173,7 @@ private:
 	void OpcodeNOP();
 	void OpcodeROXL_ROXR_Register(word opcode);
 	void OpcodeROXL_ROXR_Memory(word opcode);
+	void OpcodeRTE();
 	void OpcodeRTS();
 	void OpcodeSUBQ(word opcode);
 	void OpcodeTST(word opcode);

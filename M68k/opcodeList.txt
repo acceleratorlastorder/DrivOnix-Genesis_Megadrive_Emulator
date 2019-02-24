@@ -39,7 +39,7 @@ EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
 EXT      Sign EXTend                        Dn         -WL        - * * 0 0
 ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
 JMP      JuMP to Affective Address      < ea >                    - - - - -
-JSR      Jump to SubRoutine             < ea >                    - - - - -
+!!!Done!!! JSR      Jump to SubRoutine             < ea >                    - - - - -
 !!!Done!!! LEA      Load Effective Address         < ea >,An      --L        - - - - -
 LINK     Allocate Stack Frame               An,#< displacement>   - - - - -
 !!!Done!!! LSL      Logical Shift Left                 Dx,Dy      BWL        * * * 0 *
@@ -76,7 +76,7 @@ ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
 ROR      ROtate Right                        ...       BWL        - * * 0 *
 !!!Done!!! ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
 !!!Done!!! ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
-RTE      ReTurn from Exception               RTE                  I I I I I
+!!!Done!!! RTE      ReTurn from Exception               RTE                  I I I I I
 RTR      ReTurn and Restore                  RTR                  I I I I I
 !!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
 SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
