@@ -13,7 +13,7 @@ YM7101& YM7101::get()
 
 void YM7101::Init()
 {
-	get().vdpResolution = std::pair<int, int>(320, 224);
+	get().vdpResolution = std::pair<int, int>(256, 224);
 	get().vCounter = 0;
 	get().hCounter = 0;
 	get().controlPortPending = false;
@@ -48,6 +48,8 @@ void YM7101::Init()
 
 	get().hCounterFirst = true;
 	get().vCounterFirst = true;
+
+	CRT::ResetScreen();
 }
 
 word YM7101::GetAddressRegister()
@@ -173,6 +175,7 @@ word YM7101::ReadControlPortWORD()
 void YM7101::WriteDataPortBYTE(byte data)
 {
 	word doubleData = (data << 8) | data;
+	get().WriteDataPortWORD(doubleData);
 }
 
 void YM7101::WriteDataPortWORD(word data)
@@ -673,7 +676,6 @@ void YM7101::RenderLayer(word baseAddress, bool priority, int width, int height,
 	hFineScroll = (8 - (hFineScroll % 8)) % 8;
 
 	int horizontalTilesNumber = (get().vdpResolution.first / 8); //32 ou 40 selon la resolution
-	int verticalTilesNumber = (get().vdpResolution.second / 8);
 
 	if(hFineScroll != 0)
 	{
@@ -1109,10 +1111,10 @@ void YM7101::RenderSprite(bool priority)
 
 				int patternAddress = startAddress + (patternIndex * ((height + 1) * memSize));
 
-				byte data1 = get().vram[patternIndex];
-				byte data2 = get().vram[patternIndex + 1];
-				byte data3 = get().vram[patternIndex + 2];
-				byte data4 = get().vram[patternIndex + 3];
+				byte data1 = get().vram[patternAddress];
+				byte data2 = get().vram[patternAddress + 1];
+				byte data3 = get().vram[patternAddress + 2];
+				byte data4 = get().vram[patternAddress + 3];
 
 				for(int i = 0; i < 8; ++i)
 				{
@@ -1232,8 +1234,8 @@ void YM7101::Render()
 		return;
 	}
 
-	memset(&get().lineIntensity, INTENSITY_NOTSET, sizeof(int) * sizeof(get().lineIntensity));
-	memset(&get().spriteLineData, get().maxInt, sizeof(byte) * sizeof(get().spriteLineData));
+	std::memset(&get().lineIntensity, INTENSITY_NOTSET, sizeof(int) * 320);
+	std::memset(&get().spriteLineData, get().maxInt, sizeof(byte) * 320);
 
 	get().RenderBackdrop();
 

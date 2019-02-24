@@ -1390,6 +1390,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "01001x001xxxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeMOVEM" << std::endl;
+		}
+
+		get().OpcodeMOVEM(opcode);
+	}
 	else if(get().IsOpcode(opcode, "0111xxx0xxxxxxxx"))
 	{
 		if(get().unitTests)
@@ -3959,6 +3968,114 @@ void M68k::OpcodeMOVEA(word opcode)
 	get().registerAddress[destReg] = src.operand;
 
 	get().programCounter += src.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVEM(word opcode)
+{
+	bool dr = (opcode >> 10) & 0x1;
+	byte tempSize = (opcode >> 6) & 0x1;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	DATASIZE size;
+	switch(tempSize)
+	{
+		case 0:
+		size = WORD;
+		break;
+
+		case 1:
+		size = LONG;
+		break;
+	}
+
+	word regListMask = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+	get().programCounter += 2;
+
+	word offset = 0;
+
+	bool isControlMode = (type == EA_ADDRESS_REG_INDIRECT) || (type == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT) || (type == EA_ADDRESS_REG_INDIRECT_INDEX) || (type == EA_MODE_7 && (eaReg == 0 || eaReg == 1 || eaReg == 2 || eaReg == 3));
+
+	bool preDecMode = (type == EA_ADDRESS_REG_INDIRECT_PRE_DEC) ? true : false;
+
+	bool regDir = !preDecMode;
+
+	int pcAdvance = 0;
+
+	for(int index = 0; index < 16; ++index)
+	{
+		int newIndex = index % 8; //D0-D7 & A0-A7
+
+		if(!dr)
+		{
+			newIndex = 7 - newIndex;
+		}
+
+		bool isAn = (regDir && (index > 7)) || (!regDir && (index < 8));
+
+		if(TestBit(regListMask, index))
+		{
+			if(dr == 0)
+			{
+				dword data = 0;
+
+				if(isAn)
+				{
+					data = get().registerAddress[newIndex];
+				}
+				else
+				{
+					data = get().registerData[newIndex];
+				}
+
+				if(size == WORD && type == EA_ADDRESS_REG)
+				{
+					data = get().SignExtendDWord((word)data);
+				}
+
+				EA_DATA set = get().SetEAOperand(type, eaReg, data, size, offset);
+
+				if(isControlMode)
+				{
+					offset += (size == WORD) ? 2 : 4;
+				}
+
+				pcAdvance = set.PCadvance;
+			}
+			else
+			{
+				EA_DATA src = get().GetEAOperand(type, eaReg, size, false, offset);
+
+				if(isControlMode)
+				{
+					offset += (size == WORD) ? 2 : 4;
+				}
+
+				pcAdvance = src.PCadvance;
+
+				if(size == WORD)
+				{
+					src.operand = get().SignExtendDWord((word)src.operand);
+				}
+
+				if(isAn)
+				{
+					get().registerAddress[newIndex] = src.operand;
+				}
+				else
+				{
+					get().registerData[newIndex] = src.operand;
+				}
+			}
+		}
+	}
+
+	get().programCounter += pcAdvance;
 
 	//cycles
 }

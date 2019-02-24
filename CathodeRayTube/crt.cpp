@@ -15,7 +15,7 @@ void CRT::Init()
 {
 	get().mode = (sfVideoMode){320, 224, 32};
     get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
-    get().screenImg = sfImage_create(320, 224);
+    get().screenImg = sfImage_createFromColor(320, 224, sfBlack);
     get().screenTex = sfTexture_createFromImage(get().screenImg, NULL);
 	get().screenSpr = sfSprite_create();
 	sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
@@ -24,9 +24,9 @@ void CRT::Init()
 
 void CRT::Render()
 {
-	for(int y = 0; y < 224; y++)
+	for(int x = 0; x < 320; ++x)
     {
-        for(int x = 0; x < 320; x++)
+        for(int y = 0; y < 224; ++y)
         {
           	sfColor color;
           	color.r = get().screenData[x][y][0];
@@ -47,6 +47,13 @@ void CRT::Render()
           	}
         }
     }
+
+    sfTexture_updateFromImage(get().screenTex, get().screenImg, 0, 0);
+    sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
+
+    sfRenderWindow_clear(get().window, sfBlack);
+    sfRenderWindow_drawSprite(get().window, get().screenSpr, NULL);
+    sfRenderWindow_display(get().window);
 }
 
 void CRT::ResetScreen()

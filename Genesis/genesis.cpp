@@ -46,10 +46,8 @@ void Genesis::Run()
 
     while(sfRenderWindow_isOpen(CRT::GetWindow()) && !get().powerOff) //emu loop
     {
-
-        while (sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
+        while(sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
         {
-      		/* Close window : exit */
       		if (event.type == sfEvtClosed)
       		{
           		sfRenderWindow_close(CRT::GetWindow());
@@ -67,6 +65,7 @@ void Genesis::Run()
       		CRT::Render();
     	}
   	}
+  	
 }
 
 void Genesis::Update()

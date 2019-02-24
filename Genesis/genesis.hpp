@@ -4,12 +4,6 @@
 #include <vector>
 #include <windows.h>
 
-#include <SFML/Config.h>
-#include <SFML/System.h>
-#include <SFML/Window.h>
-#include <SFML/Graphics.h>
-#include <SFML/Audio.h>
-
 #include "RomLoader/romLoader.hpp"
 #include "../M68k/m68k.hpp"
 #include "../YM7101/ym7101.hpp"
@@ -34,6 +28,8 @@ public:
 	static void M68KWriteMemoryLONG(dword address, dword data);
 
 private:
+	static Genesis& get(void);
+
 	char romName[2048];
 
 	unsigned int FPS;
@@ -41,8 +37,6 @@ private:
 	bool powerOff;
 
 	std::vector<byte> M68kMemory;
-
-	static Genesis& get(void);
 
 	void Update();
 };

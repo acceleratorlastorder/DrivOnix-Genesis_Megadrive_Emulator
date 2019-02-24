@@ -53,7 +53,7 @@ LSR      Logical Shift Right                 ...       BWL        * * * 0 *
 !!!Done!!! MOVE     USP to/from Address Register      USP,An      --L        - - - - -
                                             An,USP
 !!!Done!!! MOVEA    MOVE Address                   < ea >,An      -WL        - - - - -
-MOVEM    MOVE Multiple         <register list>,< ea >  -WL        - - - - -
+!!!Done!!! MOVEM    MOVE Multiple         <register list>,< ea >  -WL        - - - - -
                                           < ea >,<register list>
 MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
                                          x(An),Dn
