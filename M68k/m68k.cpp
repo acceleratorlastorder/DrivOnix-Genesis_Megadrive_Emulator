@@ -1154,7 +1154,8 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 void M68k::ExecuteOpcode(word opcode)
 {
 	//get().SetUnitTestsMode();
-	//std::cout << "ProgramCounter 0x" << std::hex << get().programCounter - 2 << std::endl;
+	dword PCDebug = get().programCounter - 2;
+	//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -1426,6 +1427,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeMOVEQ(opcode);
 	}
+	else if(get().IsOpcode(opcode, "0101xxxx11001xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeDBcc" << std::endl;
+		}
+
+		get().OpcodeDBcc(opcode);
+	}
 	else if(get().IsOpcode(opcode, "0101xxx0xxxxxxxx"))
 	{
 		if(get().unitTests)
@@ -1444,15 +1454,6 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeSUBQ(opcode);
 	}
-	else if(get().IsOpcode(opcode, "1110xxxxxxx00xxx"))
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeASL_ASR_Register" << std::endl;
-		}
-
-		get().OpcodeASL_ASR_Register(opcode);
-	}
 	else if(get().IsOpcode(opcode, "1110000x11xxxxxx"))
 	{
 		if(get().unitTests)
@@ -1462,23 +1463,41 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeASL_ASR_Memory(opcode);
 	}
-	else if(get().IsOpcode(opcode, "0100xxx110xxxxxx"))
+	else if(get().IsOpcode(opcode, "1110001x11xxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeCHK" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeLSL_LSR_Memory" << std::endl;
 		}
 
-		get().OpcodeCHK(opcode);
+		get().OpcodeLSL_LSR_Memory(opcode);
 	}
-	else if(get().IsOpcode(opcode, "01000010xxxxxxxx"))
+	else if(get().IsOpcode(opcode, "1110xxxxxxx00xxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeCLR" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeASL_ASR_Register" << std::endl;
 		}
 
-		get().OpcodeCLR(opcode);
+		get().OpcodeASL_ASR_Register(opcode);
+	}
+	else if(get().IsOpcode(opcode, "1110xxxxxxx01xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeLSL_LSR_Register" << std::endl;
+		}
+
+		get().OpcodeLSL_LSR_Register(opcode);
+	}
+	else if(get().IsOpcode(opcode, "010011100110xxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeMOVE_USP" << std::endl;
+		}
+
+		get().OpcodeMOVE_USP(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100010011xxxxxx"))
 	{
@@ -1507,32 +1526,14 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeMOVE_From_SR(opcode);
 	}
-	else if(get().IsOpcode(opcode, "010011100110xxxx"))
+	else if(get().IsOpcode(opcode, "01000010xxxxxxxx"))
 	{
 		if(get().unitTests)
 		{
-			std::cout << "\tM68k :: Execute OpcodeMOVE_USP" << std::endl;
+			std::cout << "\tM68k :: Execute OpcodeCLR" << std::endl;
 		}
 
-		get().OpcodeMOVE_USP(opcode);
-	}
-	else if(get().IsOpcode(opcode, "0101xxxx11001xxx"))
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeDBcc" << std::endl;
-		}
-
-		get().OpcodeDBcc(opcode);
-	}
-	else if(get().IsOpcode(opcode, "0100xxx111xxxxxx"))
-	{
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeLEA" << std::endl;
-		}
-
-		get().OpcodeLEA(opcode);
+		get().OpcodeCLR(opcode);
 	}
 	else if(get().IsOpcode(opcode, "01001010xxxxxxxx"))
 	{
@@ -1543,8 +1544,27 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeTST(opcode);
 	}
+	else if(get().IsOpcode(opcode, "0100xxx110xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeCHK" << std::endl;
+		}
+
+		get().OpcodeCHK(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0100xxx111xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeLEA" << std::endl;
+		}
+
+		get().OpcodeLEA(opcode);
+	}
 	else
 	{
+		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
 		while(1);
 	}
@@ -3789,6 +3809,226 @@ void M68k::OpcodeLEA(word opcode)
 	get().registerAddress[reg] = src.pointer;
 
 	get().programCounter += src.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeLSL_LSR_Register(word opcode)
+{
+	byte count_reg = (opcode >> 9) & 0x7;
+	byte dr = (opcode >> 8) & 0x1;
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte ir = (opcode >> 5) & 0x1;
+	byte reg = opcode & 0x7;
+
+	int shift = 0;
+
+	if(ir == 0)
+	{
+		shift = (count_reg == 0) ? 8 : count_reg;
+	}
+	else
+	{
+		shift = get().registerData[count_reg] % 64;
+	}
+
+	dword toShift = get().registerData[reg];
+
+	int bits = 0;
+	switch(size)
+	{
+		case BYTE:
+		bits = 8;
+		toShift &= 0xFF;
+		break;
+
+		case WORD:
+		bits = 16;
+		toShift &= 0xFFFF;
+		break;
+
+		case LONG:
+		bits = 32;
+		break;
+	}
+
+	dword newData = 0;
+
+	if(dr == 0) //shift right
+	{
+		if(shift == 0)
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+		else
+		{
+			if(TestBit(toShift, shift - 1))
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, C_FLAG);
+				BitReset(get().CCR, X_FLAG);
+			}
+		}
+		newData = toShift >> shift;
+	}
+	else //shift left
+	{
+		if(shift == 0)
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+		else
+		{
+			if(TestBit(toShift, bits - shift))
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, C_FLAG);
+				BitReset(get().CCR, X_FLAG);
+			}
+		}
+		newData = toShift << shift;
+	}
+
+	SetDataRegister(reg, newData, size);
+	
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = newData;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeLSL_LSR_Memory(word opcode)
+{
+	byte dr = (opcode >> 8) & 0x1;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
+
+	dword toShift = dest.operand;
+
+	dword newData = 0;
+
+	if(dr == 0) //shift right
+	{
+		if(TestBit(toShift, 0))
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
+		}
+		newData = toShift >> 1;
+	}
+	else //shift left
+	{
+		if(TestBit(toShift, 15))
+		{
+			BitSet(get().CCR, C_FLAG);
+			BitSet(get().CCR, X_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+			BitReset(get().CCR, X_FLAG);
+		}
+		newData = toShift << 1;
+	}
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, newData, WORD, 0);
+
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = newData;
+	
+	vectorman &= 0xFFFF;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 15))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().programCounter += set.PCadvance;
 
 	//cycles
 }

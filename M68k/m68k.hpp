@@ -159,6 +159,8 @@ private:
 	void OpcodeDBcc(word opcode);
 
 	void OpcodeLEA(word opcode);
+	void OpcodeLSL_LSR_Register(word opcode);
+	void OpcodeLSL_LSR_Memory(word opcode);
 	void OpcodeMOVE(word opcode);
 	void OpcodeMOVE_To_CCR(word opcode);
 	void OpcodeMOVE_To_SR(word opcode);
