@@ -65,7 +65,7 @@ NEG      NEGate                         < ea >         BWL        * * * * *
 NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
 !!!Done!!! NOP      No OPeration                       NOP                   - - - - -
 NOT      Form one's complement          < ea >         BWL        - * * 0 0
-OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
+!!!Done!!! OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
                                             Dn,< ea >
 ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0
 PEA      Push Effective Address         < ea >         --L        - - - - -
@@ -83,9 +83,9 @@ SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
                                          -(Ax),-(Ay)
 Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -
 STOP     Enable & wait for interrupts     #< data>                I I I I I
-SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
+!!!Done!!! SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
                                         < ea >,Dn
-SUBA     SUBtract binary from An        < ea >,An      -WL        - - - - -
+!!!Done!!! SUBA     SUBtract binary from An        < ea >,An      -WL        - - - - -
 SUBI     SUBtract Immediate                 #x,< ea >  BWL        * * * * *
 !!!Done!!! SUBQ     SUBtract 3-bit immediate     #< data>,< ea >  BWL        * * * * *
 SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
