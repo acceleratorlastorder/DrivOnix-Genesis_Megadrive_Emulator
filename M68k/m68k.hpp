@@ -170,6 +170,8 @@ private:
 	void OpcodeMOVEM(word opcode);
 	void OpcodeMOVEQ(word opcode);
 	void OpcodeNOP();
+	void OpcodeROXL_ROXR_Register(word opcode);
+	void OpcodeROXL_ROXR_Memory(word opcode);
 	void OpcodeRTS();
 	void OpcodeSUBQ(word opcode);
 	void OpcodeTST(word opcode);

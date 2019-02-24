@@ -74,8 +74,8 @@ ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
                                             Dx,Dy
                                         < ea >
 ROR      ROtate Right                        ...       BWL        - * * 0 *
-ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
-ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
+!!!Done!!! ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
+!!!Done!!! ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
 RTE      ReTurn from Exception               RTE                  I I I I I
 RTR      ReTurn and Restore                  RTR                  I I I I I
 !!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
