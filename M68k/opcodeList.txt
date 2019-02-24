@@ -78,7 +78,7 @@ ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
 ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
 RTE      ReTurn from Exception               RTE                  I I I I I
 RTR      ReTurn and Restore                  RTR                  I I I I I
-RTS      ReTurn from Subroutine              RTS                  - - - - -
+!!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
 SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
                                          -(Ax),-(Ay)
 Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -

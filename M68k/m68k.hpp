@@ -167,6 +167,7 @@ private:
 	void OpcodeMOVEA(word opcode);
 	void OpcodeMOVEM(word opcode);
 	void OpcodeMOVEQ(word opcode);
+	void OpcodeRTS();
 	void OpcodeTST(word opcode);
 	//End opcodes
 	//---------------------------

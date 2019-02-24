@@ -1390,6 +1390,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "0100111001110101"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeRTS" << std::endl;
+		}
+
+		get().OpcodeRTS();
+	}
 	else if(get().IsOpcode(opcode, "01001x001xxxxxxx"))
 	{
 		if(get().unitTests)
@@ -1749,7 +1758,7 @@ void M68k::OpcodeADD_ADDA(word opcode)
 			BitReset(get().CCR, N_FLAG);
 		}
 
-		get().SetEAOperand(type, eaReg, result, size, 0);
+		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
 
 		get().programCounter += src.PCadvance;
 
@@ -1905,7 +1914,7 @@ void M68k::OpcodeADD_ADDA(word opcode)
 			BitReset(get().CCR, N_FLAG);
 		}
 
-		get().SetEAOperand(type, reg, result, size, 0);
+		get().SetEAOperand(type, eaReg, result, size, 0);
 
 		get().programCounter += src.PCadvance;
 
@@ -2622,6 +2631,7 @@ void M68k::OpcodeANDI(word opcode)
 
 	get().SetEAOperand(type, eaReg, result, size, 0);
 
+	get().programCounter += src.PCadvance;
 	get().programCounter += dest.PCadvance;
 
 	//cycles
@@ -2916,8 +2926,8 @@ void M68k::OpcodeBcc(word opcode)
 	if(displacement8 == 0)
 	{
 		word displacement16 = Genesis::M68KReadMemoryWORD(get().programCounter);
-		pcAdvance = 2;
 		displacement = get().SignExtendDWord(displacement16);
+		pcAdvance = 2;
 	}
 	else if(displacement8 == 0xFF)
 	{
@@ -4113,6 +4123,14 @@ void M68k::OpcodeMOVEQ(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
+
+	//cycles
+}
+
+void M68k::OpcodeRTS()
+{
+	get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
+	get().registerAddress[0x7] += 4;
 
 	//cycles
 }

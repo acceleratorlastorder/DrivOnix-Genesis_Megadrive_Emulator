@@ -3,6 +3,7 @@
 
 int main(void)
 {
+	//freopen("output.txt", "w", stdout);
 
 	Genesis::FileBrowser();
 	RomLoader::LoadRomFile(Genesis::GetRomName());
