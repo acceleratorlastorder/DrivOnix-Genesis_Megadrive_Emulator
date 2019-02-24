@@ -134,7 +134,7 @@ private:
 	void OpcodeABCD(word opcode);
 	void OpcodeADD_ADDA(word opcode);
 	void OpcodeADDI(word opcode);
-	void OpcodeADDQ_ADDA(word opcode);
+	void OpcodeADDQ(word opcode);
 	void OpcodeADDX(word opcode);
 	void OpcodeAND(word opcode);
 	void OpcodeANDI(word opcode);
@@ -167,7 +167,9 @@ private:
 	void OpcodeMOVEA(word opcode);
 	void OpcodeMOVEM(word opcode);
 	void OpcodeMOVEQ(word opcode);
+	void OpcodeNOP();
 	void OpcodeRTS();
+	void OpcodeSUBQ(word opcode);
 	void OpcodeTST(word opcode);
 	//End opcodes
 	//---------------------------

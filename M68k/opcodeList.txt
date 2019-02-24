@@ -63,7 +63,7 @@ MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
 NBCD     Negate BCD                     < ea >         B--        * U * U *
 NEG      NEGate                         < ea >         BWL        * * * * *
 NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
-NOP      No OPeration                       NOP                   - - - - -
+!!!Done!!! NOP      No OPeration                       NOP                   - - - - -
 NOT      Form one's complement          < ea >         BWL        - * * 0 0
 OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
                                             Dn,< ea >
@@ -87,7 +87,7 @@ SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
                                         < ea >,Dn
 SUBA     SUBtract binary from An        < ea >,An      -WL        - - - - -
 SUBI     SUBtract Immediate                 #x,< ea >  BWL        * * * * *
-SUBQ     SUBtract 3-bit immediate     #< data>,< ea >  BWL        * * * * *
+!!!Done!!! SUBQ     SUBtract 3-bit immediate     #< data>,< ea >  BWL        * * * * *
 SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
                                          -(Ay),-(Ax)
 SWAP     SWAP words of Dn                   Dn         -W-        - * * 0 0
