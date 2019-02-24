@@ -4187,7 +4187,7 @@ void M68k::OpcodeSUBQ(word opcode)
 		size = LONG;
 	}
 
-	if(mode != EA_ADDRESS_REG)
+	if(type != EA_ADDRESS_REG)
 	{
 		//C_FLAG & X_FLAG
 		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
