@@ -1153,9 +1153,9 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	//get().SetUnitTestsMode();
+	get().SetUnitTestsMode();
 	dword PCDebug = get().programCounter - 2;
-	//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -1582,12 +1582,12 @@ void M68k::ExecuteOpcode(word opcode)
 	}
 	else
 	{
-		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+		//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
 		while(1);
 	}
 
-	//std::cout << "\t 0x" << std::hex << opcode << std::endl;
+	std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -2270,7 +2270,7 @@ void M68k::OpcodeADDQ(word opcode)
 		}
 	}
 
-	get().programCounter = dest.PCadvance;
+	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
