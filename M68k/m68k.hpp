@@ -158,6 +158,7 @@ private:
 	void OpcodeCMPM(word opcode);
 	void OpcodeDBcc(word opcode);
 
+	void OpcodeJMP(word opcode);
 	void OpcodeJSR(word opcode);
 	void OpcodeLEA(word opcode);
 	void OpcodeLSL_LSR_Register(word opcode);
