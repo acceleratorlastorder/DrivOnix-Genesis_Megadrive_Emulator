@@ -1297,7 +1297,16 @@ void M68k::ExecuteOpcode(word opcode)
 	else if(get().IsOpcode(opcode, "1101xxxxxxxxxxxx"))
 	{//1101
 
-		if(get().IsOpcode(opcode, "1101xxx1xx00xxxx"))
+		if(get().IsOpcode(opcode, "1101xxxx11xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeADDA" << std::endl;
+			}
+
+			get().OpcodeADDA(opcode);
+		}
+		else if(get().IsOpcode(opcode, "1101xxx1xx00xxxx"))
 		{
 			if(get().unitTests)
 			{
@@ -1310,10 +1319,10 @@ void M68k::ExecuteOpcode(word opcode)
 		{
 			if(get().unitTests)
 			{
-				std::cout << "\tM68k :: Execute OpcodeADD_ADDA" << std::endl;
+				std::cout << "\tM68k :: Execute OpcodeADD" << std::endl;
 			}
 
-			get().OpcodeADD_ADDA(opcode);
+			get().OpcodeADD(opcode);
 		}
 	}
 
@@ -1378,6 +1387,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeCMPM(opcode);
 		}
+		else if(get().IsOpcode(opcode, "1011xxx1xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEOR" << std::endl;
+			}
+
+			get().OpcodeEOR(opcode);
+		}
 		else
 		{
 			if(get().unitTests)
@@ -1402,12 +1420,25 @@ void M68k::ExecuteOpcode(word opcode)
 
 	else if(get().IsOpcode(opcode, "1001xxxxxxxxxxxx"))
 	{//1001
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeSUB_SUBA" << std::endl;
-		}
 
-		get().OpcodeSUB_SUBA(opcode);
+		if(get().IsOpcode(opcode, "1001xxxx11xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeSUBA" << std::endl;
+			}
+
+			get().OpcodeSUBA(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeSUB" << std::endl;
+			}
+
+			get().OpcodeSUB(opcode);
+		}
 	}
 
 
@@ -1713,7 +1744,7 @@ void M68k::OpcodeABCD(word opcode)
 	//cycles
 }
 
-void M68k::OpcodeADD_ADDA(word opcode)
+void M68k::OpcodeADD(word opcode)
 {
 	byte reg = (opcode >> 9) & 0x7;
 	byte opmode = (opcode >> 6) & 0x7;
@@ -1959,7 +1990,6 @@ void M68k::OpcodeADD_ADDA(word opcode)
 
 		dword result = dest.operand + src.operand;
 
-		//ADDA Opcode
 		if(size == WORD && type == EA_ADDRESS_REG)
 		{
 			result = get().SignExtendDWord((word)dest.operand) + get().SignExtendDWord((word)src.operand);
@@ -2024,6 +2054,41 @@ void M68k::OpcodeADD_ADDA(word opcode)
 
 		//cycles
 	}
+}
+
+void M68k::OpcodeADDA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	DATASIZE size;
+	switch(opmode)
+	{
+		case 3:
+		size = WORD;
+		break;
+
+		case 7:
+		size = LONG;
+		break;
+	}
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	if(size == WORD)
+	{
+		data.operand = get().SignExtendDWord((word)data.operand);
+	}
+
+	dword result = get().registerAddress[reg] + data.operand;
+
+	get().SetAddressRegister(reg, result, size);
+
+	get().programCounter += data.PCadvance;
 }
 
 void M68k::OpcodeADDI(word opcode)
@@ -3862,6 +3927,96 @@ void M68k::OpcodeDBcc(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeEOR(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	DATASIZE size;
+	switch(opmode)
+	{
+		case 4:
+		size = BYTE;
+		break;
+
+		case 5:
+		size = WORD;
+		break;
+
+		case 6:
+		size = LONG;
+		break;
+	}
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	dword src = get().registerData[reg];
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+	dword result = dest.operand ^ src;
+
+	get().SetEAOperand(type, eaReg, result, size, 0);
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().programCounter += dest.PCadvance;
+}
+
 void M68k::OpcodeJMP(word opcode)
 {
 	byte eaMode = (opcode >> 3) & 0x7;
@@ -4946,7 +5101,7 @@ void M68k::OpcodeRTS()
 	//cycles
 }
 
-void M68k::OpcodeSUB_SUBA(word opcode)
+void M68k::OpcodeSUB(word opcode)
 {
 	byte reg = (opcode >> 9) & 0x7;
 	byte opmode = (opcode >> 6) & 0x7;
@@ -5189,7 +5344,7 @@ void M68k::OpcodeSUB_SUBA(word opcode)
 			break;
 		}
 		dword result = dest.operand - src.operand;
-		//SUBA Opcode
+		
 		if(size == WORD && type == EA_ADDRESS_REG)
 		{
 			result = get().SignExtendDWord((word)dest.operand) - get().SignExtendDWord((word)src.operand);
@@ -5254,6 +5409,38 @@ void M68k::OpcodeSUB_SUBA(word opcode)
 
 		//cycles
 	}
+}
+
+void M68k::OpcodeSUBA(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	DATASIZE size;
+	switch(opmode)
+	{
+		case 3:
+		size = WORD;
+		break;
+
+		case 7:
+		size = LONG;
+		break;
+	}
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	dword result = get().registerAddress[reg] - data.operand;
+
+	SetAddressRegister(reg, result, size);
+
+	get().programCounter += data.PCadvance;
+
+	//cycles
 }
 
 void M68k::OpcodeSUBQ(word opcode)

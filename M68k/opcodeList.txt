@@ -33,7 +33,7 @@
 !!!Done!!! DBcc     Looping Instruction           DBcc Dn,< label>-W-        - - - - -
 DIVS     DIVide Signed                  < ea >,Dn      -W-        - * * * 0
 DIVU     DIVide Unsigned                < ea >,Dn      -W-        - * * * 0
-EOR      Exclusive OR                       Dn,< ea >  BWL        - * * 0 0
+!!!Done!!! EOR      Exclusive OR                       Dn,< ea >  BWL        - * * 0 0
 EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
 EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
 EXT      Sign EXTend                        Dn         -WL        - * * 0 0

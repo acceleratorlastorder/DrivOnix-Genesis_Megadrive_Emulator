@@ -132,7 +132,8 @@ private:
 
 	//Start opcodes
 	void OpcodeABCD(word opcode);
-	void OpcodeADD_ADDA(word opcode);
+	void OpcodeADD(word opcode);
+	void OpcodeADDA(word opcode);
 	void OpcodeADDI(word opcode);
 	void OpcodeADDQ(word opcode);
 	void OpcodeADDX(word opcode);
@@ -157,6 +158,7 @@ private:
 	void OpcodeCMPI(word opcode);
 	void OpcodeCMPM(word opcode);
 	void OpcodeDBcc(word opcode);
+	void OpcodeEOR(word opcode);
 
 	void OpcodeJMP(word opcode);
 	void OpcodeJSR(word opcode);
@@ -177,7 +179,8 @@ private:
 	void OpcodeROXL_ROXR_Memory(word opcode);
 	void OpcodeRTE();
 	void OpcodeRTS();
-	void OpcodeSUB_SUBA(word opcode);
+	void OpcodeSUB(word opcode);
+	void OpcodeSUBA(word opcode);
 	void OpcodeSUBQ(word opcode);
 	void OpcodeTST(word opcode);
 	//End opcodes
