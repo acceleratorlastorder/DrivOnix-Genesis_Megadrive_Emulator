@@ -172,6 +172,7 @@ bool Test_ADD()
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
+		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 0, 0, 0, 0) << std::endl;
 
 		dword result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
 		if((value_1 + value_2) && TestFlag(state.CCR, 0, 0, 0, 0, 0))
@@ -389,10 +390,17 @@ int main()
 
 
 	M68k::SetUnitTestsMode();
+<<<<<<< HEAD
 /*
 	Genesis::AllocM68kMemory();
 	Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
 */
+=======
+
+	Genesis::AllocM68kMemory();
+	Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
+
+>>>>>>> add flag test for ADD
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
