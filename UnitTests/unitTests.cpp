@@ -144,28 +144,33 @@ bool Test_ADD()
 
 		CPU_STATE_DEBUG state;
 
-		//Test BCD Operation with X Reset
+		//Test Z_FLAG
 		state.CCR = 0x0000;
+		BitSet(state.CCR, N_FLAG);
+		BitSet(state.CCR, Z_FLAG);
+		BitSet(state.CCR, V_FLAG);
 		state.registerData[6] = 0x9;
-		state.registerData[7] = 0x8;
+		state.registerData[7] = 0x19;
 
 		M68k::SetCpuState(state);
 
 
 		/*	USED OPCODE
-		 *  1101 (register)111(7) (opmode)100 ((effective address)(mode)000 (register)110(6))
-		 *  binary: 1101111100000110
-		 *  hex: DF06
+		 *  1101 (register)111(7) (opmode)100 ((effective address)(mode)010 (register)110(6))
+		 *  binary: 1101111100010110
+		 *  hex: DF16
 		 */
 
 		//on execute l'opcode désiré
-		M68k::ExecuteOpcode(0xDF06);
+		M68k::ExecuteOpcode(0xDF16);
 
 		//on recupère notre state modifié par l'opcode
 		state = M68k::GetCpuState();
 
 		std::cout << "\t\tstate.registerData[6]" << std::hex <<state.registerData[6] << std::endl;
 		std::cout << "\t\tstate.registerData[7]" << std::hex <<state.registerData[7] << std::endl;
+
+		std::cout << "\t\tresult bit set N Z V " << TestFlag(state.CCR, 0, 1, 1, 1, 0) << std::endl;
 
 
 		if(state.registerData[7] == (0x9 + 0x8))
@@ -205,7 +210,10 @@ int main()
 {
 	std::map<std::string, bool> TestResults;
 
+
 	M68k::SetUnitTestsMode();
+
+	//Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
 
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
@@ -233,5 +241,5 @@ int main()
 		std::cout << "There is " << testErrorCount << " known errors !" << std::endl;
 	}
 
-	while(1);
+	system("pause");
 }
