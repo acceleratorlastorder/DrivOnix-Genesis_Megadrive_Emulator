@@ -172,7 +172,6 @@ bool Test_ADD()
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
-		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 0, 0, 0, 0) << std::endl;
 
 		dword result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
 		if((value_1 + value_2) && TestFlag(state.CCR, 0, 0, 0, 0, 0))
