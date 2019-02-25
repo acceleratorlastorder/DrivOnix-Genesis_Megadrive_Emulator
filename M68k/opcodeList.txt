@@ -36,7 +36,7 @@ DIVU     DIVide Unsigned                < ea >,Dn      -W-        - * * * 0
 !!!Done!!! EOR      Exclusive OR                       Dn,< ea >  BWL        - * * 0 0
 EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
 EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
-EXT      Sign EXTend                        Dn         -WL        - * * 0 0
+!!!Done!!! EXT      Sign EXTend                        Dn         -WL        - * * 0 0
 ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
 !!!Done!!! JMP      JuMP to Affective Address      < ea >                    - - - - -
 !!!Done!!! JSR      Jump to SubRoutine             < ea >                    - - - - -
@@ -61,8 +61,8 @@ MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
 MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0
 MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
 NBCD     Negate BCD                     < ea >         B--        * U * U *
-NEG      NEGate                         < ea >         BWL        * * * * *
-NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
+!!!Done!!! NEG      NEGate                         < ea >         BWL        * * * * *
+!!!Done!!! NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
 !!!Done!!! NOP      No OPeration                       NOP                   - - - - -
 NOT      Form one's complement          < ea >         BWL        - * * 0 0
 !!!Done!!! OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
@@ -70,10 +70,10 @@ NOT      Form one's complement          < ea >         BWL        - * * 0 0
 ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0
 PEA      Push Effective Address         < ea >         --L        - - - - -
 RESET    RESET all external devices        RESET                  - - - - -
-ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
+!!!Done!!! ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
                                             Dx,Dy
                                         < ea >
-ROR      ROtate Right                        ...       BWL        - * * 0 *
+!!!Done!!! ROR      ROtate Right                        ...       BWL        - * * 0 *
 !!!Done!!! ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
 !!!Done!!! ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
 !!!Done!!! RTE      ReTurn from Exception               RTE                  I I I I I

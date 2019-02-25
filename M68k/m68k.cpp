@@ -149,7 +149,7 @@ int M68k::Update()
 
 	get().ExecuteOpcode(opcode);
 
-	get().opcodeClicks = 10; //temporaire
+	get().opcodeClicks = 20; //temporaire
 	return get().opcodeClicks;
 }
 
@@ -1488,6 +1488,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeJSR(opcode);
 	}
+	else if(get().IsOpcode(opcode, "01001000xx000xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeEXT" << std::endl;
+		}
+
+		get().OpcodeEXT(opcode);
+	}
 	else if(get().IsOpcode(opcode, "01001x001xxxxxxx"))
 	{
 		if(get().unitTests)
@@ -1551,6 +1560,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeLSL_LSR_Memory(opcode);
 	}
+	else if(get().IsOpcode(opcode, "1110011x11xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeROL_ROR_Memory" << std::endl;
+		}
+
+		get().OpcodeROL_ROR_Memory(opcode);
+	}
 	else if(get().IsOpcode(opcode, "1110010x11xxxxxx"))
 	{
 		if(get().unitTests)
@@ -1577,6 +1595,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeLSL_LSR_Register(opcode);
+	}
+	else if(get().IsOpcode(opcode, "1110xxxxxxx11xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeROL_ROR_Register" << std::endl;
+		}
+
+		get().OpcodeROL_ROR_Register(opcode);
 	}
 	else if(get().IsOpcode(opcode, "1110xxxxxxx10xxx"))
 	{
@@ -1614,6 +1641,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeMOVE_To_SR(opcode);
 	}
+	else if(get().IsOpcode(opcode, "01000100xxxxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeNEG" << std::endl;
+		}
+
+		get().OpcodeNEG(opcode);
+	}
 	else if(get().IsOpcode(opcode, "0100000011xxxxxx"))
 	{
 		if(get().unitTests)
@@ -1622,6 +1658,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeMOVE_From_SR(opcode);
+	}
+	else if(get().IsOpcode(opcode, "01000000xxxxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeNEGX" << std::endl;
+		}
+
+		get().OpcodeNEGX(opcode);
 	}
 	else if(get().IsOpcode(opcode, "01000010xxxxxxxx"))
 	{
@@ -4017,6 +4062,74 @@ void M68k::OpcodeEOR(word opcode)
 	get().programCounter += dest.PCadvance;
 }
 
+void M68k::OpcodeEXT(word opcode)
+{
+	byte opmode = (opcode >> 6) & 0x7;
+	byte reg = opcode & 0x7;
+
+	DATASIZE size;
+	switch(opmode)
+	{
+		case 2:
+		get().SetDataRegister(reg, get().SignExtendWord((byte)get().registerData[reg]), WORD);
+		break;
+
+		case 3:
+		get().registerData[reg] = get().SignExtendDWord((word)get().registerData[reg]);
+		break;
+	}
+
+	dword data = get().registerData[reg];
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = data;
+	switch(opmode)
+	{
+		case 2:
+		vectorman &= 0xFFFF;
+		break;
+
+		case 3:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(opmode)
+	{
+		case 2:
+		bit = 15;
+		break;
+
+		case 3:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
 void M68k::OpcodeJMP(word opcode)
 {
 	byte eaMode = (opcode >> 3) & 0x7;
@@ -4631,6 +4744,272 @@ void M68k::OpcodeMOVEQ(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeNEG(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	//C_FLAG & X_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = (uint64_t)0 & maxTypeSize;
+	uint64_t tails = (uint64_t)data.operand & maxTypeSize;
+	if(sonic < tails)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)0 - (signed_byte)data.operand;
+
+			if(eggman < INT8_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)0 - (signed_word)data.operand;
+
+			if(eggman < INT16_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)0 - (signed_dword)data.operand;
+
+			if(eggman < INT32_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	data.operand = 0 - data.operand;
+	EA_DATA set = get().SetEAOperand(type, eaReg, data.operand, size, 0);
+	get().programCounter += data.PCadvance;
+	
+	dword vectorman = data.operand;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
+void M68k::OpcodeNEGX(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	dword xflag = TestBit(get().CCR, X_FLAG);
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	//C_FLAG & X_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = (uint64_t)0 & maxTypeSize;
+	uint64_t tails = (uint64_t)(data.operand + xflag) & maxTypeSize;
+	if(sonic < tails)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)0 - (signed_byte)data.operand - (signed_byte)xflag;
+
+			if(eggman < INT8_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)0 - (signed_word)data.operand - (signed_word)xflag;
+
+			if(eggman < INT16_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)0 - (signed_dword)data.operand - (signed_dword)xflag;
+
+			if(eggman < INT32_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	data.operand = 0 - data.operand - xflag;
+	EA_DATA set = get().SetEAOperand(type, eaReg, data.operand, size, 0);
+	get().programCounter += data.PCadvance;
+	
+	dword vectorman = data.operand;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
 void M68k::OpcodeNOP()
 {
 	//cycles
@@ -4819,6 +5198,218 @@ void M68k::OpcodeOR(word opcode)
 
 		//cycles
 	}
+}
+
+void M68k::OpcodeROL_ROR_Register(word opcode)
+{
+	byte count_reg = (opcode >> 9) & 0x7;
+	byte dr = (opcode >> 8) & 0x1;
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte ir = (opcode >> 5) & 0x1;
+	byte reg = opcode & 0x7;
+
+	int rot = 0;
+
+	if(ir == 0)
+	{
+		rot = (count_reg == 0) ? 8 : count_reg;
+	}
+	else
+	{
+		rot = get().registerData[count_reg] % 64;
+	}
+
+	dword toRot = get().registerData[reg];
+
+	int bits = 0;
+	switch(size)
+	{
+		case BYTE:
+		bits = 8;
+		toRot &= 0xFF;
+		break;
+
+		case WORD:
+		bits = 16;
+		toRot &= 0xFFFF;
+		break;
+
+		case LONG:
+		bits = 32;
+		break;
+	}
+
+	dword newData = 0;
+
+	if(dr == 0) //rot right
+	{
+		for(int i = 0; i < rot; ++i)
+		{
+			newData = toRot >> 1;
+
+			if(TestBit(toRot, 0))
+			{
+				BitSet(get().CCR, C_FLAG);
+				BitSet(get().CCR, X_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, C_FLAG);
+				BitReset(get().CCR, X_FLAG);
+			}
+		}
+	}
+	else //rot left
+	{
+		for(int i = 0; i < rot; ++i)
+		{
+			newData = toRot << 1;
+
+			if(TestBit(toRot, bits - 1))
+			{
+				BitSet(get().CCR, C_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, C_FLAG);
+			}
+		}
+	}
+
+	SetDataRegister(reg, newData, size);
+	
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = newData;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeROL_ROR_Memory(word opcode)
+{
+	byte dr = (opcode >> 8) & 0x1;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	int bits = 16;
+
+	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
+
+	dword toRot = dest.operand;
+
+	dword newData = 0;
+
+	if(dr == 0) //rot right
+	{
+		newData = toRot >> 1;
+
+		if(TestBit(toRot, 0))
+		{
+			BitSet(get().CCR, C_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+	}
+	else //rot left
+	{
+		newData = toRot << 1;
+
+		if(TestBit(toRot, bits - 1))
+		{
+			BitSet(get().CCR, C_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+	}
+
+	EA_DATA set = get().SetEAOperand(type, eaReg, newData, WORD, 0);
+
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = newData;
+	
+	vectorman &= 0xFFFF;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 15))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().programCounter += set.PCadvance;
+
+	//cycles
 }
 
 void M68k::OpcodeROXL_ROXR_Register(word opcode)

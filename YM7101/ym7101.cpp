@@ -57,7 +57,7 @@ word YM7101::GetAddressRegister()
 	word result = get().controlPortData >> 16;
 	result &= 0x3FFF;
 
-	word bits = controlPortData & 0x3;
+	word bits = get().controlPortData & 0x3;
 	result |= bits << 14;
 
 	return result;
@@ -243,9 +243,9 @@ word YM7101::ReadDataPortWORD()
 
 int YM7101::GetControlCode()
 {
-	byte lo = (byte)((get().controlPortData >> 30) & 0x3);
-	byte hi = (byte)((get().controlPortData >> 4) & 0x3);
-	return ((hi << 2) | lo);
+	byte lo = (byte)(get().controlPortData >> 30) & 0x3;
+	byte hi = (byte)(get().controlPortData >> 4) & 0x3;
+	return (int)((hi << 2) | lo);
 }
 
 void YM7101::UpdateRegister(word data)
@@ -470,7 +470,7 @@ word YM7101::GetSpriteBase()
 }
 
 bool YM7101::Is40Cell()
-{
+{	
 	if(TestBit(get().vdpRegister[0xC], 7))
 	{
 		return true;
@@ -661,7 +661,7 @@ void YM7101::RenderBackdrop()
 	byte green = get().GetColorShade((color >> 4) & 0xF);
 	byte blue = get().GetColorShade((color >> 8) & 0xF);
 
-	for(int x = 0; x <get().vdpResolution.second; ++x)
+	for(int x = 0; x < get().vdpResolution.first; ++x)
 	{
 		CRT::Write(x, get().vCounter, red, green, blue);
 	}
@@ -1289,12 +1289,11 @@ void YM7101::Render()
 void YM7101::Update(int clicks)
 {
 	bool cell40 = get().Is40Cell();
-
-	if(get().vdpResolution.first == 256 && cell40)
+	if((get().vdpResolution.first == 256) && cell40)
 	{
 		get().vdpResolution = std::make_pair<int, int>(320, 224);
 	}
-	else if(get().vdpResolution.first == 320 && !cell40)
+	else if((get().vdpResolution.first == 320) && !cell40)
 	{
 		get().vdpResolution = std::make_pair<int, int>(256, 224);
 	}
@@ -1344,8 +1343,6 @@ void YM7101::Update(int clicks)
 
 			BitReset(get().status, 7);
 			BitReset(get().status, 5);
-
-			CRT::ResetScreen();
 
 			get().lineInt = get().vdpRegister[0xA];
 
