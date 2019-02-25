@@ -284,7 +284,7 @@ bool Test_ADD()
 		 */
 		word opcode = 0x4816;
 		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-		
+
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -389,10 +389,10 @@ int main()
 
 
 	M68k::SetUnitTestsMode();
-
+/*
 	Genesis::AllocM68kMemory();
 	Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
-
+*/
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
