@@ -258,6 +258,7 @@ bool Test_ADD()
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
 
+<<<<<<< HEAD
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
@@ -377,6 +378,13 @@ bool Test_ADD()
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
+=======
+
+	M68k::SetUnitTestsMode();
+
+	//Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
+
+>>>>>>> commit before rebase
 
 
 
