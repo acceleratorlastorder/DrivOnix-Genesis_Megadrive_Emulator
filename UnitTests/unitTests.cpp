@@ -149,11 +149,16 @@ bool Test_ADD()
 		BitSet(state.CCR, N_FLAG);
 		BitSet(state.CCR, Z_FLAG);
 		BitSet(state.CCR, V_FLAG);
-		state.registerData[6] = 0x9;
-		state.registerData[7] = 0x19;
+
+		dword value_1 =
+		dword value_2
+
+
+		state.registerData[7] = 0x3;
+		state.registerAddress[6] = 0xE00000;
+		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], 0x6);
 
 		M68k::SetCpuState(state);
-
 
 		/*	USED OPCODE
 		 *  1101 (register)111(7) (opmode)100 ((effective address)(mode)010 (register)110(6))
@@ -163,24 +168,33 @@ bool Test_ADD()
 
 		//on execute l'opcode désiré
 		M68k::ExecuteOpcode(0xDF16);
-
-		//on recupère notre state modifié par l'opcode
 		state = M68k::GetCpuState();
+		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 0, 0, 0, 0) << std::endl;
 
-		std::cout << "\t\tstate.registerData[6]" << std::hex <<state.registerData[6] << std::endl;
-		std::cout << "\t\tstate.registerData[7]" << std::hex <<state.registerData[7] << std::endl;
+		dword result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
+		std::cout << "\t\tstate.registerData[7] " << std::hex << state.registerData[7] << std::endl;
+		std::cout << "\t\tresult " << std::hex << result << std::endl;
 
-		std::cout << "\t\tresult bit set N Z V " << TestFlag(state.CCR, 0, 1, 1, 1, 0) << std::endl;
+		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 1, 1, 1, 0) << std::endl;
 
+		std::cout << "\t\tresult bit set V " << TestFlag(state.CCR, 0, 1, 0, 0, 0) << std::endl;
+		std::cout << "\t\tresult bit set Z " << TestFlag(state.CCR, 0, 0, 1, 0, 0) << std::endl;
+		std::cout << "\t\tresult bit set N " << TestFlag(state.CCR, 0, 0, 0, 1, 0) << std::endl;
 
-		if(state.registerData[7] == (0x9 + 0x8))
+		if(result == (0x6 + 0x3) && TestFlag(state.CCR, 0, 0, 0, 0, 0))
 		{
-			std::cout << "\t\tTest normal byte add Operation Passed" << std::endl;
+			std::cout << "\t\tTest normal byte add Operation with V Z N Passed" << std::endl;
 		}
 		else
 		{
-			std::cout << "\t\tTest normal byte add Operation Failed" << std::endl;
 			testResult = false;
+			std::cout << "\t\tTest normal byte add Operation Failed" << std::endl;
+			if(!TestFlag(state.CCR, 0, 0, 0, 0, 0)){
+				std::cout << "\t\tclear flag V Z N failed !" << std::endl;
+			}
+			if (result != (value_1 + value_2)) {
+				std::cout << "\t\toperation result is false result: " << result << " should be: " << (value_1 + value_2) << std::endl;
+			}
 		}
 
 
@@ -199,6 +213,8 @@ bool Test_ADD()
 		BitSet(state.CCR, C_FLAG);
 		*/
 
+		//indique la fin du test
+		std::cout << "End Test_ADD()" << std::endl;
 		return testResult;
 	}
 
@@ -213,7 +229,8 @@ int main()
 
 	M68k::SetUnitTestsMode();
 
-	//Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
+	Genesis::AllocM68kMemory();
+	Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
 
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
