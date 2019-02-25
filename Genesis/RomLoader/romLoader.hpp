@@ -53,8 +53,8 @@ private:
 		byte PCodeVNumber[0x10];
 		dword romStart;
 		dword romEnd;
-		dword sramStart;
-		dword sramEnd;
+		dword ramStart;
+		dword ramEnd;
 		byte sram[0xC];
 		byte modem[0xC];
 		byte memo[0x28];
@@ -71,7 +71,7 @@ private:
 
 	static RomLoader& get(void);
 
-	void LoadBINMD(std::string romName);
+	void LoadBINMDGEN(std::string romName);
 	void LoadSMD(std::string romName);
 	void LoadHeader();
 	void Checksum();

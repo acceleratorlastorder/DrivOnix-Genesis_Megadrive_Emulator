@@ -23,9 +23,14 @@ void Genesis::Init()
 	get().FPS = 60;
 }
 
-void Genesis::InsertCartridge()
+void Genesis::AllocM68kMemory()
 {
 	get().M68kMemory.reserve(M68K_MEM_SIZE);
+}
+
+void Genesis::InsertCartridge()
+{
+	get().AllocM68kMemory();
 
 	RomLoader::PageMemory(0, 0x400000, 0, get().M68kMemory);
 }
@@ -102,7 +107,7 @@ void Genesis::FileBrowser()
     memset(&ofn,      0, sizeof(ofn));
     ofn.lStructSize  = sizeof(ofn);
     ofn.hwndOwner    = nullptr;
-    ofn.lpstrFilter  = "Genesis/Megadrive BIN rom\0*.bin\0Genesis/Megadrive MD rom\0*.md\0Genesis/Megadrive SMD rom\0*.smd\0";
+    ofn.lpstrFilter  = "Genesis/Megadrive BIN rom\0*.bin\0Megadrive MD rom\0*.md\0Genesis GEN rom\0*.gen\0Genesis/Megadrive SMD rom\0*.smd\0";
     ofn.lpstrFile    = get().romName;
     ofn.nMaxFile     = 2048;
     ofn.lpstrTitle   = "Select a Rom, hell yeah !";

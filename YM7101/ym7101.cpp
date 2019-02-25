@@ -373,7 +373,7 @@ void YM7101::DMAVRAMCopy()
 
 void YM7101::WriteVram(word data)
 {
-	word address = GetAddressRegister();
+	word address = get().GetAddressRegister();
 
 	if(TestBit(address, 0))
 	{
@@ -400,7 +400,7 @@ void YM7101::WriteVsram(word data)
 
 word YM7101::ReadVram()
 {
-	word address = GetAddressRegister();
+	word address = get().GetAddressRegister();
 	return get().vram[address] << 8 | get().vram[address + 1];
 }
 

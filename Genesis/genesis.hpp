@@ -16,6 +16,7 @@ class Genesis
 public:
 	Genesis();
 	static void Init();
+	static void AllocM68kMemory();
 	static void InsertCartridge();
 	static void Run();
 	static void FileBrowser();
