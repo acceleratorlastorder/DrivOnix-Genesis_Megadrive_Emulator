@@ -136,27 +136,21 @@ bool Test_ADD()
 		 */
 		//Indique le debut du test
 		std::cout << "Start Test_ADD()" << std::endl;
-		bool testResult = true;
-
-		//on declare un state
-		//et on met les values qu'il doit avoir avant l'execution de l'opcode
-
-
 		CPU_STATE_DEBUG state;
-
-		//Test Z_FLAG
+		bool testResult = true;
+		//Test NZVC_FLAG
 		state.CCR = 0x0000;
 		BitSet(state.CCR, N_FLAG);
 		BitSet(state.CCR, Z_FLAG);
 		BitSet(state.CCR, V_FLAG);
+		BitSet(state.CCR, C_FLAG);
 
-		dword value_1 =
-		dword value_2
+		dword value_1 = 0x3;
+		dword value_2 = 0x6;
 
-
-		state.registerData[7] = 0x3;
+		state.registerData[7] = value_1;
 		state.registerAddress[6] = 0xE00000;
-		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], 0x6);
+		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_2);
 
 		M68k::SetCpuState(state);
 
@@ -165,32 +159,24 @@ bool Test_ADD()
 		 *  binary: 1101111100010110
 		 *  hex: DF16
 		 */
+		word opcode = 0xDF16;
+		std::cout << "\t\texcute ADD with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
-		//on execute l'opcode désiré
-		M68k::ExecuteOpcode(0xDF16);
+		//execute the opcode
+		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
-		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 0, 0, 0, 0) << std::endl;
 
 		dword result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
-		std::cout << "\t\tstate.registerData[7] " << std::hex << state.registerData[7] << std::endl;
-		std::cout << "\t\tresult " << std::hex << result << std::endl;
-
-		std::cout << "\t\tresult bit set V Z N " << TestFlag(state.CCR, 0, 1, 1, 1, 0) << std::endl;
-
-		std::cout << "\t\tresult bit set V " << TestFlag(state.CCR, 0, 1, 0, 0, 0) << std::endl;
-		std::cout << "\t\tresult bit set Z " << TestFlag(state.CCR, 0, 0, 1, 0, 0) << std::endl;
-		std::cout << "\t\tresult bit set N " << TestFlag(state.CCR, 0, 0, 0, 1, 0) << std::endl;
-
-		if(result == (0x6 + 0x3) && TestFlag(state.CCR, 0, 0, 0, 0, 0))
+		if((value_1 + value_2) && TestFlag(state.CCR, 0, 0, 0, 0, 0))
 		{
-			std::cout << "\t\tTest normal byte add Operation with V Z N Passed" << std::endl;
+			std::cout << "\t\tTest normal byte add Operation with V Z N C Passed" << std::endl;
 		}
 		else
 		{
 			testResult = false;
 			std::cout << "\t\tTest normal byte add Operation Failed" << std::endl;
 			if(!TestFlag(state.CCR, 0, 0, 0, 0, 0)){
-				std::cout << "\t\tclear flag V Z N failed !" << std::endl;
+				std::cout << "\t\tclear flag V Z N C failed !" << std::endl;
 			}
 			if (result != (value_1 + value_2)) {
 				std::cout << "\t\toperation result is false result: " << result << " should be: " << (value_1 + value_2) << std::endl;
@@ -199,9 +185,6 @@ bool Test_ADD()
 
 
 		/*
-
-
-
 		BitSet(state.CCR, X_FLAG);
 
 		BitSet(state.CCR, N_FLAG);
