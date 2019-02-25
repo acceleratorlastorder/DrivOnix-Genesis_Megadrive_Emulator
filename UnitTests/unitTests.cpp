@@ -284,7 +284,7 @@ bool Test_ADD()
 		 */
 		word opcode = 0x4816;
 		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-		
+
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
