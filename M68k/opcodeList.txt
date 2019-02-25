@@ -31,17 +31,17 @@
 !!!Done!!! CMPI     CoMPare Immediate            #< data>,< ea >  BWL        - * * * *
 !!!Done!!! CMPM     CoMPare Memory                  (Ay)+,(Ax)+   BWL        - * * * *
 !!!Done!!! DBcc     Looping Instruction           DBcc Dn,< label>-W-        - - - - -
-DIVS     DIVide Signed                  < ea >,Dn      -W-        - * * * 0
-DIVU     DIVide Unsigned                < ea >,Dn      -W-        - * * * 0
+!!!Done!!! DIVS     DIVide Signed                  < ea >,Dn      -W-        - * * * 0
+!!!Done!!! DIVU     DIVide Unsigned                < ea >,Dn      -W-        - * * * 0
 !!!Done!!! EOR      Exclusive OR                       Dn,< ea >  BWL        - * * 0 0
-EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
-EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
+!!!Done!!! EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
+!!!Done!!! EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
 !!!Done!!! EXT      Sign EXTend                        Dn         -WL        - * * 0 0
-ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
+!!!Done!!! ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
 !!!Done!!! JMP      JuMP to Affective Address      < ea >                    - - - - -
 !!!Done!!! JSR      Jump to SubRoutine             < ea >                    - - - - -
 !!!Done!!! LEA      Load Effective Address         < ea >,An      --L        - - - - -
-LINK     Allocate Stack Frame               An,#< displacement>   - - - - -
+!!!Done!!! LINK     Allocate Stack Frame               An,#< displacement>   - - - - -
 !!!Done!!! LSL      Logical Shift Left                 Dx,Dy      BWL        * * * 0 *
                                         #<1-8>,Dy
                                         < ea >
@@ -64,7 +64,7 @@ NBCD     Negate BCD                     < ea >         B--        * U * U *
 !!!Done!!! NEG      NEGate                         < ea >         BWL        * * * * *
 !!!Done!!! NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
 !!!Done!!! NOP      No OPeration                       NOP                   - - - - -
-NOT      Form one's complement          < ea >         BWL        - * * 0 0
+!!!Done!!! NOT      Form one's complement          < ea >         BWL        - * * 0 0
 !!!Done!!! OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
                                             Dn,< ea >
 ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0

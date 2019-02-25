@@ -664,12 +664,12 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 	switch(mode)
 	{
 		case EA_DATA_REG:
-		SetDataRegister(reg, data, size);
+		get().SetDataRegister(reg, data, size);
 		result.eatype = EA_DATA_REG;
 		break;
 
 		case EA_ADDRESS_REG:
-		SetAddressRegister(reg, data, size);
+		get().SetAddressRegister(reg, data, size);
 		result.eatype = EA_ADDRESS_REG;
 		break;
 
@@ -935,7 +935,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 				case EA_MODE_7_ABS_ADDRESS_LONG:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
-					result.pointer = (Genesis::M68KReadMemoryWORD(get().programCounter) << 16) | Genesis::M68KReadMemoryWORD(get().programCounter + 2);
+					result.pointer = Genesis::M68KReadMemoryLONG(get().programCounter);
 					result.pointer += offset;
 					result.PCadvance = 4;
 
@@ -966,7 +966,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 				case EA_MODE_7_PC_WITH_PREINDEX:
 				{
 					result.mode7Type = EA_MODE_7_PC_WITH_PREINDEX;
-					result.PCadvance = 2;
+					result.PCadvance = 4;
 
 					word Data = Genesis::M68KReadMemoryWORD(get().programCounter);
 
@@ -1005,7 +1005,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 						break;
 					}
 
-					result.pointer += get().programCounter;
+					result.pointer += Genesis::M68KReadMemoryWORD(get().programCounter + 2);
 					result.pointer += displacement;
 					result.pointer += offset;
 
@@ -1153,9 +1153,9 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	//get().SetUnitTestsMode();
+	get().SetUnitTestsMode();
 	dword PCDebug = get().programCounter - 2;
-	//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -1218,6 +1218,15 @@ void M68k::ExecuteOpcode(word opcode)
 			}
 
 			get().OpcodeBTSTStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "00001010xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEORI" << std::endl;
+			}
+
+			get().OpcodeEORI(opcode);
 		}
 		else if(get().IsOpcode(opcode, "00001100xxxxxxxx"))
 		{
@@ -1339,6 +1348,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeABCD(opcode);
 		}
+		else if(get().IsOpcode(opcode, "1100xxx1xx00xxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEXG" << std::endl;
+			}
+
+			get().OpcodeEXG(opcode);
+		}
 		else
 		{
 			if(get().unitTests)
@@ -1410,12 +1428,34 @@ void M68k::ExecuteOpcode(word opcode)
 
 	else if(get().IsOpcode(opcode, "1000xxxxxxxxxxxx"))
 	{//1000
-		if(get().unitTests)
-		{
-			std::cout << "\tM68k :: Execute OpcodeOR" << std::endl;
-		}
 
-		get().OpcodeOR(opcode);
+		if(get().IsOpcode(opcode, "1000xxx111xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeDIVS" << std::endl;
+			}
+
+			get().OpcodeDIVS(opcode);
+		}
+		else if(get().IsOpcode(opcode, "1000xxx011xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeDIVU" << std::endl;
+			}
+
+			get().OpcodeDIVU(opcode);
+		}
+		else
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeOR" << std::endl;
+			}
+
+			get().OpcodeOR(opcode);
+		}
 	}
 
 	else if(get().IsOpcode(opcode, "1001xxxxxxxxxxxx"))
@@ -1443,6 +1483,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "0100101011111100"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeILLEGAL" << std::endl;
+		}
+
+		get().OpcodeILLEGAL();
+	}
 	else if(get().IsOpcode(opcode, "0100111001110011"))
 	{
 		if(get().unitTests)
@@ -1469,6 +1518,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeRTS();
+	}
+	else if(get().IsOpcode(opcode, "0100111001010xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeLINK" << std::endl;
+		}
+
+		get().OpcodeLINK();
 	}
 	else if(get().IsOpcode(opcode, "0100111011xxxxxx"))
 	{
@@ -1641,6 +1699,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeMOVE_To_SR(opcode);
 	}
+	else if(get().IsOpcode(opcode, "01000110xxxxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeNOT" << std::endl;
+		}
+
+		get().OpcodeNOT(opcode);
+	}
 	else if(get().IsOpcode(opcode, "01000100xxxxxxxx"))
 	{
 		if(get().unitTests)
@@ -1706,12 +1773,12 @@ void M68k::ExecuteOpcode(word opcode)
 	}
 	else
 	{
-		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+		//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
 		while(1);
 	}
 
-	//std::cout << "\t 0x" << std::hex << opcode << std::endl;
+	std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -2147,9 +2214,9 @@ void M68k::OpcodeADDI(word opcode)
 	EA_TYPES type = (EA_TYPES)eaMode;
 
 	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	get().programCounter += src.PCadvance;
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
 
-	get().programCounter += src.PCadvance;
 
 	//C_FLAG & X_FLAG
 	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
@@ -2454,7 +2521,7 @@ void M68k::OpcodeADDX(word opcode)
 	
 	EA_DATA dest = get().GetEAOperand(type, rx, size, true, 0);
 	EA_DATA src = get().GetEAOperand(type, ry, size, false, 0);
-	
+	get().programCounter += src.PCadvance;
 
 	byte xflag = TestBit(get().CCR, X_FLAG);
 
@@ -2574,6 +2641,8 @@ void M68k::OpcodeADDX(word opcode)
 	}
 	
 	EA_DATA data = get().SetEAOperand(type, rx, result, size, 0);
+
+	get().programCounter += data.PCadvance;
 	//cycles
 }
 
@@ -2669,7 +2738,7 @@ void M68k::OpcodeAND(word opcode)
 			BitReset(get().CCR, N_FLAG);
 		}
 
-		get().SetEAOperand(type, eaReg, result, size, 0);
+		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
 
 		get().programCounter += src.PCadvance;
 
@@ -2761,7 +2830,7 @@ void M68k::OpcodeAND(word opcode)
 			BitReset(get().CCR, N_FLAG);
 		}
 
-		get().SetEAOperand(type, reg, result, size, 0);
+		get().SetEAOperand(type, eaReg, result, size, 0);
 
 		get().programCounter += src.PCadvance;
 
@@ -2780,7 +2849,9 @@ void M68k::OpcodeANDI(word opcode)
 	EA_TYPES type = (EA_TYPES)eaMode;
 
 	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	get().programCounter += src.PCadvance;
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+	get().programCounter += dest.PCadvance;
 
 	//C_FLAG
 	BitReset(get().CCR, C_FLAG);
@@ -2844,9 +2915,6 @@ void M68k::OpcodeANDI(word opcode)
 	}
 
 	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += src.PCadvance;
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -3256,9 +3324,7 @@ void M68k::OpcodeBCLRDynamic(word opcode)
 	BitReset(dest.operand, bit);
 
 	EA_DATA set = get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
 	get().programCounter += dest.PCadvance;
-
 	//cycles
 }
 
@@ -3276,6 +3342,7 @@ void M68k::OpcodeBCLRStatic(word opcode)
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+	
 
 	if(!TestBit(dest.operand, bit))
 	{
@@ -3404,6 +3471,7 @@ void M68k::OpcodeBTSTDynamic(word opcode)
 	int bit = get().registerData[reg] % modulo;
 	
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
+	get().programCounter += dest.PCadvance;
 
 	if(!TestBit(dest.operand, bit))
 	{
@@ -3413,8 +3481,6 @@ void M68k::OpcodeBTSTDynamic(word opcode)
 	{
 		BitReset(get().CCR, Z_FLAG);
 	}
-
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -3433,6 +3499,7 @@ void M68k::OpcodeBTSTStatic(word opcode)
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
+	get().programCounter += dest.PCadvance;
 
 	if(!TestBit(dest.operand, bit))
 	{
@@ -3442,8 +3509,6 @@ void M68k::OpcodeBTSTStatic(word opcode)
 	{
 		BitReset(get().CCR, Z_FLAG);
 	}
-
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -3487,12 +3552,12 @@ void M68k::OpcodeCLR(word opcode)
 
 	EA_DATA set = get().SetEAOperand(type, eaReg, 0, size, 0);
 
+	get().programCounter += set.PCadvance;
+
 	BitReset(get().CCR, N_FLAG);
 	BitSet(get().CCR, Z_FLAG);
 	BitReset(get().CCR, V_FLAG);
 	BitReset(get().CCR, C_FLAG);
-
-	get().programCounter += set.PCadvance;
 
 	//cycles
 }
@@ -3528,6 +3593,8 @@ void M68k::OpcodeCMP_CMPA(word opcode)
 	EA_TYPES type = (EA_TYPES)eaMode;
 
 	EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
+
+	get().programCounter += src.PCadvance;
 
 	dword dest;
 
@@ -3663,8 +3730,6 @@ void M68k::OpcodeCMP_CMPA(word opcode)
 		BitReset(get().CCR, N_FLAG);
 	}
 
-	get().programCounter += src.PCadvance;
-
 	//cycles
 }
 
@@ -3679,9 +3744,9 @@ void M68k::OpcodeCMPI(word opcode)
 	EA_TYPES type = (EA_TYPES)eaMode;
 
 	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
-
 	get().programCounter += src.PCadvance;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
+	get().programCounter += dest.PCadvance;
 
 	//C_FLAG
 	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
@@ -3799,8 +3864,6 @@ void M68k::OpcodeCMPI(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
-
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -3814,6 +3877,8 @@ void M68k::OpcodeCMPM(word opcode)
 	EA_DATA dest = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, ax, size, false, 0);
 	EA_DATA src = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, ay, size, false, 0);
 
+	get().programCounter += dest.PCadvance;
+
 	//C_FLAG
 	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
 	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
@@ -3930,8 +3995,6 @@ void M68k::OpcodeCMPM(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
-
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -3972,6 +4035,147 @@ void M68k::OpcodeDBcc(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeDIVS(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = (opcode & 0x7);
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	signed_dword signedReg = get().registerData[reg];
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
+	get().programCounter += src.PCadvance;
+
+	if(((signed_word)src.operand) == 0)
+	{
+		printf("DIVISION PAR ZERO, INTERDIT BORDEL\n");
+		return;
+	}
+
+	bool overflow = false;
+	signed_dword div = signedReg / (signed_word)src.operand;
+	if(div > 0x7FFF)
+	{
+		overflow = true;
+	}
+
+	if(overflow)
+	{
+		BitSet(get().CCR, V_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, V_FLAG);
+	}
+
+	if(!overflow)
+	{
+		signed_word quotient = (signed_word)div;
+		signed_word remainder = (signed_word)(signedReg - (((signed_dword)quotient) * ((signed_dword)((signed_word)src.operand))));
+
+		if(TestBit(signedReg, 31))
+		{
+			BitSet(remainder, 15);
+		}
+		else
+		{
+			BitReset(remainder, 15);
+		}
+
+		get().registerData[reg] = (((dword)remainder) << 16) | (dword)quotient;
+
+		BitReset(get().CCR, C_FLAG);
+
+		if(TestBit(quotient, 15))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		if(quotient == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeDIVU(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = (opcode & 0x7);
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	dword unsignedReg = get().registerData[reg];
+
+	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
+	get().programCounter += src.PCadvance;
+
+	if(((word)src.operand) == 0)
+	{
+		printf("DIVISION PAR ZERO, INTERDIT BORDEL\n");
+		return;
+	}
+
+	bool overflow = false;
+	dword div = unsignedReg / (word)src.operand;
+	if(div > 0x7FFF)
+	{
+		overflow = true;
+	}
+
+	if(overflow)
+	{
+		BitSet(get().CCR, V_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, V_FLAG);
+	}
+
+	if(!overflow)
+	{
+		word quotient = (word)div;
+		word remainder = (word)(unsignedReg - (((dword)quotient) * ((dword)((word)src.operand))));
+
+		get().registerData[reg] = (((dword)remainder) << 16) | (dword)quotient;
+
+		BitReset(get().CCR, C_FLAG);
+
+		if(TestBit(quotient, 15))
+		{
+			BitSet(get().CCR, N_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, N_FLAG);
+		}
+
+		if(quotient == 0)
+		{
+			BitSet(get().CCR, Z_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, Z_FLAG);
+		}
+	}
+
+	//cycles
+}
+
 void M68k::OpcodeEOR(word opcode)
 {
 	byte reg = (opcode >> 9) & 0x7;
@@ -4002,6 +4206,8 @@ void M68k::OpcodeEOR(word opcode)
 	dword result = dest.operand ^ src;
 
 	get().SetEAOperand(type, eaReg, result, size, 0);
+
+	get().programCounter += dest.PCadvance;
 
 	BitReset(get().CCR, C_FLAG);
 	BitReset(get().CCR, V_FLAG);
@@ -4058,8 +4264,116 @@ void M68k::OpcodeEOR(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
+}
+
+void M68k::OpcodeEORI(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	get().programCounter += src.PCadvance;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+	dword result = dest.operand ^ src.operand;
+
+	get().SetEAOperand(type, eaReg, result, size, 0);
 
 	get().programCounter += dest.PCadvance;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
+void M68k::OpcodeEXG(word opcode)
+{
+	byte rx = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 3) & 0x1F;
+	byte ry = opcode & 0x7;
+
+	switch(opmode)
+	{
+		case 8:
+		{
+			dword temp = get().registerData[regx];
+			get().registerData[regx] = get().registerData[regy];
+			get().registerData[regy] = temp;
+		}
+		break;
+
+		case 9:
+		{
+			dword temp = get().registerAddress[regx];
+			get().registerAddress[regx] = get().registerAddress[regy];
+			get().registerAddress[regy] = temp;
+		}
+		break;
+
+		case 17:
+		{
+			dword temp = get().registerData[regx];
+			get().registerData[regx] = get().registerAddress[regy];
+			get().registerAddress[regy] = temp;
+		}
+		break;
+	}
+
+	//cycles
 }
 
 void M68k::OpcodeEXT(word opcode)
@@ -4130,6 +4444,13 @@ void M68k::OpcodeEXT(word opcode)
 	}
 }
 
+void M68k::OpcodeILLEGAL()
+{
+	get().OpcodeTRAP(4);
+
+	//cycles
+}
+
 void M68k::OpcodeJMP(word opcode)
 {
 	byte eaMode = (opcode >> 3) & 0x7;
@@ -4170,6 +4491,21 @@ void M68k::OpcodeLEA(word opcode)
 	get().programCounter += src.PCadvance;
 
 	//cycles
+}
+
+void M68k::OpcodeLINK(word opcode)
+{
+	byte reg = (opcode & 0x7);
+
+	get().registerAddress[0x7] -= 4;
+	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().registerAddress[reg]);
+	get().registerAddress[reg] = get().registerAddress[0x7];
+
+	dword displacement = get().SignExtendDWord(Genesis::M68KWriteMemoryWORD(get().programCounter));
+
+	get().programCounter += 2;
+
+	get().registerAddress[0x7] += displacement;
 }
 
 void M68k::OpcodeLSL_LSR_Register(word opcode)
@@ -4361,6 +4697,8 @@ void M68k::OpcodeLSL_LSR_Memory(word opcode)
 
 	EA_DATA set = get().SetEAOperand(type, eaReg, newData, WORD, 0);
 
+	get().programCounter += set.PCadvance;
+
 	BitReset(get().CCR, V_FLAG);
 
 	dword vectorman = newData;
@@ -4386,8 +4724,6 @@ void M68k::OpcodeLSL_LSR_Memory(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
-
-	get().programCounter += set.PCadvance;
 
 	//cycles
 }
@@ -4420,7 +4756,9 @@ void M68k::OpcodeMOVE(word opcode)
 	}
 
 	EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
+	get().programCounter += src.PCadvance;
 	EA_DATA dest = get().SetEAOperand(destType, destReg, src.operand, size, 0);
+	get().programCounter += dest.PCadvance;
 
 	BitReset(get().CCR, C_FLAG);
 	BitReset(get().CCR, V_FLAG);
@@ -4477,9 +4815,6 @@ void M68k::OpcodeMOVE(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
-
-	get().programCounter += src.PCadvance;
-	get().programCounter += dest.PCadvance;
 
 	//cycles
 }
@@ -5012,6 +5347,109 @@ void M68k::OpcodeNEGX(word opcode)
 
 void M68k::OpcodeNOP()
 {
+	//cycles
+}
+
+void M68k::OpcodeNOT(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
+
+	dword newData = 0;
+	switch(size)
+	{
+		case BYTE:
+		{
+			byte tempData = (byte)data.operand;
+			tempData = ~tempData;
+			newData = tempData;
+		}
+		break;
+
+		case WORD:
+		{
+			word tempData = (word)data.operand;
+			tempData = ~tempData;
+			newData = tempData;
+		}
+		break;
+
+		case LONG:
+		{
+			dword tempData = data.operand;
+			tempData = ~tempData;
+			newData = tempData;
+		}
+		break;
+	}
+
+	get().SetEAOperand(type, eaReg, newData, size, 0);
+
+	get().programCounter += data.PCadvance;
+
+	//C_FLAG
+	BitReset(get().CCR, C_FLAG);
+	//V_FLAG
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = newData;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
 	//cycles
 }
 

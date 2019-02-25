@@ -158,12 +158,17 @@ private:
 	void OpcodeCMPI(word opcode);
 	void OpcodeCMPM(word opcode);
 	void OpcodeDBcc(word opcode);
+	void OpcodeDIVS(word opcode);
+	void OpcodeDIVU(word opcode);
 	void OpcodeEOR(word opcode);
+	void OpcodeEORI(word opcode);
+	void OpcodeEXG(word opcode);
 	void OpcodeEXT(word opcode);
-
+	void OpcodeILLEGAL();
 	void OpcodeJMP(word opcode);
 	void OpcodeJSR(word opcode);
 	void OpcodeLEA(word opcode);
+	void OpcodeLINK(word opcode);
 	void OpcodeLSL_LSR_Register(word opcode);
 	void OpcodeLSL_LSR_Memory(word opcode);
 	void OpcodeMOVE(word opcode);
@@ -177,6 +182,7 @@ private:
 	void OpcodeNEG(word opcode);
 	void OpcodeNEGX(word opcode);
 	void OpcodeNOP();
+	void OpcodeNOT(word opcode);
 	void OpcodeOR(word opcode);
 	void OpcodeROL_ROR_Register(word opcode);
 	void OpcodeROL_ROR_Memory(word opcode);

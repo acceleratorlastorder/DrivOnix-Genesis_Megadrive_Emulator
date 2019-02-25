@@ -139,7 +139,6 @@ void YM7101::WriteControlPortWORD(word data)
 	if(!get().controlPortPending)
 	{
 		byte code = (byte)((data >> 14) & 0x3);
-
 		if(code == 2)
 		{
 			get().UpdateRegister(data);
