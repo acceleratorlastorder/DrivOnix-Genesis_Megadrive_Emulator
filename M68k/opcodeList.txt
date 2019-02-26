@@ -1,98 +1,80 @@
-!!!Done!!! ABCD     Add BCD with extend                Dx,Dy      B--        * U * U *
-                                         -(Ax),-(Ay)
-!!!Done!!! ADD      ADD binary                         Dn,< ea >  BWL        * * * * *
-                                        < ea >,Dn
-!!!Done!!! ADDA     ADD binary to An               < ea >,An      -WL        - - - - -
-!!!Done!!! ADDI     ADD Immediate                      #x,< ea >  BWL        * * * * *
-!!!Done!!! ADDQ     ADD 3-bit immediate            #<1-8>,< ea >  BWL        * * * * *
-!!!Done!!! ADDX     ADD eXtended                       Dy,Dx      BWL        * * * * *
-                                         -(Ay),-(Ax)
-!!!Done!!! AND      Bit-wise AND                   < ea >,Dn      BWL        - * * 0 0
-                                            Dn,< ea >
-!!!Done!!! ANDI     Bit-wise AND with Immediate  #< data>,< ea >  BWL        - * * 0 0
-!!!Done!!! ASL      Arithmetic Shift Left          #<1-8>,Dy      BWL        * * * * *
-                                            Dx,Dy
-                                        < ea >
-!!!Done!!! ASR      Arithmetic Shift Right              ...       BWL        * * * * *
-!!!Done!!! Bcc      Conditional Branch            Bcc.S < label>  BW-        - - - - -
-                                       Bcc.W < label>
-!!!Done!!! BCHG     Test a Bit and ChanGe              Dn,< ea >  B-L        - - * - -
-                                      #< data>,< ea >
-!!!Done!!! BCLR     Test a Bit and CLEAR                ...       B-L        - - * - -
-!!!Done!!! BSET     Test a Bit and SET                  ...       B-L        - - * - -
-!!!Done!!! BSR      Branch to SubRoutine          BSR.S < label>  BW-        - - - - -
-                                       BSR.W < label>
-!!!Done!!! BTST     Bit TeST                           Dn,< ea >  B-L        - - * - -
-                                      #< data>,< ea >
-!!!Done!!! CHK      CHecK Dn Against Bounds        < ea >,Dn      -W-        - * U U U
-!!!Done!!! CLR      CLEAR                          < ea >         BWL        - 0 1 0 0
-!!!Done!!! CMP      CoMPare                        < ea >,Dn      BWL        - * * * *
-!!!Done!!! CMPA     CoMPare Address                < ea >,An      -WL        - * * * *
-!!!Done!!! CMPI     CoMPare Immediate            #< data>,< ea >  BWL        - * * * *
-!!!Done!!! CMPM     CoMPare Memory                  (Ay)+,(Ax)+   BWL        - * * * *
-!!!Done!!! DBcc     Looping Instruction           DBcc Dn,< label>-W-        - - - - -
-!!!Done!!! DIVS     DIVide Signed                  < ea >,Dn      -W-        - * * * 0
-!!!Done!!! DIVU     DIVide Unsigned                < ea >,Dn      -W-        - * * * 0
-!!!Done!!! EOR      Exclusive OR                       Dn,< ea >  BWL        - * * 0 0
-!!!Done!!! EORI     Exclusive OR Immediate       #< data>,< ea >  BWL        - * * 0 0
-!!!Done!!! EXG      Exchange any two registers         Rx,Ry      --L        - - - - -
-!!!Done!!! EXT      Sign EXTend                        Dn         -WL        - * * 0 0
-!!!Done!!! ILLEGAL  ILLEGAL-Instruction Exception     ILLEGAL                - - - - -
-!!!Done!!! JMP      JuMP to Affective Address      < ea >                    - - - - -
-!!!Done!!! JSR      Jump to SubRoutine             < ea >                    - - - - -
-!!!Done!!! LEA      Load Effective Address         < ea >,An      --L        - - - - -
-!!!Done!!! LINK     Allocate Stack Frame               An,#< displacement>   - - - - -
-!!!Done!!! LSL      Logical Shift Left                 Dx,Dy      BWL        * * * 0 *
-                                        #<1-8>,Dy
-                                        < ea >
-!!!Done!!! LSR      Logical Shift Right                 ...       BWL        * * * 0 *
-!!!Done!!! MOVE     Between Effective Addresses    < ea >,< ea >  BWL        - * * 0 0
-!!!Done!!! MOVE     To CCR                         < ea >,CCR     -W-        I I I I I
-!!!Done!!! MOVE     To SR                          < ea >,SR      -W-        I I I I I
-!!!Done!!! MOVE     From SR                            SR,< ea >  -W-        - - - - -
-!!!Done!!! MOVE     USP to/from Address Register      USP,An      --L        - - - - -
-                                            An,USP
-!!!Done!!! MOVEA    MOVE Address                   < ea >,An      -WL        - - - - -
-!!!Done!!! MOVEM    MOVE Multiple         <register list>,< ea >  -WL        - - - - -
-                                          < ea >,<register list>
-!!!Done!!! MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
-                                         x(An),Dn
-!!!Done!!! MOVEQ    MOVE 8-bit immediate     #<-128.+127>,Dn      --L        - * * 0 0
-!!!Done!!! MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0
-!!!Done!!! MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
-!!!Done!!! NBCD     Negate BCD                     < ea >         B--        * U * U *
-!!!Done!!! NEG      NEGate                         < ea >         BWL        * * * * *
-!!!Done!!! NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
-!!!Done!!! NOP      No OPeration                       NOP                   - - - - -
-!!!Done!!! NOT      Form one's complement          < ea >         BWL        - * * 0 0
-!!!Done!!! OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
-                                            Dn,< ea >
-!!!Done!!! ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0
-!!!Done!!! PEA      Push Effective Address         < ea >         --L        - - - - -
-!!!Done!!! RESET    RESET all external devices        RESET                  - - - - -
-!!!Done!!! ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
-                                            Dx,Dy
-                                        < ea >
-!!!Done!!! ROR      ROtate Right                        ...       BWL        - * * 0 *
-!!!Done!!! ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
-!!!Done!!! ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
-!!!Done!!! RTE      ReTurn from Exception               RTE                  I I I I I
-!!!Done!!! RTR      ReTurn and Restore                  RTR                  I I I I I
-!!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
-!!!Done!!! SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
-                                         -(Ax),-(Ay)
-!!!Done!!! Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -
-!!!Done!!! STOP     Enable & wait for interrupts     #< data>                I I I I I
-!!!Done!!! SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
-                                        < ea >,Dn
-!!!Done!!! SUBA     SUBtract binary from An        < ea >,An      -WL        - - - - -
-!!!Done!!! SUBI     SUBtract Immediate                 #x,< ea >  BWL        * * * * *
-!!!Done!!! SUBQ     SUBtract 3-bit immediate     #< data>,< ea >  BWL        * * * * *
-!!!Done!!! SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
-                                         -(Ay),-(Ax)
-!!!Done!!! SWAP     SWAP words of Dn                   Dn         -W-        - * * 0 0
-!!!Done!!! TAS      Test & Set MSB & Set N/Z-bits  < ea >         B--        - * * 0 0
-!!!Done!!! TRAP     Execute TRAP Exception            #< vector>             - - - - -
-!!!Done!!! TRAPV    TRAPV Exception if V-bit Set       TRAPV                 - - - - -
-!!!Done!!! TST      TeST for negative or zero      < ea >         BWL        - * * 0 0
-!!!Done!!! UNLK     Deallocate Stack Frame             An                    - - - - -
+From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
+
+!!!Done!!! ABCD  Add Binary-Coded Decimal (BCD) with Extend
+!!!Done!!! ADD Add Binary
+!!!Done!!! ADDA  Add Address
+!!!Done!!! ADDI  Add Immediate
+!!!Done!!! ADDQ  Add Quick (3-bit Immediate)
+!!!Done!!! ADDX  Add Extended
+!!!Done!!! AND And Logical
+!!!Done!!! ANDI  And Immediate
+ANDI to CCR And Immediate to Condition Code Register
+ANDI to SR  And Immediate to Status Register
+!!!Done!!! ASL, ASR  Arithmetic Shift Left/Right
+!!!Done!!! Bcc Branch on Condition Code
+!!!Done!!! BCHG  Test Bit and Change
+!!!Done!!! BCLR  Test Bit and Clear
+!!!Done!!! BRA Branch Always
+!!!Done!!! BSET  Test Bit and Set
+!!!Done!!! BSR Branch to Subroutine
+!!!Done!!! BTST  Test a Bit
+!!!Done!!! CHK Check Register Against Bounds
+!!!Done!!! CLR Clear an Operand
+!!!Done!!! CMP Compare
+!!!Done!!! CMPA  Compare Address
+!!!Done!!! CMPI  Compare Immediate
+!!!Done!!! CMPM  Compare Memory with Memory
+!!!Done!!! DBcc  Test Condition, Decrement, and Branch
+!!!Done!!! DIVS, DIVU  Divide Signed/Unsigned
+!!!Done!!! EOR Exclusive OR Logical
+!!!Done!!! EORI  Exclusive OR Immediate
+EORI to CCR Exclusive OR Immediate to Condition Code Register
+EORI to SR  Exclusive OR Immediate to Status Register
+!!!Done!!! EXG Exchange Registers
+!!!Done!!! EXT Sign Extend Data Register
+!!!Done!!! ILLEGAL Execute Illegal Instruction Exception
+!!!Done!!! JMP Jump
+!!!Done!!! JSR Jump to Subroutine
+!!!Done!!! LEA Load Effective Address
+!!!Done!!! LINK  Link and Allocate
+!!!Done!!! LSL, LSR  Logical Shift Left/Right
+!!!Done!!! MOVE  Move Data Between Effective Addresses
+!!!Done!!! MOVEA Move Address
+!!!Done!!! MOVE to CCR Move Data to Condition Code Register
+!!!Done!!! MOVE from SR  Move Data from Status Register
+!!!Done!!! MOVE to SR  Move Data to Status Register
+!!!Done!!! MOVE USP  Move Data to/from USP
+!!!Done!!! MOVEM Move Multiple Registers
+!!!Done!!! MOVEP Move Peripheral Data
+!!!Done!!! MOVEQ Move Quick (8-bit Immediate)
+!!!Done!!! MULS, MULU  Multiply Signed/Unsigned
+!!!Done!!! NBCD  Negate Binary-Coded Decimal (BCD) with Extend
+!!!Done!!! NEG Negate
+!!!Done!!! NEGX  Negate with Extend
+!!!Done!!! NOP No Operation
+!!!Done!!! NOT Logical Complement
+!!!Done!!! OR  Or Logical
+!!!Done!!! ORI Or Immediate
+ORI to CCR  Or Immediate to Condition Code Register
+ORI to SR Or Immediate to Status Register
+!!!Done!!! PEA Push Effective Address
+!!!Done!!! RESET Reset All External Devices
+!!!Done!!! ROL, ROR  Rotate Left/Right
+!!!Done!!! ROXL, ROXR  Rotate Left/Right with Extend
+!!!Done!!! RTE Return from Exception
+!!!Done!!! RTR Return and Restore Condition Codes
+!!!Done!!! RTS Return from Subroutine
+!!!Done!!! SBCD  Subtract Binary-Coded Decimal (BCD) with Extend
+!!!Done!!! Scc Set on Condition Code
+!!!Done!!! STOP  Load Status Register and Stop
+!!!Done!!! SUB Subtract Binary
+!!!Done!!! SUBA  Subtract Address
+!!!Done!!! SUBI  Subtract Immediate
+!!!Done!!! SUBQ  Subtract Quick (8-bit Immediate)
+!!!Done!!! SUBX  Subtract Extended
+!!!Done!!! SWAP  Swap Register Halves
+!!!Done!!! TAS Test and Set an Operand
+!!!Done!!! TRAP  Execute Trap Exception
+!!!Done!!! TRAPV Trap on Overflow
+!!!Done!!! TST Test an Operand
+!!!Done!!! UNLK  Unlink and Deallocate
