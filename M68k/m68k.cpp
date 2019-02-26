@@ -1535,7 +1535,7 @@ void M68k::ExecuteOpcode(word opcode)
 			std::cout << "\tM68k :: Execute OpcodeLINK" << std::endl;
 		}
 
-		get().OpcodeLINK();
+		get().OpcodeLINK(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100111011xxxxxx"))
 	{
@@ -1680,6 +1680,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeROXL_ROXR_Register(opcode);
+	}
+	else if(get().IsOpcode(opcode, "010011100100xxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeTRAP" << std::endl;
+		}
+
+		get().OpcodeTRAP(opcode);
 	}
 	else if(get().IsOpcode(opcode, "010011100110xxxx"))
 	{
@@ -4359,25 +4368,25 @@ void M68k::OpcodeEXG(word opcode)
 	{
 		case 8:
 		{
-			dword temp = get().registerData[regx];
-			get().registerData[regx] = get().registerData[regy];
-			get().registerData[regy] = temp;
+			dword temp = get().registerData[rx];
+			get().registerData[rx] = get().registerData[ry];
+			get().registerData[ry] = temp;
 		}
 		break;
 
 		case 9:
 		{
-			dword temp = get().registerAddress[regx];
-			get().registerAddress[regx] = get().registerAddress[regy];
-			get().registerAddress[regy] = temp;
+			dword temp = get().registerAddress[rx];
+			get().registerAddress[rx] = get().registerAddress[ry];
+			get().registerAddress[ry] = temp;
 		}
 		break;
 
 		case 17:
 		{
-			dword temp = get().registerData[regx];
-			get().registerData[regx] = get().registerAddress[regy];
-			get().registerAddress[regy] = temp;
+			dword temp = get().registerData[rx];
+			get().registerData[rx] = get().registerAddress[ry];
+			get().registerAddress[ry] = temp;
 		}
 		break;
 	}
@@ -4510,7 +4519,7 @@ void M68k::OpcodeLINK(word opcode)
 	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().registerAddress[reg]);
 	get().registerAddress[reg] = get().registerAddress[0x7];
 
-	dword displacement = get().SignExtendDWord(Genesis::M68KWriteMemoryWORD(get().programCounter));
+	dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
 
 	get().programCounter += 2;
 
@@ -6694,6 +6703,15 @@ void M68k::OpcodeSUBQ(word opcode)
 	}	
 
 	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeTRAP(word opcode)
+{
+	byte vector = opcode & 0xF;
+
+	get().RequestInt(INT_TRAP, Genesis::M68KReadMemoryLONG((32 + vector) * 4));
 
 	//cycles
 }

@@ -194,6 +194,7 @@ private:
 	void OpcodeSUB(word opcode);
 	void OpcodeSUBA(word opcode);
 	void OpcodeSUBQ(word opcode);
+	void OpcodeTRAP(word opcode);
 	void OpcodeTST(word opcode);
 	//End opcodes
 	//---------------------------
