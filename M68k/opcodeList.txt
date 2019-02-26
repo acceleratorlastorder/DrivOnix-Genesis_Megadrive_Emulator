@@ -55,7 +55,7 @@
 !!!Done!!! MOVEA    MOVE Address                   < ea >,An      -WL        - - - - -
 !!!Done!!! MOVEM    MOVE Multiple         <register list>,< ea >  -WL        - - - - -
                                           < ea >,<register list>
-MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
+!!!Done!!! MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
                                          x(An),Dn
 !!!Done!!! MOVEQ    MOVE 8-bit immediate     #<-128.+127>,Dn      --L        - * * 0 0
 MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0

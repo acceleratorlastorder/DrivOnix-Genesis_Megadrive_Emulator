@@ -1246,6 +1246,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeADDI(opcode);
 		}
+		else if(get().IsOpcode(opcode, "0000xxx1xx001xxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeMOVEP" << std::endl;
+			}
+
+			get().OpcodeMOVEP(opcode);
+		}
 		else if(get().IsOpcode(opcode, "0000xxx101xxxxxx"))
 		{
 			if(get().unitTests)
@@ -5038,6 +5047,69 @@ void M68k::OpcodeMOVEM(word opcode)
 	}
 
 	get().programCounter += pcAdvance;
+
+	//cycles
+}
+
+void M68k::OpcodeMOVEP(word opcode)
+{
+	byte dataReg = (opcode >> 9) & 0x7;
+	byte opmode = (opcode >> 6) & 0x7;
+	byte addrReg = opcode & 0x7;
+
+	signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
+	dword addr = get().registerAddress[addrReg] + displacement;
+
+	bool isWord = (opmode == 4 || opmode == 6);
+	bool isEven = ((addr % 2) == 0);
+
+	if(opmode < 6)
+	{
+		word word1 = Genesis::M68KReadMemoryWORD(addr);
+		word word2 = Genesis::M68KReadMemoryWORD(addr + 2);
+		if(isWord)
+		{
+			get().registerData[dataReg] &= 0xFFFF0000;
+			if(isEven)
+			{
+				get().registerData[dataReg] |= (word1 & 0xFF00) | (word2 >> 8);
+			}
+			else
+			{
+				get().registerData[dataReg] |= ((word1 & 0xFF) << 8) | (word2 & 0xFF);
+			}
+		}
+		else
+		{
+			word word3 = Genesis::M68KReadMemoryWORD(addr + 4);
+			word word4 = Genesis::M68KReadMemoryWORD(addr + 6);
+			if(isEven)
+			{
+				get().registerData[dataReg] = ((word1 & 0xFF00) << 16) | ((word2 & 0xFF00) << 8) | (word3 & 0xFF00) | (word4 >> 8);				
+			}
+			else
+			{
+				get().registerData[dataReg] = ((word1 & 0xFF) << 24) | ((word2 & 0xFF) << 16) | (word3 & 0xFF << 8) | (word4 & 0xFF);
+			}
+		}
+	}
+	else
+	{
+		if(isWord)
+		{
+			Genesis::M68KWriteMemoryBYTE(addr, (byte)(get().registerData[dataReg] >> 8));
+			Genesis::M68KWriteMemoryBYTE(addr + 2, (byte)(get().registerData[dataReg]));
+		}
+		else
+		{
+			Genesis::M68KWriteMemoryBYTE(addr, (byte)(get().registerData[dataReg] >> 24));
+			Genesis::M68KWriteMemoryBYTE(addr + 2, (byte)(get().registerData[dataReg] >> 16));
+			Genesis::M68KWriteMemoryBYTE(addr + 4, (byte)(get().registerData[dataReg] >> 8));
+			Genesis::M68KWriteMemoryBYTE(addr + 6, (byte)(get().registerData[dataReg]));
+		}
+	}
+
+	get().programCounter += 2;
 
 	//cycles
 }

@@ -178,6 +178,7 @@ private:
 	void OpcodeMOVE_USP(word opcode);
 	void OpcodeMOVEA(word opcode);
 	void OpcodeMOVEM(word opcode);
+	void OpcodeMOVEP(word opcode);
 	void OpcodeMOVEQ(word opcode);
 	void OpcodeNEG(word opcode);
 	void OpcodeNEGX(word opcode);
