@@ -3068,21 +3068,6 @@ void M68k::OpcodeANDI(word opcode)
 	//cycles
 }
 
-void M68k::OpcodeANDI_To_CCR()
-{
-	word data = Genesis::M68KReadMemoryWORD(get().programCounter);
-	get().programCounter +=2;
-
-	byte loCCR = (byte)get().CCR;
-	byte loData = (byte)data;
-
-	loCCR &= loData;
-	get().CCR &= 0xFF00;
-	get().CCR |= loCCR;
-
-	//cycles
-}
-
 void M68k::OpcodeASL_ASR_Register(word opcode)
 {
 	byte count_reg = (opcode >> 9) & 0x7;
