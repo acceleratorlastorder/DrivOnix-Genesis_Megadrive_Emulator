@@ -1153,9 +1153,26 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	//get().SetUnitTestsMode();
+	/*get().SetUnitTestsMode();
 	dword PCDebug = get().programCounter - 2;
-	//std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+	std::cout << "\t 0x" << std::hex << opcode << std::endl;
+
+	for(int i = 0; i < 8; ++i)
+	{
+		std::cout << "\tA" << i << " = 0x" << std::hex << get().registerAddress[i] << std::endl; 
+	}
+
+	for(int i = 0; i < 8; ++i)
+	{
+		std::cout << "\tD" << i << " = 0x" << std::hex << get().registerData[i] << std::endl; 
+	}
+
+	std::cout << "\tX_FLAG = " << TestBit(get().CCR, X_FLAG) << std::endl;
+	std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
+	std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
+	std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
+	std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -1481,7 +1498,16 @@ void M68k::ExecuteOpcode(word opcode)
 	else if(get().IsOpcode(opcode, "1011xxxxxxxxxxxx"))
 	{//1011
 
-		if(get().IsOpcode(opcode, "1011xxx1xx001xxx"))
+		if(get().IsOpcode(opcode, "1011xxxx11xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeCMPA" << std::endl;
+			}
+
+			get().OpcodeCMP_CMPA(opcode);
+		}
+		else if(get().IsOpcode(opcode, "1011xxx1xx001xxx"))
 		{
 			if(get().unitTests)
 			{
@@ -1503,7 +1529,7 @@ void M68k::ExecuteOpcode(word opcode)
 		{
 			if(get().unitTests)
 			{
-				std::cout << "\tM68k :: Execute OpcodeCMP_CMPA" << std::endl;
+				std::cout << "\tM68k :: Execute OpcodeCMP" << std::endl;
 			}
 
 			get().OpcodeCMP_CMPA(opcode);
@@ -1721,7 +1747,7 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeJSR(opcode);
 	}
-	else if(get().IsOpcode(opcode, "01001000xx000xxx"))
+	else if(get().IsOpcode(opcode, "0100100x1x000xxx"))
 	{
 		if(get().unitTests)
 		{
@@ -1973,14 +1999,6 @@ void M68k::ExecuteOpcode(word opcode)
 
 		get().OpcodeLEA(opcode);
 	}
-	else
-	{
-		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
-		std::cout << "\t Unimplemented 0x" << std::hex << opcode << std::endl;
-		while(1);
-	}
-
-	//std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
 	//copy state for unit test
 	if(get().unitTests)
@@ -6852,6 +6870,7 @@ void M68k::OpcodeSTOP()
 
 void M68k::OpcodeSUB(word opcode)
 {
+
 	byte reg = (opcode >> 9) & 0x7;
 	byte opmode = (opcode >> 6) & 0x7;
 	byte eaMode = (opcode >> 3) & 0x7;
