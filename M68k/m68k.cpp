@@ -5291,12 +5291,12 @@ void M68k::OpcodeNBCD(word opcode)
 	//BCD OVERFLOW CORRECTION
 	if((dest & 0xF) > 9)
 	{
-		result += 0x6;
+		dest += 0x6;
 	}
 
 	if((dest >> 4) > 9)
 	{
-		result += 0x60;
+		dest += 0x60;
 	}
 
 	if(dest != 0)
@@ -5313,7 +5313,7 @@ void M68k::OpcodeNBCD(word opcode)
 
 	word result = 0x99 - dest;
 
-	EA_DATA = SetEAOperand(type, eaReg, (byte)result, BYTE, 0);
+	EA_DATA set = SetEAOperand(type, eaReg, (byte)result, BYTE, 0);
 
 	if((result & 0xFF) != 0)
 	{
