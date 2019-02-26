@@ -81,7 +81,7 @@ RTR      ReTurn and Restore                  RTR                  I I I I I
 !!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
 SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
                                          -(Ax),-(Ay)
-Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -
+!!!Done!!! Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -
 STOP     Enable & wait for interrupts     #< data>                I I I I I
 !!!Done!!! SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
                                         < ea >,Dn

@@ -194,6 +194,7 @@ private:
 	void OpcodeROXL_ROXR_Memory(word opcode);
 	void OpcodeRTE();
 	void OpcodeRTS();
+	void OpcodeScc(word opcode);
 	void OpcodeSUB(word opcode);
 	void OpcodeSUBA(word opcode);
 	void OpcodeSUBQ(word opcode);
