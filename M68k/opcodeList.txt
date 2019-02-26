@@ -67,9 +67,9 @@
 !!!Done!!! NOT      Form one's complement          < ea >         BWL        - * * 0 0
 !!!Done!!! OR       Bit-wise OR                    < ea >,Dn      BWL        - * * 0 0
                                             Dn,< ea >
-ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0
-PEA      Push Effective Address         < ea >         --L        - - - - -
-RESET    RESET all external devices        RESET                  - - - - -
+!!!Done!!! ORI      Bit-wise OR with Immediate   #< data>,< ea >  BWL        - * * 0 0
+!!!Done!!! PEA      Push Effective Address         < ea >         --L        - - - - -
+!!!Done!!! RESET    RESET all external devices        RESET                  - - - - -
 !!!Done!!! ROL      ROtate Left                    #<1-8>,Dy      BWL        - * * 0 *
                                             Dx,Dy
                                         < ea >
@@ -77,7 +77,7 @@ RESET    RESET all external devices        RESET                  - - - - -
 !!!Done!!! ROXL     ROtate Left with eXtend             ...       BWL        * * * 0 *
 !!!Done!!! ROXR     ROtate Right with eXtend            ...       BWL        * * * 0 *
 !!!Done!!! RTE      ReTurn from Exception               RTE                  I I I I I
-RTR      ReTurn and Restore                  RTR                  I I I I I
+!!!Done!!! RTR      ReTurn and Restore                  RTR                  I I I I I
 !!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
 SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
                                          -(Ax),-(Ay)

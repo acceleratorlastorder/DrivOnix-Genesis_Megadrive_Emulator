@@ -188,11 +188,15 @@ private:
 	void OpcodeNOP();
 	void OpcodeNOT(word opcode);
 	void OpcodeOR(word opcode);
+	void OpcodeORI(word opcode);
+	void OpcodePEA(word opcode);
+	void OpcodeRESET();
 	void OpcodeROL_ROR_Register(word opcode);
 	void OpcodeROL_ROR_Memory(word opcode);
 	void OpcodeROXL_ROXR_Register(word opcode);
 	void OpcodeROXL_ROXR_Memory(word opcode);
 	void OpcodeRTE();
+	void OpcodeRTR();
 	void OpcodeRTS();
 	void OpcodeScc(word opcode);
 	void OpcodeSUB(word opcode);

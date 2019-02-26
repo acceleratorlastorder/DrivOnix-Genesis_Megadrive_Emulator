@@ -1219,6 +1219,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeBTSTStatic(opcode);
 		}
+		else if(get().IsOpcode(opcode, "00000000xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeORI" << std::endl;
+			}
+
+			get().OpcodeORI(opcode);
+		}
 		else if(get().IsOpcode(opcode, "00001010xxxxxxxx"))
 		{
 			if(get().unitTests)
@@ -1510,6 +1519,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "0100111001110000"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeRESET" << std::endl;
+		}
+
+		get().OpcodeRESET();
+	}
 	else if(get().IsOpcode(opcode, "0100101011111100"))
 	{
 		if(get().unitTests)
@@ -1527,6 +1545,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeRTE();
+	}
+	else if(get().IsOpcode(opcode, "0100111001110111"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeRTR" << std::endl;
+		}
+
+		get().OpcodeRTR();
 	}
 	else if(get().IsOpcode(opcode, "0100111001110001"))
 	{
@@ -1554,6 +1581,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeLINK(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0100100001xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodePEA" << std::endl;
+		}
+
+		get().OpcodePEA(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100100000xxxxxx"))
 	{
@@ -5891,6 +5927,105 @@ void M68k::OpcodeOR(word opcode)
 	}
 }
 
+void M68k::OpcodeORI(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	get().programCounter += src.PCadvance;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+	dword result = dest.operand | src.operand;
+
+	get().SetEAOperand(type, eaReg, result, size, 0);
+
+	get().programCounter += dest.PCadvance;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
+void M68k::OpcodePEA(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, LONG, false, 0);
+
+	get().programCounter += data.PCadvance;
+
+	get().registerAddress[0x7] -= 4;
+
+	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], data.pointer);
+
+	//cycles
+}
+
+void M68k::OpcodeRESET()
+{
+	get().Init();
+
+	//cycles
+}
+
 void M68k::OpcodeROL_ROR_Register(word opcode)
 {
 	byte count_reg = (opcode >> 9) & 0x7;
@@ -6371,6 +6506,19 @@ void M68k::OpcodeRTE()
 	{
 		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
 	}
+
+	//cycles
+}
+
+void M68k::OpcodeRTR()
+{
+	word newCCR = Genesis::M68KReadMemoryWORD(get().registerAddress[0x7]);
+
+	get().CCR &= 0xFF00; //Supervisor status conservé
+	get().CCR |= (byte)(newCCR & 0xFF);
+	get().registerAddress[0x7] += 2;
+	get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
+	get().registerAddress[0x7] += 4;
 
 	//cycles
 }
