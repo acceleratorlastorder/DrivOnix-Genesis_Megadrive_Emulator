@@ -448,12 +448,12 @@ word YM7101::GetBaseLayerA()
 
 word YM7101::GetBaseLayerB()
 {
-	return ((get().vdpRegister[3] & 0x38) << 10);
+	return ((get().vdpRegister[4] & 0x7) << 13);
 }
 
 word YM7101::GetBaseWindow()
 {
-	return ((get().vdpRegister[4] & 0x38) << 13);
+	return ((get().vdpRegister[3] & 0x3E) << 10);
 }
 
 word YM7101::GetSpriteBase()
@@ -1096,7 +1096,7 @@ void YM7101::RenderSprite(bool priority)
 			{
 				memSize = 32;
 				startAddress = tileNumber * memSize;
-				startAddress = (yIndex * 4);
+				startAddress += (yIndex * 4);
 			}
 
 			for(int width = 0; width <= hValue; ++width)
