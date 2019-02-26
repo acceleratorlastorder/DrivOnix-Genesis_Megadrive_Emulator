@@ -10,29 +10,29 @@ From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
 !!!Clicks!!!Done!!! ANDI  And Immediate
 !!!Clicks!!!Done!!! ANDI to CCR And Immediate to Condition Code Register
 !!!Clicks!!!Done!!! ANDI to SR  And Immediate to Status Register
-!!!Done!!! ASL, ASR  Arithmetic Shift Left/Right
-!!!Done!!! Bcc Branch on Condition Code
-!!!Done!!! BCHG  Test Bit and Change
-!!!Done!!! BCLR  Test Bit and Clear
-!!!Done!!! BRA Branch Always
-!!!Done!!! BSET  Test Bit and Set
-!!!Done!!! BSR Branch to Subroutine
-!!!Done!!! BTST  Test a Bit
-!!!Done!!! CHK Check Register Against Bounds
-!!!Done!!! CLR Clear an Operand
-!!!Done!!! CMP Compare
-!!!Done!!! CMPA  Compare Address
-!!!Done!!! CMPI  Compare Immediate
-!!!Done!!! CMPM  Compare Memory with Memory
-!!!Done!!! DBcc  Test Condition, Decrement, and Branch
-!!!Done!!! DIVS, DIVU  Divide Signed/Unsigned
-!!!Done!!! EOR Exclusive OR Logical
-!!!Done!!! EORI  Exclusive OR Immediate
-!!!Done!!! EORI to CCR Exclusive OR Immediate to Condition Code Register
-!!!Done!!! EORI to SR  Exclusive OR Immediate to Status Register
-!!!Done!!! EXG Exchange Registers
-!!!Done!!! EXT Sign Extend Data Register
-!!!Done!!! ILLEGAL Execute Illegal Instruction Exception
+!!!Clicks!!!Done!!! ASL, ASR  Arithmetic Shift Left/Right
+!!!Clicks!!!Done!!! Bcc Branch on Condition Code
+!!!Clicks!!!Done!!! BCHG  Test Bit and Change
+!!!Clicks!!!Done!!! BCLR  Test Bit and Clear
+!!!Clicks!!!Done!!! BRA Branch Always
+!!!Clicks!!!Done!!! BSET  Test Bit and Set
+!!!Clicks!!!Done!!! BSR Branch to Subroutine
+!!!Clicks!!!Done!!! BTST  Test a Bit
+!!!Clicks!!!Done!!! CHK Check Register Against Bounds
+!!!Clicks!!!Done!!! CLR Clear an Operand
+!!!Clicks!!!Done!!! CMP Compare
+!!!Clicks!!!Done!!! CMPA  Compare Address
+!!!Clicks!!!Done!!! CMPI  Compare Immediate
+!!!Clicks!!!Done!!! CMPM  Compare Memory with Memory
+!!!Clicks!!!Done!!! DBcc  Test Condition, Decrement, and Branch
+!!!Clicks!!!Done!!! DIVS, DIVU  Divide Signed/Unsigned
+!!!Clicks!!!Done!!! EOR Exclusive OR Logical
+!!!Clicks!!!Done!!! EORI  Exclusive OR Immediate
+!!!Clicks!!!Done!!! EORI to CCR Exclusive OR Immediate to Condition Code Register
+!!!Clicks!!!Done!!! EORI to SR  Exclusive OR Immediate to Status Register
+!!!Clicks!!!Done!!! EXG Exchange Registers
+!!!Clicks!!!Done!!! EXT Sign Extend Data Register
+!!!Clicks!!!Done!!! ILLEGAL Execute Illegal Instruction Exception
 !!!Done!!! JMP Jump
 !!!Done!!! JSR Jump to Subroutine
 !!!Done!!! LEA Load Effective Address
