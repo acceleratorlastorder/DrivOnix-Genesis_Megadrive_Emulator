@@ -88,8 +88,6 @@ public:
 		EA_MODE_7_NUM				   =  5
 	};
 
-	static const int EA_NUMBER = EA_MODE_7 + EA_MODE_7_NUM;
-
 	struct EA_DATA
 	{
 		int cycles;
@@ -128,6 +126,7 @@ private:
 	dword GetTypeMaxSize(DATASIZE size);
 	bool ConditionTable(byte condition);
 	bool IsOpcode(word opcode, std::string mask);
+	void ClicksMoveInit();
 	//End opcodes Utils
 
 	//Start opcodes
@@ -220,7 +219,6 @@ private:
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
-
 	dword programCounter;
 	dword opcodeClicks;
 	word  CCR;
@@ -241,8 +239,11 @@ private:
 	CPU_STATE_DEBUG cpuStateDebug;
 	//End CPU Unit Test
 	//--------------------------
-
-
+	//Start CPU clicks
+	int clicksMoveBW[12][9];
+	int clicksMoveL[12][9];
+	//End CPU clicks
+	//--------------------------
 };
 
 #endif

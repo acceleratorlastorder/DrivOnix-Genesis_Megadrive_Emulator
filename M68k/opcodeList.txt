@@ -1,11 +1,11 @@
 From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
 
-!!!Done!!! ABCD  Add Binary-Coded Decimal (BCD) with Extend
-!!!Done!!! ADD Add Binary
-!!!Done!!! ADDA  Add Address
-!!!Done!!! ADDI  Add Immediate
-!!!Done!!! ADDQ  Add Quick (3-bit Immediate)
-!!!Done!!! ADDX  Add Extended
+!!!Clicks!!!Done!!! ABCD  Add Binary-Coded Decimal (BCD) with Extend
+!!!Clicks!!!Done!!! ADD Add Binary
+!!!Clicks!!!Done!!! ADDA  Add Address
+!!!Clicks!!!Done!!! ADDI  Add Immediate
+!!!Clicks!!!Done!!! ADDQ  Add Quick (3-bit Immediate)
+!!!Clicks!!!Done!!! ADDX  Add Extended
 !!!Done!!! AND And Logical
 !!!Done!!! ANDI  And Immediate
 !!!Done!!! ANDI to CCR And Immediate to Condition Code Register
