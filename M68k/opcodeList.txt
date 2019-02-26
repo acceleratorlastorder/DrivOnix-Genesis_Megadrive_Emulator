@@ -8,8 +8,8 @@ From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
 !!!Done!!! ADDX  Add Extended
 !!!Done!!! AND And Logical
 !!!Done!!! ANDI  And Immediate
-ANDI to CCR And Immediate to Condition Code Register
-ANDI to SR  And Immediate to Status Register
+!!!Done!!! ANDI to CCR And Immediate to Condition Code Register
+!!!Done!!! ANDI to SR  And Immediate to Status Register
 !!!Done!!! ASL, ASR  Arithmetic Shift Left/Right
 !!!Done!!! Bcc Branch on Condition Code
 !!!Done!!! BCHG  Test Bit and Change
@@ -28,8 +28,8 @@ ANDI to SR  And Immediate to Status Register
 !!!Done!!! DIVS, DIVU  Divide Signed/Unsigned
 !!!Done!!! EOR Exclusive OR Logical
 !!!Done!!! EORI  Exclusive OR Immediate
-EORI to CCR Exclusive OR Immediate to Condition Code Register
-EORI to SR  Exclusive OR Immediate to Status Register
+!!!Done!!! EORI to CCR Exclusive OR Immediate to Condition Code Register
+!!!Done!!! EORI to SR  Exclusive OR Immediate to Status Register
 !!!Done!!! EXG Exchange Registers
 !!!Done!!! EXT Sign Extend Data Register
 !!!Done!!! ILLEGAL Execute Illegal Instruction Exception
@@ -55,8 +55,8 @@ EORI to SR  Exclusive OR Immediate to Status Register
 !!!Done!!! NOT Logical Complement
 !!!Done!!! OR  Or Logical
 !!!Done!!! ORI Or Immediate
-ORI to CCR  Or Immediate to Condition Code Register
-ORI to SR Or Immediate to Status Register
+!!!Done!!! ORI to CCR  Or Immediate to Condition Code Register
+!!!Done!!! ORI to SR Or Immediate to Status Register
 !!!Done!!! PEA Push Effective Address
 !!!Done!!! RESET Reset All External Devices
 !!!Done!!! ROL, ROR  Rotate Left/Right

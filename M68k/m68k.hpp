@@ -139,6 +139,8 @@ private:
 	void OpcodeADDX(word opcode);
 	void OpcodeAND(word opcode);
 	void OpcodeANDI(word opcode);
+	void OpcodeANDI_To_CCR();
+	void OpcodeANDI_To_SR();
 	void OpcodeASL_ASR_Register(word opcode);
 	void OpcodeASL_ASR_Memory(word opcode);
 	void OpcodeBcc(word opcode);
@@ -161,6 +163,8 @@ private:
 	void OpcodeDIVU(word opcode);
 	void OpcodeEOR(word opcode);
 	void OpcodeEORI(word opcode);
+	void OpcodeEORI_To_CCR();
+	void OpcodeEORI_To_SR();
 	void OpcodeEXG(word opcode);
 	void OpcodeEXT(word opcode);
 	void OpcodeILLEGAL();
@@ -188,6 +192,8 @@ private:
 	void OpcodeNOT(word opcode);
 	void OpcodeOR(word opcode);
 	void OpcodeORI(word opcode);
+	void OpcodeORI_To_CCR();
+	void OpcodeORI_To_SR();
 	void OpcodePEA(word opcode);
 	void OpcodeRESET();
 	void OpcodeROL_ROR_Register(word opcode);

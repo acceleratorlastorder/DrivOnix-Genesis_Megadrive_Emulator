@@ -1160,16 +1160,60 @@ void M68k::ExecuteOpcode(word opcode)
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
 
-		if(get().IsOpcode(opcode, "00000010xxxxxxxx"))
-		{//00000010
+		if(get().IsOpcode(opcode, "0000001000111100"))
+		{
 			if(get().unitTests)
 			{
-				std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
+				std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
 			}
 
-			get().OpcodeANDI(opcode);
+			get().OpcodeANDI_To_CCR();
 		}
+		else if(get().IsOpcode(opcode, "0000001001111100"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeANDI_To_SR" << std::endl;
+			}
 
+			get().OpcodeANDI_To_SR();
+		}
+		else if(get().IsOpcode(opcode, "0000101000111100"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEORI_To_CCR" << std::endl;
+			}
+
+			get().OpcodeEORI_To_CCR();
+		}
+		else if(get().IsOpcode(opcode, "0000101001111100"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeEORI_To_SR" << std::endl;
+			}
+
+			get().OpcodeEORI_To_SR();
+		}
+		else if(get().IsOpcode(opcode, "0000000000111100"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeORI_To_CCR" << std::endl;
+			}
+
+			get().OpcodeORI_To_CCR();
+		}
+		else if(get().IsOpcode(opcode, "0000000001111100"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeORI_To_SR" << std::endl;
+			}
+
+			get().OpcodeORI_To_SR();
+		}
 		else if(get().IsOpcode(opcode, "0000100001xxxxxx"))
 		{
 			if(get().unitTests)
@@ -1205,6 +1249,15 @@ void M68k::ExecuteOpcode(word opcode)
 			}
 
 			get().OpcodeBTSTStatic(opcode);
+		}
+		else if(get().IsOpcode(opcode, "00000010xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
+			}
+
+			get().OpcodeANDI(opcode);
 		}
 		else if(get().IsOpcode(opcode, "00000000xxxxxxxx"))
 		{
@@ -3068,6 +3121,41 @@ void M68k::OpcodeANDI(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeANDI_To_CCR()
+{
+	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+	get().programCounter += 2;
+
+	byte loCCR = (byte)get().CCR;
+	byte loImm = (byte)imm;
+
+	loCCR &= loImm;
+
+	get().CCR &= 0xFF00;
+	get().CCR |= loCCR;
+
+	//cycles
+}
+
+void M68k::OpcodeANDI_To_SR()
+{
+	if(get().superVisorModeActivated)
+	{
+		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+		get().programCounter += 2;
+
+		get().CCR &= imm;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
+}
+
 void M68k::OpcodeASL_ASR_Register(word opcode)
 {
 	byte count_reg = (opcode >> 9) & 0x7;
@@ -4472,6 +4560,41 @@ void M68k::OpcodeEORI(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
+}
+
+void M68k::OpcodeEORI_To_CCR()
+{
+	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+	get().programCounter += 2;
+
+	byte loCCR = (byte)get().CCR;
+	byte loImm = (byte)imm;
+
+	loCCR ^= loImm;
+
+	get().CCR &= 0xFF00;
+	get().CCR |= loCCR;
+
+	//cycles
+}
+
+void M68k::OpcodeEORI_To_SR()
+{
+	if(get().superVisorModeActivated)
+	{
+		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+		get().programCounter += 2;
+
+		get().CCR ^= imm;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
 }
 
 void M68k::OpcodeEXG(word opcode)
@@ -6043,6 +6166,41 @@ void M68k::OpcodeORI(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
+}
+
+void M68k::OpcodeORI_To_CCR()
+{
+	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+	get().programCounter += 2;
+
+	byte loCCR = (byte)get().CCR;
+	byte loImm = (byte)imm;
+
+	loCCR |= loImm;
+
+	get().CCR &= 0xFF00;
+	get().CCR |= loCCR;
+
+	//cycles
+}
+
+void M68k::OpcodeORI_To_SR()
+{
+	if(get().superVisorModeActivated)
+	{
+		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
+
+		get().programCounter += 2;
+
+		get().CCR |= imm;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
 }
 
 void M68k::OpcodePEA(word opcode)
