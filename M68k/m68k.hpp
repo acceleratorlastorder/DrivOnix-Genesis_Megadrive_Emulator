@@ -180,6 +180,9 @@ private:
 	void OpcodeMOVEM(word opcode);
 	void OpcodeMOVEP(word opcode);
 	void OpcodeMOVEQ(word opcode);
+	void OpcodeMULS(word opcode);
+	void OpcodeMULU(word opcode);
+	void OpcodeNBCD(word opcode);
 	void OpcodeNEG(word opcode);
 	void OpcodeNEGX(word opcode);
 	void OpcodeNOP();

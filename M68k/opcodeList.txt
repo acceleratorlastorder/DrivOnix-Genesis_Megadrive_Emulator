@@ -58,9 +58,9 @@
 !!!Done!!! MOVEP    MOVE Peripheral                    Dn,x(An)   -WL        - - - - -
                                          x(An),Dn
 !!!Done!!! MOVEQ    MOVE 8-bit immediate     #<-128.+127>,Dn      --L        - * * 0 0
-MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0
-MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
-NBCD     Negate BCD                     < ea >         B--        * U * U *
+!!!Done!!! MULS     MULtiply Signed                < ea >,Dn      -W-        - * * 0 0
+!!!Done!!! MULU     MULtiply Unsigned              < ea >,Dn      -W-        - * * 0 0
+!!!Done!!! NBCD     Negate BCD                     < ea >         B--        * U * U *
 !!!Done!!! NEG      NEGate                         < ea >         BWL        * * * * *
 !!!Done!!! NEGX     NEGate with eXtend             < ea >         BWL        * * * * *
 !!!Done!!! NOP      No OPeration                       NOP                   - - - - -
@@ -92,7 +92,7 @@ SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
                                          -(Ay),-(Ax)
 SWAP     SWAP words of Dn                   Dn         -W-        - * * 0 0
 TAS      Test & Set MSB & Set N/Z-bits  < ea >         B--        - * * 0 0
-TRAP     Execute TRAP Exception            #< vector>             - - - - -
+!!!Done!!! TRAP     Execute TRAP Exception            #< vector>             - - - - -
 TRAPV    TRAPV Exception if V-bit Set       TRAPV                 - - - - -
 !!!Done!!! TST      TeST for negative or zero      < ea >         BWL        - * * 0 0
 UNLK     Deallocate Stack Frame             An                    - - - - -

@@ -1357,6 +1357,24 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeABCD(opcode);
 		}
+		else if(get().IsOpcode(opcode, "1100xxx111xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeMULS" << std::endl;
+			}
+
+			get().OpcodeMULS(opcode);
+		}
+		else if(get().IsOpcode(opcode, "1100xxx011xxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeMULU" << std::endl;
+			}
+
+			get().OpcodeMULU(opcode);
+		}
 		else if(get().IsOpcode(opcode, "1100xxx1xx00xxxx"))
 		{
 			if(get().unitTests)
@@ -1536,6 +1554,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeLINK(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0100100000xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeNBCD" << std::endl;
+		}
+
+		get().OpcodeNBCD(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100111011xxxxxx"))
 	{
@@ -5155,6 +5182,142 @@ void M68k::OpcodeMOVEQ(word opcode)
 	else
 	{
 		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles
+}
+
+void M68k::OpcodeMULS(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, WORD, false, 0);
+	data.operand = (signed_word)data.operand;
+	signed_word dataReg = (signed_word)get().registerData[reg];
+	signed_dword result = (signed_word)dataReg * (signed_word)data.operand;
+	get().registerData[reg] = result;
+	get().programCounter += data.PCadvance;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	vectorman &= 0xFFFF;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 15))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles	
+}
+
+void M68k::OpcodeMULU(word opcode)
+{
+	byte reg = (opcode >> 9) & 0x7;
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, WORD, false, 0);
+	data.operand = (word)data.operand;
+	signed_word dataReg = (word)get().registerData[reg];
+	signed_dword result = (word)dataReg * (word)data.operand;
+	get().registerData[reg] = result;
+	get().programCounter += data.PCadvance;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = result;
+	vectorman &= 0xFFFF;
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	if(TestBit(vectorman, 15))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	//cycles	
+}
+
+void M68k::OpcodeNBCD(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	byte dest = (byte)get().GetEAOperand(type, eaReg, BYTE, true, 0).operand;
+
+	byte xflag = TestBit(get().CCR, X_FLAG);
+
+	dest += xflag;
+
+	//BCD OVERFLOW CORRECTION
+	if((dest & 0xF) > 9)
+	{
+		result += 0x6;
+	}
+
+	if((dest >> 4) > 9)
+	{
+		result += 0x60;
+	}
+
+	if(dest != 0)
+	{
+		dest--;
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	word result = 0x99 - dest;
+
+	EA_DATA = SetEAOperand(type, eaReg, (byte)result, BYTE, 0);
+
+	if((result & 0xFF) != 0)
+	{
+		BitReset(get().CCR, Z_FLAG);
 	}
 
 	//cycles
