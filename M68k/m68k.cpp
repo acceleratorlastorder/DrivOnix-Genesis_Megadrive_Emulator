@@ -3046,6 +3046,27 @@ void M68k::OpcodeAND(word opcode)
 		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
 		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
 
+		switch(size)
+		{
+			case BYTE:
+			case WORD:
+			get().opcodeClicks += 4;
+			break;
+
+			case LONG:
+			{
+				if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
+				{
+					get().opcodeClicks += 8;
+				}
+				else
+				{
+					get().opcodeClicks += 6;
+				}
+			}
+			break;
+		}
+
 		//C_FLAG
 		BitReset(get().CCR, C_FLAG);
 
@@ -3111,7 +3132,7 @@ void M68k::OpcodeAND(word opcode)
 
 		get().programCounter += src.PCadvance;
 
-		//cycles
+		get().opcodeClicks += src.cycles;
 
 	}
 	else
@@ -3137,6 +3158,18 @@ void M68k::OpcodeAND(word opcode)
 
 		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
 		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
+
+		switch(size)
+		{
+			case BYTE:
+			case WORD:
+			get().opcodeClicks += 8;
+			break;
+
+			case LONG:
+			get().opcodeClicks += 12;
+			break;
+		}
 
 		//C_FLAG
 		BitReset(get().CCR, C_FLAG);
@@ -3203,7 +3236,7 @@ void M68k::OpcodeAND(word opcode)
 
 		get().programCounter += src.PCadvance;
 
-		//cycles
+		get().opcodeClicks += src.cycles;
 	}
 }
 
@@ -3217,10 +3250,24 @@ void M68k::OpcodeANDI(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
+	switch(type)
+	{
+		case EA_DATA_REG:
+		case EA_ADDRESS_REG:
+		get().opcodeClicks += (size == LONG) ? 16 : 8;
+		break;
+
+		default:
+		get().opcodeClicks += (size == LONG) ? 20 : 12;
+		break;
+	}
+
 	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
 	get().programCounter += src.PCadvance;
 	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
 	get().programCounter += dest.PCadvance;
+
+	get().opcodeClicks += dest.cycles;
 
 	//C_FLAG
 	BitReset(get().CCR, C_FLAG);
@@ -3284,8 +3331,6 @@ void M68k::OpcodeANDI(word opcode)
 	}
 
 	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	//cycles
 }
 
 void M68k::OpcodeANDI_To_CCR()
@@ -3302,7 +3347,7 @@ void M68k::OpcodeANDI_To_CCR()
 	get().CCR &= 0xFF00;
 	get().CCR |= loCCR;
 
-	//cycles
+	get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeANDI_To_SR()
@@ -3314,13 +3359,15 @@ void M68k::OpcodeANDI_To_SR()
 		get().programCounter += 2;
 
 		get().CCR &= imm;
+
+		get().opcodeClicks += 20;
 	}
 	else
 	{
 		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-	}
 
-	//cycles
+		get().opcodeClicks += 34;
+	}
 }
 
 void M68k::OpcodeASL_ASR_Register(word opcode)

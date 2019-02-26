@@ -6,10 +6,10 @@ From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
 !!!Clicks!!!Done!!! ADDI  Add Immediate
 !!!Clicks!!!Done!!! ADDQ  Add Quick (3-bit Immediate)
 !!!Clicks!!!Done!!! ADDX  Add Extended
-!!!Done!!! AND And Logical
-!!!Done!!! ANDI  And Immediate
-!!!Done!!! ANDI to CCR And Immediate to Condition Code Register
-!!!Done!!! ANDI to SR  And Immediate to Status Register
+!!!Clicks!!!Done!!! AND And Logical
+!!!Clicks!!!Done!!! ANDI  And Immediate
+!!!Clicks!!!Done!!! ANDI to CCR And Immediate to Condition Code Register
+!!!Clicks!!!Done!!! ANDI to SR  And Immediate to Status Register
 !!!Done!!! ASL, ASR  Arithmetic Shift Left/Right
 !!!Done!!! Bcc Branch on Condition Code
 !!!Done!!! BCHG  Test Bit and Change
