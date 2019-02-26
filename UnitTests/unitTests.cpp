@@ -39,7 +39,7 @@ bool Test_ABCD()
 	M68k::SetCpuState(state);
 
 	word opcode = 0xCD04;
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -63,7 +63,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -86,7 +86,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -111,7 +111,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -167,7 +167,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		word opcode = 0xDF16;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -210,7 +210,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		opcode = 0xDF16;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -251,6 +251,310 @@ bool Test_ADD()
 		return testResult;
 	}
 
+	bool Test_ADDA()
+	{
+		return true;
+	}
+	bool Test_ADDI()
+	{
+		return true;
+	}
+	bool Test_ADDQ()
+	{
+		return true;
+	}
+	bool Test_ADDX()
+	{
+		return true;
+	}
+	bool Test_AND()
+	{
+		return true;
+	}
+	bool Test_ANDI()
+	{
+		return true;
+	}
+	bool Test_ANDI()
+	{
+		return true;
+	}
+	bool Test_ANDI()
+	{
+		return true;
+	}
+	bool Test_ASL()
+	{
+		return true;
+	}
+	bool Test_ASR()
+	{
+		return true;
+	}
+	bool Test_Bcc()
+	{
+		return true;
+	}
+	bool Test_BCHG()
+	{
+		return true;
+	}
+	bool Test_BCLR()
+	{
+		return true;
+	}
+	bool Test_BRA()
+	{
+		return true;
+	}
+	bool Test_BSET()
+	{
+		return true;
+	}
+	bool Test_BSR()
+	{
+		return true;
+	}
+	bool Test_BTST()
+	{
+		return true;
+	}
+	bool Test_CHK()
+	{
+		return true;
+	}
+	bool Test_CLR()
+	{
+		return true;
+	}
+	bool Test_CMP()
+	{
+		return true;
+	}
+	bool Test_CMPA()
+	{
+		return true;
+	}
+	bool Test_CMPI()
+	{
+		return true;
+	}
+	bool Test_CMPM()
+	{
+		return true;
+	}
+	bool Test_DBcc()
+	{
+		return true;
+	}
+	bool Test_DIVS()
+	{
+		return true;
+	}
+	bool Test_EOR()
+	{
+		return true;
+	}
+	bool Test_EORI()
+	{
+		return true;
+	}
+	bool Test_EORI()
+	{
+		return true;
+	}
+	bool Test_EORI()
+	{
+		return true;
+	}
+	bool Test_EXG()
+	{
+		return true;
+	}
+	bool Test_EXT()
+	{
+		return true;
+	}
+	bool Test_ILLEGAL()
+	{
+		return true;
+	}
+	bool Test_JMP()
+	{
+		return true;
+	}
+	bool Test_JSR()
+	{
+		return true;
+	}
+	bool Test_LEA()
+	{
+		return true;
+	}
+	bool Test_LINK()
+	{
+		return true;
+	}
+	bool Test_LSL()
+	{
+		return true;
+	}
+	bool Test_MOVE()
+	{
+		return true;
+	}
+	bool Test_MOVEA()
+	{
+		return true;
+	}
+	bool Test_MOVE()
+	{
+		return true;
+	}
+	bool Test_MOVE()
+	{
+		return true;
+	}
+	bool Test_MOVE()
+	{
+		return true;
+	}
+	bool Test_MOVE()
+	{
+		return true;
+	}
+	bool Test_MOVEM()
+	{
+		return true;
+	}
+	bool Test_MOVEP()
+	{
+		return true;
+	}
+	bool Test_MOVEQ()
+	{
+		return true;
+	}
+	bool Test_MULS()
+	{
+		return true;
+	}
+	bool Test_NEG()
+	{
+		return true;
+	}
+	bool Test_NEGX()
+	{
+		return true;
+	}
+	bool Test_NOP()
+	{
+		return true;
+	}
+	bool Test_NOT()
+	{
+		return true;
+	}
+	bool Test_OR()
+	{
+		return true;
+	}
+	bool Test_ORI()
+	{
+		return true;
+	}
+	bool Test_ORI()
+	{
+		return true;
+	}
+	bool Test_ORI()
+	{
+		return true;
+	}
+	bool Test_PEA()
+	{
+		return true;
+	}
+	bool Test_RESET()
+	{
+		return true;
+	}
+	bool Test_ROL()
+	{
+		return true;
+	}
+	bool Test_ROXL()
+	{
+		return true;
+	}
+	bool Test_RTE()
+	{
+		return true;
+	}
+	bool Test_RTR()
+	{
+		return true;
+	}
+	bool Test_RTS()
+	{
+		return true;
+	}
+	bool Test_SBCD()
+	{
+		return true;
+	}
+	bool Test_Scc()
+	{
+		return true;
+	}
+	bool Test_STOP()
+	{
+		return true;
+	}
+	bool Test_SUB()
+	{
+		return true;
+	}
+	bool Test_SUBA()
+	{
+		return true;
+	}
+	bool Test_SUBI()
+	{
+		return true;
+	}
+	bool Test_SUBQ()
+	{
+		return true;
+	}
+	bool Test_SUBX()
+	{
+		return true;
+	}
+	bool Test_SWAP()
+	{
+		return true;
+	}
+	bool Test_TAS()
+	{
+		return true;
+	}
+	bool Test_TRAP()
+	{
+		return true;
+	}
+	bool Test_TRAPV()
+	{
+		return true;
+	}
+	bool Test_TST()
+	{
+		return true;
+	}
+	bool Test_UNLK()
+	{
+		return true;
+	}
 
 
 	bool Test_NBCD()
@@ -266,10 +570,6 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 
 		dword value_1 = 0x3;
-		dword value_2 = 0x9;
-
-
-		dword value_1 = 0x3;
 		dword value_2 = 0x6;
 
 		state.registerData[7] = value_1;
@@ -278,13 +578,13 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 		/*	USED OPCODE
-		 *  0100100000 ((effective address)(mode)010 (register)110(6))
+		 *  0100100000 ((effective address)(mode)010("(An)") (register)110(6))
 		 *  binary: 0100100000010110
 		 *  hex: 0x4806
 		 */
 		word opcode = 0x4816;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-		
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -309,7 +609,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -332,7 +632,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -357,7 +657,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
