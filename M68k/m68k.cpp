@@ -1162,25 +1162,12 @@ void M68k::ExecuteOpcode(word opcode)
 
 		if(get().IsOpcode(opcode, "00000010xxxxxxxx"))
 		{//00000010
-
-			if(get().IsOpcode(opcode, "0000001000111100"))
+			if(get().unitTests)
 			{
-				if(get().unitTests)
-				{
-					std::cout << "\tM68k :: Execute OpcodeANDI_To_CCR" << std::endl;
-				}
-
-				get().OpcodeANDI_To_CCR();
+				std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
 			}
-			else
-			{
-				if(get().unitTests)
-				{
-					std::cout << "\tM68k :: Execute OpcodeANDI" << std::endl;
-				}
 
-				get().OpcodeANDI(opcode);
-			}
+			get().OpcodeANDI(opcode);
 		}
 
 		else if(get().IsOpcode(opcode, "0000100001xxxxxx"))
@@ -1254,6 +1241,15 @@ void M68k::ExecuteOpcode(word opcode)
 			}
 
 			get().OpcodeADDI(opcode);
+		}
+		else if(get().IsOpcode(opcode, "00000100xxxxxxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeSUBI" << std::endl;
+			}
+
+			get().OpcodeSUBI(opcode);
 		}
 		else if(get().IsOpcode(opcode, "0000xxx1xx001xxx"))
 		{
@@ -1465,7 +1461,16 @@ void M68k::ExecuteOpcode(word opcode)
 	else if(get().IsOpcode(opcode, "1000xxxxxxxxxxxx"))
 	{//1000
 
-		if(get().IsOpcode(opcode, "1000xxx111xxxxxx"))
+		if(get().IsOpcode(opcode, "1000xxx10000xxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeSBCD" << std::endl;
+			}
+
+			get().OpcodeSBCD(opcode);
+		}
+		else if(get().IsOpcode(opcode, "1000xxx111xxxxxx"))
 		{
 			if(get().unitTests)
 			{
@@ -1506,6 +1511,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 			get().OpcodeSUBA(opcode);
 		}
+		if(get().IsOpcode(opcode, "1001xxx1xx00xxxx"))
+		{
+			if(get().unitTests)
+			{
+				std::cout << "\tM68k :: Execute OpcodeSUBX" << std::endl;
+			}
+
+			get().OpcodeSUBX(opcode);
+		}
 		else
 		{
 			if(get().unitTests)
@@ -1519,6 +1533,15 @@ void M68k::ExecuteOpcode(word opcode)
 
 
 	//other
+	else if(get().IsOpcode(opcode, "0100111001110110"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeTRAPV" << std::endl;
+		}
+
+		get().OpcodeTRAPV();
+	}
 	else if(get().IsOpcode(opcode, "0100111001110000"))
 	{
 		if(get().unitTests)
@@ -1572,6 +1595,33 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeRTS();
+	}
+	else if(get().IsOpcode(opcode, "0100111001110010"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeSTOP" << std::endl;
+		}
+
+		get().OpcodeSTOP();
+	}
+	else if(get().IsOpcode(opcode, "0100111001011xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeUNLK" << std::endl;
+		}
+
+		get().OpcodeUNLK(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0100100001000xxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeSWAP" << std::endl;
+		}
+
+		get().OpcodeSWAP(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100111001010xxx"))
 	{
@@ -1770,6 +1820,15 @@ void M68k::ExecuteOpcode(word opcode)
 		}
 
 		get().OpcodeMOVE_USP(opcode);
+	}
+	else if(get().IsOpcode(opcode, "0100101011xxxxxx"))
+	{
+		if(get().unitTests)
+		{
+			std::cout << "\tM68k :: Execute OpcodeTAS" << std::endl;
+		}
+
+		get().OpcodeTAS(opcode);
 	}
 	else if(get().IsOpcode(opcode, "0100010011xxxxxx"))
 	{
@@ -3622,12 +3681,12 @@ void M68k::OpcodeCHK(word opcode)
 
 	if(Dn < 0)
 	{
-		//OpcodeTRAP(6);
+		get().OpcodeTRAP(6);
 		BitSet(get().CCR, N_FLAG);
 	}
 	else if(Dn > ((signed_word)bounds.operand))
 	{
-		//OpcodeTRAP(6);
+		get().OpcodeTRAP(6);
 		BitReset(get().CCR, N_FLAG);
 	}
 }
@@ -5336,12 +5395,12 @@ void M68k::OpcodeNBCD(word opcode)
 	//BCD OVERFLOW CORRECTION
 	if((dest & 0xF) > 9)
 	{
-		dest += 0x6;
+		dest -= 0x6;
 	}
 
 	if((dest >> 4) > 9)
 	{
-		dest += 0x60;
+		dest -= 0x60;
 	}
 
 	if(dest != 0)
@@ -6531,6 +6590,89 @@ void M68k::OpcodeRTS()
 	//cycles
 }
 
+void M68k::OpcodeSBCD(word opcode)
+{
+	byte rx = (opcode >> 9) & 0x7;
+	byte rm = (opcode >> 3) & 0x1;
+	byte ry = opcode & 0x7;
+
+	byte src;
+	byte dest;
+
+	EA_TYPES type;
+
+	if(rm)
+	{
+		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
+	}
+	else
+	{
+		type = EA_DATA_REG;
+	}
+
+	
+	dest = (byte)get().GetEAOperand(type, ry, BYTE, true, 0).operand;
+	src = (byte)get().GetEAOperand(type, rx, BYTE, false, 0).operand;
+	
+
+	byte xflag = TestBit(get().CCR, X_FLAG);
+
+	src += xflag;
+
+	//BCD OVERFLOW CORRECTION
+	if((dest & 0xF) > 9)
+	{
+		src -= 0x6;
+	}
+
+	if((dest >> 4) > 9)
+	{
+		src -= 0x60;
+	}
+
+	byte newSub;
+
+	byte result;
+
+	if(dest < src)
+	{
+		if(src != 0)
+		{
+			src--;
+		}
+
+		newSub = src - dest;
+
+		result = 0x99 - newSub;
+	}
+	else
+	{
+		result = dest - src;
+	}
+
+	word conditionResult = dest - src;
+
+	if(conditionResult > 0x99)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	if((conditionResult & 0xFF) != 0)
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	
+	EA_DATA data = get().SetEAOperand(type, ry, (byte)result, BYTE, 0);
+	//cycles
+}
+
 void M68k::OpcodeScc(word opcode)
 {
 	byte condition = (opcode >> 8) & 0xF;
@@ -6547,6 +6689,22 @@ void M68k::OpcodeScc(word opcode)
 
 	EA_DATA set = get().SetEAOperand(type, eaReg, data, BYTE, 0);
 	get().programCounter += set.PCadvance;
+}
+
+void M68k::OpcodeSTOP()
+{
+	if(get().superVisorModeActivated)
+	{
+		get().CCR = Genesis::M68KReadMemoryWORD(get().programCounter);
+		get().programCounter += 4;
+		get().stop = true;
+	}
+	else
+	{
+		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
+	}
+
+	//cycles
 }
 
 void M68k::OpcodeSUB(word opcode)
@@ -6891,6 +7049,147 @@ void M68k::OpcodeSUBA(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeSUBI(word opcode)
+{
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+
+	byte eaMode = (opcode >> 3) & 0x7;
+
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+	get().programCounter += src.PCadvance;
+	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
+
+
+	//C_FLAG & X_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
+	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
+	if(sonic < tails)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
+
+			if(eggman < INT8_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
+
+			if(eggman < INT16_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
+
+			if(eggman < INT32_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	dword result = dest.operand - src.operand;
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if(vectorman == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().SetEAOperand(type, eaReg, result, size, 0);
+
+	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
 void M68k::OpcodeSUBQ(word opcode)
 {
 	byte data = (opcode >> 9) & 0x7;
@@ -7045,11 +7344,241 @@ void M68k::OpcodeSUBQ(word opcode)
 	//cycles
 }
 
+void M68k::OpcodeSUBX(word opcode)
+{
+	byte ry = (opcode >> 9) & 0x7;
+	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
+	byte rm = (opcode >> 3) & 0x1;
+	byte rx = opcode & 0x7;
+
+	dword xflag = TestBit(get().CCR, X_FLAG);
+
+	EA_TYPES type;
+
+	if(rm)
+	{
+		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
+	}
+	else
+	{
+		type = EA_DATA_REG;
+	}
+
+	
+	EA_DATA dest = get().GetEAOperand(type, ry, BYTE, true, 0);
+	EA_DATA src = get().GetEAOperand(type, rx, BYTE, false, 0);
+
+	//C_FLAG & X_FLAG
+	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
+	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
+	uint64_t tails = (uint64_t)((src.operand + xflag) & maxTypeSize);
+	if(sonic < tails)
+	{
+		BitSet(get().CCR, C_FLAG);
+		BitSet(get().CCR, X_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, X_FLAG);
+	}
+
+	//V_FLAG
+	switch(size)
+	{
+		case BYTE:
+		{
+			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand - (signed_byte)xflag;
+
+			if(eggman < INT8_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case WORD:
+		{
+			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand - (signed_word)xflag;
+
+			if(eggman < INT16_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+
+		case LONG:
+		{
+			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand - (signed_dword)xflag;
+
+			if(eggman < INT32_MIN)
+			{
+				BitSet(get().CCR, V_FLAG);
+			}
+			else
+			{
+				BitReset(get().CCR, V_FLAG);
+			}
+		}
+		break;
+	}
+
+	dword result = dest.operand - src.operand - xflag;
+
+	dword vectorman = result;
+	switch(size)
+	{
+		case BYTE:
+		vectorman &= 0xFF;
+		break;
+
+		case WORD:
+		vectorman &= 0xFFFF;
+		break;
+
+		case LONG:
+		vectorman &= 0xFFFFFFFF;
+		break;
+	}
+
+	//Z_FLAG
+	if(vectorman != 0)
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+	int bit;
+
+	switch(size)
+	{
+		case BYTE:
+		bit = 7;
+		break;
+
+		case WORD:
+		bit = 15;
+		break;
+
+		case LONG:
+		bit = 31;
+		break;
+	}
+
+	if(TestBit(vectorman, bit))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	get().SetEAOperand(type, ry, result, size, 0);
+}
+
+void M68k::OpcodeSWAP(word opcode)
+{
+	byte reg = opcode & 0x7;
+
+	dword data = get().registerData[reg];
+	word lo = (word)(data & 0xFFFF);
+	word hi = (word)((data >> 16) & 0xFFFF);
+	dword newData = ((dword)lo << 16) | hi;
+
+	get().registerData[reg] = newData;
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	if(newData == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	if(TestBit(newData, 31))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+}
+
+void M68k::OpcodeTAS(word opcode)
+{
+	byte eaMode = (opcode >> 3) & 0x7;
+	byte eaReg = opcode & 0x7;
+
+	EA_TYPES type = (EA_TYPES)eaMode;
+
+	EA_DATA data = get().GetEAOperand(type, eaReg, BYTE, false, 0);
+
+	BitReset(get().CCR, C_FLAG);
+	BitReset(get().CCR, V_FLAG);
+
+	dword vectorman = data.operand;
+	
+	vectorman &= 0xFF;	
+
+	//Z_FLAG
+	if((vectorman) == 0)
+	{
+		BitSet(get().CCR, Z_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, Z_FLAG);
+	}
+
+	//N_FLAG
+
+	if(TestBit(vectorman, 7))
+	{
+		BitSet(get().CCR, N_FLAG);
+	}
+	else
+	{
+		BitReset(get().CCR, N_FLAG);
+	}
+
+	BitSet(data.operand, 7);
+
+	get().programCounter += data.PCadvance;
+
+	//cycles
+
+}
+
 void M68k::OpcodeTRAP(word opcode)
 {
 	byte vector = opcode & 0xF;
 
 	get().RequestInt(INT_TRAP, Genesis::M68KReadMemoryLONG((32 + vector) * 4));
+
+	//cycles
+}
+
+void M68k::OpcodeTRAPV()
+{
+	if(TestBit(get().CCR, V_FLAG))
+	{
+		get().OpcodeTRAP(4);
+	}
 
 	//cycles
 }
@@ -7121,6 +7650,17 @@ void M68k::OpcodeTST(word opcode)
 	}
 
 	get().programCounter += dest.PCadvance;
+
+	//cycles
+}
+
+void M68k::OpcodeUNLK(word opcode)
+{
+	byte reg = opcode & 0x7;
+
+	get().registerAddress[0x7] = get().registerAddress[reg];
+	get().registerAddress[reg] = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
+	get().registerAddress[0x7] += 4;
 
 	//cycles
 }

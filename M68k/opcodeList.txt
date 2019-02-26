@@ -79,20 +79,20 @@
 !!!Done!!! RTE      ReTurn from Exception               RTE                  I I I I I
 !!!Done!!! RTR      ReTurn and Restore                  RTR                  I I I I I
 !!!Done!!! RTS      ReTurn from Subroutine              RTS                  - - - - -
-SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
+!!!Done!!! SBCD     Subtract BCD with eXtend           Dx,Dy      B--        * U * U *
                                          -(Ax),-(Ay)
 !!!Done!!! Scc      Set to -1 if True, 0 if False  < ea >         B--        - - - - -
-STOP     Enable & wait for interrupts     #< data>                I I I I I
+!!!Done!!! STOP     Enable & wait for interrupts     #< data>                I I I I I
 !!!Done!!! SUB      SUBtract binary                    Dn,< ea >  BWL        * * * * *
                                         < ea >,Dn
 !!!Done!!! SUBA     SUBtract binary from An        < ea >,An      -WL        - - - - -
-SUBI     SUBtract Immediate                 #x,< ea >  BWL        * * * * *
+!!!Done!!! SUBI     SUBtract Immediate                 #x,< ea >  BWL        * * * * *
 !!!Done!!! SUBQ     SUBtract 3-bit immediate     #< data>,< ea >  BWL        * * * * *
-SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
+!!!Done!!! SUBX     SUBtract eXtended                  Dy,Dx      BWL        * * * * *
                                          -(Ay),-(Ax)
-SWAP     SWAP words of Dn                   Dn         -W-        - * * 0 0
-TAS      Test & Set MSB & Set N/Z-bits  < ea >         B--        - * * 0 0
+!!!Done!!! SWAP     SWAP words of Dn                   Dn         -W-        - * * 0 0
+!!!Done!!! TAS      Test & Set MSB & Set N/Z-bits  < ea >         B--        - * * 0 0
 !!!Done!!! TRAP     Execute TRAP Exception            #< vector>             - - - - -
-TRAPV    TRAPV Exception if V-bit Set       TRAPV                 - - - - -
+!!!Done!!! TRAPV    TRAPV Exception if V-bit Set       TRAPV                 - - - - -
 !!!Done!!! TST      TeST for negative or zero      < ea >         BWL        - * * 0 0
 UNLK     Deallocate Stack Frame             An                    - - - - -

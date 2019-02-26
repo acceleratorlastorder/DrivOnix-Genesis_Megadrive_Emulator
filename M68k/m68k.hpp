@@ -139,7 +139,6 @@ private:
 	void OpcodeADDX(word opcode);
 	void OpcodeAND(word opcode);
 	void OpcodeANDI(word opcode);
-	void OpcodeANDI_To_CCR();
 	void OpcodeASL_ASR_Register(word opcode);
 	void OpcodeASL_ASR_Memory(word opcode);
 	void OpcodeBcc(word opcode);
@@ -198,12 +197,20 @@ private:
 	void OpcodeRTE();
 	void OpcodeRTR();
 	void OpcodeRTS();
+	void OpcodeSBCD(word opcode);
 	void OpcodeScc(word opcode);
+	void OpcodeSTOP();
 	void OpcodeSUB(word opcode);
 	void OpcodeSUBA(word opcode);
+	void OpcodeSUBI(word opcode);
 	void OpcodeSUBQ(word opcode);
+	void OpcodeSUBX(word opcode);
+	void OpcodeSWAP(word opcode);
+	void OpcodeTAS(word opcode);
 	void OpcodeTRAP(word opcode);
+	void OpcodeTRAPV();
 	void OpcodeTST(word opcode);
+	void OpcodeUNLK(word opcode);
 	//End opcodes
 	//---------------------------
 	//Start CPU Reg, Flags, Var
