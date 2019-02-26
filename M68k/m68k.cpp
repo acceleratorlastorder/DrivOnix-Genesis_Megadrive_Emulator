@@ -5365,7 +5365,7 @@ void M68k::OpcodeMOVEP(word opcode)
 void M68k::OpcodeMOVEQ(word opcode)
 {
 	byte reg = (opcode >> 9) & 0x7;
-	byte data = opcode & 0xF;
+	byte data = opcode & 0xFF;
 
 	dword extendData = get().SignExtendDWord(get().SignExtendWord(data));
 
