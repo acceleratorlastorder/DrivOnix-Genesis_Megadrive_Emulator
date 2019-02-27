@@ -14,8 +14,8 @@ YM7101& YM7101::get()
 void YM7101::Init()
 {
 	get().vdpResolution = std::pair<int, int>(256, 224);
-	get().vCounter = 0;
-	get().hCounter = 0;
+	get().vCounter = 0x0;
+	get().hCounter = 0x0;
 	get().controlPortPending = false;
 	get().controlPortData = 0;
 	get().refresh = false;
@@ -26,8 +26,7 @@ void YM7101::Init()
 	get().spriteMask2 = 0xFF;
 	get().spriteMask = std::make_pair(0xFF, std::make_pair(0xFF, 0xFF));
 	get().requestInt = false;
-	get().status = 0x3600;
-	BitSet(get().status, 9);
+	get().status = 0x3608;
 
 	std::memset(get().vram, 0x0, 0x10000);
 
@@ -1287,6 +1286,10 @@ void YM7101::Render()
 
 void YM7101::Update(int clicks)
 {
+
+	//printf("Vcounter 0x%X\n", get().vCounter);
+	//printf("Hcounter 0x%X\n", get().hCounter);
+
 	bool cell40 = get().Is40Cell();
 	if((get().vdpResolution.first == 256) && cell40)
 	{

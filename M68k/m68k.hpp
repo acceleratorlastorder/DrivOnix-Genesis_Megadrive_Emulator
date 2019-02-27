@@ -4,6 +4,15 @@
 #include <iostream>
 #include <map>
 #include <string>
+
+//DEBUG
+#include <SFML/Config.h>
+#include <SFML/System.h>
+#include <SFML/Window.h>
+#include <SFML/Graphics.h>
+#include <SFML/Audio.h>
+//DEBUG
+
 #include "../Bits/bitsUtils.hpp"
 #include "../Genesis/genesis.hpp"
 
@@ -223,6 +232,8 @@ private:
 	dword opcodeClicks;
 	word  CCR;
 	bool  stop;
+
+	sfClock* clock; //debug
 
 	bool firstInit;
 

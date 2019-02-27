@@ -64,24 +64,25 @@ void Genesis::Run()
     	if((lastFrameTime + VdpUpdateInterval) <= currentTime)
     	{
       		lastFrameTime = currentTime;
-      
+      			
       		get().Update();
-
+      	
       		CRT::Render();
     	}
   	}
-  	
 }
 
 void Genesis::Update()
 {
+	//INIT_TIMER
+	//START_TIMER
 	int cycleThisUpdate = 0;
 	int cycleThisFrame = M68K_CYCLES_PER_SECOND / get().FPS;
 
 	while(cycleThisUpdate < cycleThisFrame)
 	{
 		int CPUcycles = M68k::Update();
-		
+
 		YM7101::Update(CPUcycles);
 
 		if(YM7101::GetRequestInt())
@@ -92,6 +93,8 @@ void Genesis::Update()
 
 		cycleThisUpdate += CPUcycles;
 	}
+
+	//STOP_TIMER("Update");
 }
 
 Genesis& Genesis::get(void)
@@ -233,6 +236,11 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 
 void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
 {
+	/*if(address == 0x00FF0020)
+	{
+		printf("GET______IT\n");
+	}*/
+
 	address = address % M68K_MEM_SIZE;
 
 	//ROM Cartridge/Expension port
@@ -392,6 +400,11 @@ word Genesis::M68KReadMemoryWORD(dword address)
 
 void Genesis::M68KWriteMemoryWORD(dword address, word data)
 {
+	/*if(address == 0x00FF0020)
+	{
+		printf("GET______IT\n");
+	}*/
+
 	address = address % M68K_MEM_SIZE;
 
 	//ROM Cartridge/Expension port

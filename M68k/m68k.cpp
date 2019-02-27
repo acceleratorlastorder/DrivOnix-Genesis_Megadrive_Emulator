@@ -3,6 +3,7 @@
 M68k::M68k()
 {
 	this->firstInit = true;
+	this->clock = sfClock_create(); //debug
 }
 
 M68k& M68k::get()
@@ -1209,26 +1210,29 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	/*get().SetUnitTestsMode();
-	dword PCDebug = get().programCounter - 2;
-	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
-	std::cout << "\t 0x" << std::hex << opcode << std::endl;
+	//if(sfTime_asSeconds(sfClock_getElapsedTime(get().clock)) > 5)
+	//{
+		/*get().SetUnitTestsMode();
+		dword PCDebug = get().programCounter - 2;
+		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+		std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
-	for(int i = 0; i < 8; ++i)
-	{
-		std::cout << "\tA" << i << " = 0x" << std::hex << get().registerAddress[i] << std::endl; 
-	}
+		for(int i = 0; i < 8; ++i)
+		{
+			std::cout << "\tA" << i << " = 0x" << std::hex << get().registerAddress[i] << std::endl; 
+		}
 
-	for(int i = 0; i < 8; ++i)
-	{
-		std::cout << "\tD" << i << " = 0x" << std::hex << get().registerData[i] << std::endl; 
-	}
+		for(int i = 0; i < 8; ++i)
+		{
+			std::cout << "\tD" << i << " = 0x" << std::hex << get().registerData[i] << std::endl;
+		}
 
-	std::cout << "\tX_FLAG = " << TestBit(get().CCR, X_FLAG) << std::endl;
-	std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
-	std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
-	std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
-	std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
+		std::cout << "\tX_FLAG = " << TestBit(get().CCR, X_FLAG) << std::endl;
+		std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
+		std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
+		std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
+		std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
+	//}
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -3698,9 +3702,9 @@ void M68k::OpcodeBCHGDynamic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = get().registerData[reg] % modulo;
 	
@@ -3732,9 +3736,9 @@ void M68k::OpcodeBCHGStatic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
@@ -3767,9 +3771,9 @@ void M68k::OpcodeBCLRDynamic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = get().registerData[reg] % modulo;
 	
@@ -3800,9 +3804,9 @@ void M68k::OpcodeBCLRStatic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
@@ -3836,9 +3840,9 @@ void M68k::OpcodeBSETDynamic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = get().registerData[reg] % modulo;
 	
@@ -3870,9 +3874,9 @@ void M68k::OpcodeBSETStatic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
@@ -3932,9 +3936,9 @@ void M68k::OpcodeBTSTDynamic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = get().registerData[reg] % modulo;
 	
@@ -3961,9 +3965,9 @@ void M68k::OpcodeBTSTStatic(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_ADDRESS_REG) ? 32 : 8;
+	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_ADDRESS_REG) ? LONG : BYTE;
+	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
 
 	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
 	get().programCounter += 2;
