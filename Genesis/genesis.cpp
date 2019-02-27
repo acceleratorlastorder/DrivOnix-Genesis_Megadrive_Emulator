@@ -236,10 +236,6 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 
 void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
 {
-	/*if(address == 0x00FF0020)
-	{
-		printf("GET______IT\n");
-	}*/
 
 	address = address % M68K_MEM_SIZE;
 
@@ -400,10 +396,6 @@ word Genesis::M68KReadMemoryWORD(dword address)
 
 void Genesis::M68KWriteMemoryWORD(dword address, word data)
 {
-	/*if(address == 0x00FF0020)
-	{
-		printf("GET______IT\n");
-	}*/
 
 	address = address % M68K_MEM_SIZE;
 

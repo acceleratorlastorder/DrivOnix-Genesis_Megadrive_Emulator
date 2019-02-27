@@ -2,6 +2,7 @@
 #define BITSUTILS_HPP
 
 #include <stdint.h>
+#include <climits>
 
 typedef uint8_t byte;
 typedef uint16_t word;
@@ -36,6 +37,16 @@ int BitGetVal(type data, int position)
 {
 	type mask = 1 << position;
 	return (data & mask) ? 1 : 0;
+}
+
+template <typename type>
+type ROL(type value, int count) {
+    return (value << count) | (value >> (sizeof(type)*CHAR_BIT - count));
+}
+
+template <typename type>
+type ROR(type value, int count) {
+    return (value >> count) | (value << (sizeof(type)*CHAR_BIT - count));
 }
 
 void InvertWordEndian(word& data);

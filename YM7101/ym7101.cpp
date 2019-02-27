@@ -26,7 +26,7 @@ void YM7101::Init()
 	get().spriteMask2 = 0xFF;
 	get().spriteMask = std::make_pair(0xFF, std::make_pair(0xFF, 0xFF));
 	get().requestInt = false;
-	get().status = 0x3608;
+	get().status = 0x3600;
 
 	std::memset(get().vram, 0x0, 0x10000);
 
@@ -1286,9 +1286,6 @@ void YM7101::Render()
 
 void YM7101::Update(int clicks)
 {
-
-	//printf("Vcounter 0x%X\n", get().vCounter);
-	//printf("Hcounter 0x%X\n", get().hCounter);
 
 	bool cell40 = get().Is40Cell();
 	if((get().vdpResolution.first == 256) && cell40)

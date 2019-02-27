@@ -3,7 +3,6 @@
 M68k::M68k()
 {
 	this->firstInit = true;
-	this->clock = sfClock_create(); //debug
 }
 
 M68k& M68k::get()
@@ -1210,29 +1209,27 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 
 void M68k::ExecuteOpcode(word opcode)
 {
-	//if(sfTime_asSeconds(sfClock_getElapsedTime(get().clock)) > 5)
-	//{
-		/*get().SetUnitTestsMode();
-		dword PCDebug = get().programCounter - 2;
-		std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
-		std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
-		for(int i = 0; i < 8; ++i)
-		{
-			std::cout << "\tA" << i << " = 0x" << std::hex << get().registerAddress[i] << std::endl; 
-		}
+	/*get().SetUnitTestsMode();
+	dword PCDebug = get().programCounter - 2;
+	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
+	std::cout << "\t 0x" << std::hex << opcode << std::endl;
 
-		for(int i = 0; i < 8; ++i)
-		{
-			std::cout << "\tD" << i << " = 0x" << std::hex << get().registerData[i] << std::endl;
-		}
+	for(int i = 0; i < 8; ++i)
+	{
+		std::cout << "\tA" << i << " = 0x" << std::hex << get().registerAddress[i] << std::endl; 
+	}
 
-		std::cout << "\tX_FLAG = " << TestBit(get().CCR, X_FLAG) << std::endl;
-		std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
-		std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
-		std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
-		std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
-	//}
+	for(int i = 0; i < 8; ++i)
+	{
+		std::cout << "\tD" << i << " = 0x" << std::hex << get().registerData[i] << std::endl;
+	}
+
+	std::cout << "\tX_FLAG = " << TestBit(get().CCR, X_FLAG) << std::endl;
+	std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
+	std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
+	std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
+	std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -3468,15 +3465,15 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 		switch(size)
 		{
 			case BYTE:
-			result = ((byte)toShift) << ((byte)shiftCount);
+			result = ((signed_byte)toShift) << ((signed_byte)shiftCount);
 			break;
 
 			case WORD:
-			result = ((word)toShift) << ((word)shiftCount);
+			result = ((signed_word)toShift) << ((signed_word)shiftCount);
 			break;
 
 			case LONG:
-			result = ((dword)toShift) << ((dword)shiftCount);
+			result = ((signed_dword)toShift) << ((signed_dword)shiftCount);
 			break;
 		}
 	}
@@ -3505,15 +3502,15 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 		switch(size)
 		{
 			case BYTE:
-			result = ((byte)toShift) >> ((byte)shiftCount);
+			result = ((signed_byte)toShift) >> ((signed_byte)shiftCount);
 			break;
 
 			case WORD:
-			result = ((word)toShift) >> ((word)shiftCount);
+			result = ((signed_word)toShift) >> ((signed_word)shiftCount);
 			break;
 
 			case LONG:
-			result = ((dword)toShift) >> ((dword)shiftCount);
+			result = ((signed_dword)toShift) >> ((signed_dword)shiftCount);
 			break;
 		}
 	}
@@ -4528,10 +4525,10 @@ void M68k::OpcodeDBcc(word opcode)
 
 	if(!get().ConditionTable(condition))
 	{
-		bool negOne = (get().registerData[reg] == 0);
+		bool negOne = (word)(get().registerData[reg]) == 0;
 
-		word lo = (word)((word)(get().registerData[reg] & 0xFFFF) - 1);
-		word hi = (word)((word)((get().registerData[reg] >> 16) & 0xFFFF));
+		word lo = (word)(get().registerData[reg]) - 1;
+		word hi = (word)(get().registerData[reg] >> 16);
 
 		get().registerData[reg] = (hi << 16) | lo;
 
@@ -5206,13 +5203,13 @@ void M68k::OpcodeLSL_LSR_Register(word opcode)
 
 	int shift = 0;
 
-	if(ir == 0)
+	if(ir)
 	{
-		shift = (count_reg == 0) ? 8 : count_reg;
+		shift = get().registerData[count_reg] % 64;
 	}
 	else
 	{
-		shift = get().registerData[count_reg] % 64;
+		shift = (count_reg == 0) ? 8 : count_reg;
 	}
 
 	get().opcodeClicks += (6 + (2 * shift));
@@ -5234,6 +5231,7 @@ void M68k::OpcodeLSL_LSR_Register(word opcode)
 
 		case LONG:
 		bits = 32;
+		get().opcodeClicks += 2;
 		break;
 	}
 
@@ -5282,7 +5280,7 @@ void M68k::OpcodeLSL_LSR_Register(word opcode)
 		newData = toShift << shift;
 	}
 
-	SetDataRegister(reg, newData, size);
+	get().SetDataRegister(reg, newData, size);
 	
 	BitReset(get().CCR, V_FLAG);
 
@@ -6929,20 +6927,16 @@ void M68k::OpcodeROL_ROR_Register(word opcode)
 		rot = get().registerData[count_reg] % 64;
 	}
 
-	dword toRot = get().registerData[reg];
-
 	int bits = 0;
 	switch(size)
 	{
 		case BYTE:
 		bits = 8;
-		toRot &= 0xFF;
 		get().opcodeClicks += (6 + (2 * rot));
 		break;
 
 		case WORD:
 		bits = 16;
-		toRot &= 0xFFFF;
 		get().opcodeClicks += (6 + (2 * rot));
 		break;
 
@@ -6956,40 +6950,59 @@ void M68k::OpcodeROL_ROR_Register(word opcode)
 
 	if(dr == 0) //rot right
 	{
-		for(int i = 0; i < rot; ++i)
+		switch(size)
 		{
-			newData = toRot >> 1;
+			case BYTE:
+			newData |= ROR((byte)(get().registerData[reg] & 0xFF), rot);
+			break;
 
-			if(TestBit(toRot, 0))
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
+			case WORD:
+			newData |= ROR((word)(get().registerData[reg] & 0xFFFF), rot);
+			break;
+
+			case LONG:
+			newData |= ROR((dword)(get().registerData[reg] & 0xFFFFFFFF), rot);
+			break;
 		}
+
+		if(TestBit(newData, bits - 1))
+		{
+			BitSet(get().CCR, C_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
+		}
+		
 	}
 	else //rot left
 	{
-		for(int i = 0; i < rot; ++i)
+		switch(size)
 		{
-			newData = toRot << 1;
+			case BYTE:
+			newData |= ROL((byte)(get().registerData[reg] & 0xFF), rot);
+			break;
 
-			if(TestBit(toRot, bits - 1))
-			{
-				BitSet(get().CCR, C_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-			}
+			case WORD:
+			newData |= ROL((word)(get().registerData[reg] & 0xFFFF), rot);
+			break;
+
+			case LONG:
+			newData |= ROL((dword)(get().registerData[reg] & 0xFFFFFFFF), rot);
+			break;
+		}
+
+		if(TestBit(newData, 0))
+		{
+			BitSet(get().CCR, C_FLAG);
+		}
+		else
+		{
+			BitReset(get().CCR, C_FLAG);
 		}
 	}
 
-	SetDataRegister(reg, newData, size);
+	get().SetDataRegister(reg, newData, size);
 	
 	BitReset(get().CCR, V_FLAG);
 
@@ -7059,15 +7072,16 @@ void M68k::OpcodeROL_ROR_Memory(word opcode)
 
 	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
 
-	dword toRot = dest.operand;
+	dword toRot = 1;
 
 	dword newData = 0;
 
 	if(dr == 0) //rot right
 	{
-		newData = toRot >> 1;
+		
+		newData |= ROR((word)(dest.operand & 0xFFFF), toRot);
 
-		if(TestBit(toRot, 0))
+		if(TestBit(newData, bits - 1))
 		{
 			BitSet(get().CCR, C_FLAG);
 		}
@@ -7078,9 +7092,10 @@ void M68k::OpcodeROL_ROR_Memory(word opcode)
 	}
 	else //rot left
 	{
-		newData = toRot << 1;
+		
+		newData |= ROL((word)(dest.operand & 0xFFFF), toRot);
 
-		if(TestBit(toRot, bits - 1))
+		if(TestBit(toRot, 0))
 		{
 			BitSet(get().CCR, C_FLAG);
 		}
