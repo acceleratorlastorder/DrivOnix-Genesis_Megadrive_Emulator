@@ -33,48 +33,48 @@ From : https://smdromhack.fandom.com/wiki/68000_Instruction_Set
 !!!Clicks!!!Done!!! EXG Exchange Registers
 !!!Clicks!!!Done!!! EXT Sign Extend Data Register
 !!!Clicks!!!Done!!! ILLEGAL Execute Illegal Instruction Exception
-!!!Done!!! JMP Jump
-!!!Done!!! JSR Jump to Subroutine
-!!!Done!!! LEA Load Effective Address
-!!!Done!!! LINK  Link and Allocate
-!!!Done!!! LSL, LSR  Logical Shift Left/Right
-!!!Done!!! MOVE  Move Data Between Effective Addresses
-!!!Done!!! MOVEA Move Address
-!!!Done!!! MOVE to CCR Move Data to Condition Code Register
-!!!Done!!! MOVE from SR  Move Data from Status Register
-!!!Done!!! MOVE to SR  Move Data to Status Register
-!!!Done!!! MOVE USP  Move Data to/from USP
-!!!Done!!! MOVEM Move Multiple Registers
-!!!Done!!! MOVEP Move Peripheral Data
-!!!Done!!! MOVEQ Move Quick (8-bit Immediate)
-!!!Done!!! MULS, MULU  Multiply Signed/Unsigned
-!!!Done!!! NBCD  Negate Binary-Coded Decimal (BCD) with Extend
-!!!Done!!! NEG Negate
-!!!Done!!! NEGX  Negate with Extend
-!!!Done!!! NOP No Operation
-!!!Done!!! NOT Logical Complement
-!!!Done!!! OR  Or Logical
-!!!Done!!! ORI Or Immediate
-!!!Done!!! ORI to CCR  Or Immediate to Condition Code Register
-!!!Done!!! ORI to SR Or Immediate to Status Register
-!!!Done!!! PEA Push Effective Address
-!!!Done!!! RESET Reset All External Devices
-!!!Done!!! ROL, ROR  Rotate Left/Right
-!!!Done!!! ROXL, ROXR  Rotate Left/Right with Extend
-!!!Done!!! RTE Return from Exception
-!!!Done!!! RTR Return and Restore Condition Codes
-!!!Done!!! RTS Return from Subroutine
-!!!Done!!! SBCD  Subtract Binary-Coded Decimal (BCD) with Extend
-!!!Done!!! Scc Set on Condition Code
-!!!Done!!! STOP  Load Status Register and Stop
-!!!Done!!! SUB Subtract Binary
-!!!Done!!! SUBA  Subtract Address
-!!!Done!!! SUBI  Subtract Immediate
-!!!Done!!! SUBQ  Subtract Quick (8-bit Immediate)
-!!!Done!!! SUBX  Subtract Extended
-!!!Done!!! SWAP  Swap Register Halves
-!!!Done!!! TAS Test and Set an Operand
-!!!Done!!! TRAP  Execute Trap Exception
-!!!Done!!! TRAPV Trap on Overflow
-!!!Done!!! TST Test an Operand
-!!!Done!!! UNLK  Unlink and Deallocate
+!!!Clicks!!!Done!!! JMP Jump
+!!!Clicks!!!Done!!! JSR Jump to Subroutine
+!!!Clicks!!!Done!!! LEA Load Effective Address
+!!!Clicks!!!Done!!! LINK  Link and Allocate
+!!!Clicks!!!Done!!! LSL, LSR  Logical Shift Left/Right
+!!!Clicks!!!Done!!! MOVE  Move Data Between Effective Addresses
+!!!Clicks!!!Done!!! MOVEA Move Address
+!!!Clicks!!!Done!!! MOVE to CCR Move Data to Condition Code Register
+!!!Clicks!!!Done!!! MOVE from SR  Move Data from Status Register
+!!!Clicks!!!Done!!! MOVE to SR  Move Data to Status Register
+!!!Clicks!!!Done!!! MOVE USP  Move Data to/from USP
+!!!Clicks!!!Done!!! MOVEM Move Multiple Registers
+!!!Clicks!!!Done!!! MOVEP Move Peripheral Data
+!!!Clicks!!!Done!!! MOVEQ Move Quick (8-bit Immediate)
+!!!Clicks!!!Done!!! MULS, MULU  Multiply Signed/Unsigned
+!!!Clicks!!!Done!!! NBCD  Negate Binary-Coded Decimal (BCD) with Extend
+!!!Clicks!!!Done!!! NEG Negate
+!!!Clicks!!!Done!!! NEGX  Negate with Extend
+!!!Clicks!!!Done!!! NOP No Operation
+!!!Clicks!!!Done!!! NOT Logical Complement
+!!!Clicks!!!Done!!! OR  Or Logical
+!!!Clicks!!!Done!!! ORI Or Immediate
+!!!Clicks!!!Done!!! ORI to CCR  Or Immediate to Condition Code Register
+!!!Clicks!!!Done!!! ORI to SR Or Immediate to Status Register
+!!!Clicks!!!Done!!! PEA Push Effective Address
+!!!Clicks!!!Done!!! RESET Reset All External Devices
+!!!Clicks!!!Done!!! ROL, ROR  Rotate Left/Right
+!!!Clicks!!!Done!!! ROXL, ROXR  Rotate Left/Right with Extend
+!!!Clicks!!!Done!!! RTE Return from Exception
+!!!Clicks!!!Done!!! RTR Return and Restore Condition Codes
+!!!Clicks!!!Done!!! RTS Return from Subroutine
+!!!Clicks!!!Done!!! SBCD  Subtract Binary-Coded Decimal (BCD) with Extend
+!!!Clicks!!!Done!!! Scc Set on Condition Code
+!!!Clicks!!!Done!!! STOP  Load Status Register and Stop
+!!!Clicks!!!Done!!! SUB Subtract Binary
+!!!Clicks!!!Done!!! SUBA  Subtract Address
+!!!Clicks!!!Done!!! SUBI  Subtract Immediate
+!!!Clicks!!!Done!!! SUBQ  Subtract Quick (8-bit Immediate)
+!!!Clicks!!!Done!!! SUBX  Subtract Extended
+!!!Clicks!!!Done!!! SWAP  Swap Register Halves
+!!!Clicks!!!Done!!! TAS Test and Set an Operand
+!!!Clicks!!!Done!!! TRAP  Execute Trap Exception
+!!!Clicks!!!Done!!! TRAPV Trap on Overflow
+!!!Clicks!!!Done!!! TST Test an Operand
+!!!Clicks!!!Done!!! UNLK  Unlink and Deallocate

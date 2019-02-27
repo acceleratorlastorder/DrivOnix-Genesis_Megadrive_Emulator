@@ -224,6 +224,8 @@ private:
 	word  CCR;
 	bool  stop;
 
+	bool firstInit;
+
 	dword registerData[8];
 	dword registerAddress[8];
 	dword supervisorStackPointer;
