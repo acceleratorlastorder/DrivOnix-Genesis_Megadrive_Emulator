@@ -39,7 +39,7 @@ bool Test_ABCD()
 	M68k::SetCpuState(state);
 
 	word opcode = 0xCD04;
-	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -63,7 +63,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -86,7 +86,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -111,7 +111,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -167,7 +167,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		word opcode = 0xDF16;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -210,7 +210,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		opcode = 0xDF16;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -257,8 +257,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xD0C1;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -279,8 +279,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x601;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -301,8 +301,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x5001;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -323,8 +323,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xD101;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -345,8 +345,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xC001;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -367,8 +367,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x201;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -379,9 +379,9 @@ bool Test_ADD()
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
 	}
-	bool Test_ASL()
+	bool Test_ASL_ASR_TO_MEMORY()
 	{
-		const std::string testName = "ASL";
+		const std::string testName = "Test_ASL_ASR_TO_MEMORY";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -389,8 +389,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xE4A6;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -401,9 +401,9 @@ bool Test_ADD()
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
 	}
-	bool Test_ASR()
+	bool Test_ASL_ASR_TO_REGISTER()
 	{
-		const std::string testName = "ASR";
+		const std::string testName = "Test_ASL_ASR_TO_REGISTER";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -411,8 +411,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xE4A6;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -434,7 +434,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -455,8 +455,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x554;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -477,8 +477,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x581;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -500,7 +500,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -521,8 +521,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x5EC;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -543,8 +543,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x6101;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -565,8 +565,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x102;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -588,7 +588,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -610,7 +610,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -632,7 +632,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -653,8 +653,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xBFCE;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -675,8 +675,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xC01;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -697,8 +697,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0xB10B;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -720,7 +720,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -742,7 +742,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -764,7 +764,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -786,7 +786,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -808,7 +808,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -830,7 +830,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -852,7 +852,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -874,7 +874,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -896,7 +896,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -918,7 +918,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -940,7 +940,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -951,9 +951,9 @@ bool Test_ADD()
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
 	}
-	bool Test_LSL()
+	bool Test_LSL_LSR_TO_REGISTER()
 	{
-		const std::string testName = "LSL";
+		const std::string testName = "Test_LSL_LSR_TO_REGISTER";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -962,7 +962,29 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_LSL_LSR_TO_MEMORY()
+	{
+		const std::string testName = "Test_LSL_LSR_TO_MEMORY";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -984,7 +1006,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1006,7 +1028,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1028,7 +1050,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1050,7 +1072,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1072,7 +1094,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1094,7 +1116,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1116,7 +1138,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1138,7 +1160,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1160,7 +1182,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1182,7 +1204,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1204,7 +1226,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1225,8 +1247,52 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x1;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ORI_TO_CCR()
+	{
+		const std::string testName = "ORI_TO_CCR";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x3D;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ORI_TO_SR()
+	{
+		const std::string testName = "ORI_TO_SR";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x7D;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1248,7 +1314,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1269,8 +1335,8 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		word opcode = 0x4E71;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1281,9 +1347,9 @@ bool Test_ADD()
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
 	}
-	bool Test_ROL()
+	bool Test_ROL_ROR_TO_REGISTER()
 	{
-		const std::string testName = "ROL";
+		const std::string testName = "Test_ROL_ROR_TO_REGISTER";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -1292,7 +1358,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1303,9 +1369,9 @@ bool Test_ADD()
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
 	}
-	bool Test_ROXL()
+	bool Test_ROL_ROR_TO_MEMORY()
 	{
-		const std::string testName = "ROXL";
+		const std::string testName = "Test_ROL_ROR_TO_MEMORY";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -1314,7 +1380,51 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ROXL_ROXR_TO_MEMORY()
+	{
+		const std::string testName = "Test_ROXL_ROXR_TO_MEMORY";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ROXL_ROXR_TO_REGISTER()
+	{
+		const std::string testName = "Test_ROXL_ROXR_TO_REGISTER";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1336,7 +1446,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1358,7 +1468,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1380,7 +1490,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1402,7 +1512,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1424,7 +1534,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1446,7 +1556,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1468,7 +1578,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1490,7 +1600,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1512,7 +1622,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1534,7 +1644,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1556,7 +1666,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1578,7 +1688,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1600,7 +1710,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1622,7 +1732,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1644,7 +1754,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1666,7 +1776,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1688,7 +1798,7 @@ bool Test_ADD()
 		M68k::SetCpuState(state);
 
 		word opcode = 0x4816;
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1729,7 +1839,7 @@ bool Test_ADD()
 		 */
 		word opcode = 0x4816;
 
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -1755,7 +1865,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1778,7 +1888,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1803,7 +1913,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1850,8 +1960,8 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_ADDX", Test_ADDX()));
 	TestResults.insert(std::pair<std::string, bool>("Test_AND", Test_AND()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ANDI", Test_ANDI()));
-	TestResults.insert(std::pair<std::string, bool>("Test_ASL", Test_ASL()));
-	TestResults.insert(std::pair<std::string, bool>("Test_ASR", Test_ASR()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ASL_ASR_TO_MEMORY", Test_ASL_ASR_TO_MEMORY()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ASL_ASR_TO_REGISTER", Test_ASL_ASR_TO_REGISTER()));
 	TestResults.insert(std::pair<std::string, bool>("Test_Bcc", Test_Bcc()));
 	TestResults.insert(std::pair<std::string, bool>("Test_BCHG", Test_BCHG()));
 	TestResults.insert(std::pair<std::string, bool>("Test_BCLR", Test_BCLR()));
@@ -1876,7 +1986,8 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_JSR", Test_JSR()));
 	TestResults.insert(std::pair<std::string, bool>("Test_LEA", Test_LEA()));
 	TestResults.insert(std::pair<std::string, bool>("Test_LINK", Test_LINK()));
-	TestResults.insert(std::pair<std::string, bool>("Test_LSL", Test_LSL()));
+	TestResults.insert(std::pair<std::string, bool>("Test_LSL_LSR_TO_MEMORY", Test_LSL_LSR_TO_MEMORY()));
+	TestResults.insert(std::pair<std::string, bool>("Test_LSL_LSR_TO_REGISTER", Test_LSL_LSR_TO_REGISTER()));
 	TestResults.insert(std::pair<std::string, bool>("Test_MOVE", Test_MOVE()));
 	TestResults.insert(std::pair<std::string, bool>("Test_MOVEA", Test_MOVEA()));
 	TestResults.insert(std::pair<std::string, bool>("Test_MOVEM", Test_MOVEM()));
@@ -1889,10 +2000,14 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_NOT", Test_NOT()));
 	TestResults.insert(std::pair<std::string, bool>("Test_OR", Test_OR()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ORI", Test_ORI()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ORI_TO_CCR", Test_ORI_TO_CCR()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ORI_TO_SR", Test_ORI_TO_SR()));
 	TestResults.insert(std::pair<std::string, bool>("Test_PEA", Test_PEA()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RESET", Test_RESET()));
-	TestResults.insert(std::pair<std::string, bool>("Test_ROL", Test_ROL()));
-	TestResults.insert(std::pair<std::string, bool>("Test_ROXL", Test_ROXL()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ROL_ROR_TO_REGISTER", Test_ROL_ROR_TO_REGISTER()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ROL_ROR_TO_MEMORY", Test_ROL_ROR_TO_MEMORY()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ROXL_ROXR_TO_MEMORY", Test_ROXL_ROXR_TO_MEMORY()));
+	TestResults.insert(std::pair<std::string, bool>("Test_ROXL_ROXR_TO_REGISTER", Test_ROXL_ROXR_TO_REGISTER()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RTE", Test_RTE()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RTR", Test_RTR()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RTS", Test_RTS()));
