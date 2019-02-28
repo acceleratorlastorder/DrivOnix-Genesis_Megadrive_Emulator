@@ -39,7 +39,7 @@ bool Test_ABCD()
 	M68k::SetCpuState(state);
 
 	word opcode = 0xCD04;
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -63,7 +63,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -86,7 +86,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -111,7 +111,7 @@ bool Test_ABCD()
 
 	M68k::SetCpuState(state);
 
-	std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+	std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 	M68k::ExecuteOpcode(opcode);
 
@@ -167,7 +167,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		word opcode = 0xDF16;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -210,7 +210,7 @@ bool Test_ADD()
 		 *  hex: DF16
 		 */
 		opcode = 0xDF16;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -236,13 +236,9 @@ bool Test_ADD()
 
 		/*
 		BitSet(state.CCR, X_FLAG);
-
 		BitSet(state.CCR, N_FLAG);
-
 		BitSet(state.CCR, Z_FLAG);
-
 		BitSet(state.CCR, V_FLAG);
-
 		BitSet(state.CCR, C_FLAG);
 		*/
 
@@ -1719,10 +1715,6 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 
 		dword value_1 = 0x3;
-		dword value_2 = 0x9;
-
-
-		dword value_1 = 0x3;
 		dword value_2 = 0x6;
 
 		state.registerData[7] = value_1;
@@ -1731,12 +1723,13 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 		/*	USED OPCODE
-		 *  0100100000 ((effective address)(mode)010 (register)110(6))
+		 *  0100100000 ((effective address)(mode)010("(An)") (register)110(6))
 		 *  binary: 0100100000010110
 		 *  hex: 0x4806
 		 */
 		word opcode = 0x4816;
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
@@ -1762,7 +1755,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1785,7 +1778,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1810,7 +1803,7 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 
@@ -1842,10 +1835,10 @@ int main()
 
 
 	M68k::SetUnitTestsMode();
-/*
+
 	Genesis::AllocM68kMemory();
 	Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
-*/
+
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
