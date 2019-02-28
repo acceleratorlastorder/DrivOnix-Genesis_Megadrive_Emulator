@@ -282,6 +282,8 @@ bool Test_ADD()
 		word opcode = 0x4816;
 		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
+		word opcode = 0x4816;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -484,6 +486,92 @@ bool Test_ADD()
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
 
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ADDI()
+	{
+		const std::string testName = "ADDI";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ADDQ()
+	{
+		const std::string testName = "ADDQ";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_ADDX()
+	{
+		const std::string testName = "ADDX";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+	bool Test_AND()
+	{
+		const std::string testName = "AND";
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
 		std::cout << "End Test_" << testName << "()" << std::endl;
