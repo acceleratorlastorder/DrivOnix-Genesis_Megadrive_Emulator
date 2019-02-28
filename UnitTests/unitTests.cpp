@@ -1732,11 +1732,8 @@ bool Test_ADD()
 		 *  hex: 0x4806
 		 */
 		word opcode = 0x4816;
-<<<<<<< HEAD
-		std::cout << "\t\texecute " << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-=======
+
 		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
->>>>>>> 6cff47178e08ba807ca117add9e34a739ce4a330
 
 		//execute the opcode
 		M68k::ExecuteOpcode(opcode);
