@@ -114,7 +114,7 @@ private:
 
 	static M68k& get(void);
 
-	void RequestInt(INT_TYPE level, int address);
+	void RequestInt(INT_TYPE level, dword address);
 	void CheckInt();
 	void CheckPrivilege();
 	void SetDataRegister(int id, dword result, DATASIZE size);
@@ -130,6 +130,8 @@ private:
 	bool IsOpcode(word opcode, std::string mask);
 	void ClicksMoveInit();
 	//End opcodes Utils
+
+	void ExecuteOpcodeOptimized(word opcode);
 
 	//Start opcodes
 	void OpcodeABCD(word opcode);

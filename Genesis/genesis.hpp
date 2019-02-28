@@ -11,7 +11,7 @@
 #ifdef TIMING
 #define INIT_TIMER auto start = std::chrono::high_resolution_clock::now();
 #define START_TIMER  start = std::chrono::high_resolution_clock::now();
-#define STOP_TIMER(name)  std::cout << "RUNTIME of " << name << ": " << \
+#define STOP_TIMER(name)  std::cout << "RUNTIME of " << name << ": " << std::dec << \
     std::chrono::duration_cast<std::chrono::milliseconds>( \
             std::chrono::high_resolution_clock::now()-start \
     ).count() << " ms " << std::endl; 

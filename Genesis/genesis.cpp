@@ -311,6 +311,7 @@ void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
 
 word Genesis::M68KReadMemoryWORD(dword address)
 {
+
 	address = address % M68K_MEM_SIZE;
 
 	//ROM Cartridge/Expension port

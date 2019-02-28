@@ -836,7 +836,7 @@ void YM7101::RenderLayer(word baseAddress, bool priority, int width, int height,
 				continue;
 			}
 
-			if(TestBit(get().vdpRegister[0], 5) && absX < 8) //colonne blank de gauche
+			if(absX >= get().vdpResolution.first || (TestBit(get().vdpRegister[0], 5) && absX < 8)) //colonne blank de gauche
 			{
 				continue;
 			}
@@ -929,7 +929,7 @@ void YM7101::RenderWindow(word baseAddress, bool priority)
 			byte data3 = get().vram[tileData + 3];
 			byte data4 = get().vram[tileData + 4];
 
-			if(absX >= get().vdpResolution.first || (TestBit(get().vdpRegister[0], 5) && absX < 8))
+			if((absX >= get().vdpResolution.first) || (TestBit(get().vdpRegister[0], 5) && absX < 8))
 			{
 				continue;
 			}
