@@ -22,6 +22,7 @@
 #endif
 
 #include "RomLoader/romLoader.hpp"
+#include "GamePad/gamePad.hpp"
 #include "../M68k/m68k.hpp"
 #include "../YM7101/ym7101.hpp"
 #include "../CathodeRayTube/crt.hpp"

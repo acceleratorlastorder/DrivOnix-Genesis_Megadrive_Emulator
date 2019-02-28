@@ -15,8 +15,8 @@
 #define N_FLAG 3
 #define X_FLAG 4
 
-#define M68K_CYCLES_PER_SECOND 7670000
-
+#define M68K_NTSC_CYCLES_PER_SECOND 7670000
+#define M68K_PAL_CYCLES_PER_SECOND 7600000
 
 typedef struct
 {

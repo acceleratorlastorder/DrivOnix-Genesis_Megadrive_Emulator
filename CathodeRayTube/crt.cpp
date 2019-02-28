@@ -24,6 +24,14 @@ void CRT::Init()
 
 void CRT::Render()
 {
+
+	int offsetScreen = 0;
+
+	if(YM7101::GetIs256Screen())
+	{
+		offsetScreen = (320 - 256) / 2;
+	}
+
 	for(int x = 0; x < 320; ++x)
     {
         for(int y = 0; y < 224; ++y)
@@ -50,6 +58,8 @@ void CRT::Render()
 
     sfTexture_updateFromImage(get().screenTex, get().screenImg, 0, 0);
     sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
+
+    sfSprite_setPosition(get().screenSpr, (sfVector2f){ (float)offsetScreen, 0.0f });
 
     sfRenderWindow_clear(get().window, sfBlack);
     sfRenderWindow_drawSprite(get().window, get().screenSpr, NULL);

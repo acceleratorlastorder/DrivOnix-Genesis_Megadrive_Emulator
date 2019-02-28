@@ -57,6 +57,8 @@ void Genesis::Run()
       		{
           		sfRenderWindow_close(CRT::GetWindow());
       		}
+
+      		get().powerOff = GamePad::Update(event);
     	}
 
     	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
@@ -77,7 +79,7 @@ void Genesis::Update()
 	//INIT_TIMER
 	//START_TIMER
 	int cycleThisUpdate = 0;
-	int cycleThisFrame = M68K_CYCLES_PER_SECOND / get().FPS;
+	int cycleThisFrame = M68K_NTSC_CYCLES_PER_SECOND / get().FPS;
 
 	while(cycleThisUpdate < cycleThisFrame)
 	{
@@ -149,18 +151,33 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 		}
 		else if(address == 0xA10003)
 		{
-			//Manette 1
-			return 0;
+			//Manette 1 data
+			return GamePad::ReadData(0);
 		}
 		else if(address == 0xA10005)
 		{
-			//Manette 2
-			return 0;
+			//Manette 2 data
+			return GamePad::ReadData(1);
 		}
 		else if(address == 0xA10007)
 		{
-			//je sais pas, peut être le light gun
-			return 0;
+			//Expansion port data
+			return 0x7F;
+		}
+		else if(address == 0xA10009)
+		{
+			//Manette 1 control
+			return GamePad::ReadControl(0);
+		}
+		else if(address == 0xA1000B)
+		{
+			//Manette 2 control
+			return GamePad::ReadControl(1);
+		}
+		else if(address == 0xA1000D)
+		{
+			//Expansion port data
+			return 0x7F;
 		}
 		else
 		{
@@ -252,19 +269,35 @@ void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
 	//I/O Registers
 	else if(address >= 0xA10000 && address <= 0xA10FFF)
 	{
-		BitSet(address, 0);
+		BitSet(address, 0); //pair et impair = pareil
 
 		if(address == 0xA10003)
 		{
 			//Manette 1
+			GamePad::Write(0, data, false);
 		}
 		else if(address == 0xA10005)
 		{
 			//Manette 2
+			GamePad::Write(1, data, false);
 		}
 		else if(address == 0xA10007)
 		{
-			//je sais pas
+			//Expansion port data
+		}
+		else if(address == 0xA10009)
+		{
+			//Manette 1 control
+			GamePad::Write(0, data, true);
+		}
+		else if(address == 0xA1000B)
+		{
+			//Manette 2 control
+			GamePad::Write(1, data, true);
+		}
+		else if(address == 0xA1000D)
+		{
+			//Expansion port data
 		}
 		else
 		{
@@ -336,17 +369,32 @@ word Genesis::M68KReadMemoryWORD(dword address)
 		else if(address == 0xA10003)
 		{
 			//Manette 1
-			return 0;
+			return GamePad::ReadData(0);
 		}
 		else if(address == 0xA10005)
 		{
 			//Manette 2
-			return 0;
+			return GamePad::ReadData(1);
 		}
 		else if(address == 0xA10007)
 		{
-			//je sais pas, peut être le light gun
-			return 0;
+			//Expansion port data
+			return 0x7F;
+		}
+		else if(address == 0xA10009)
+		{
+			//Manette 1 control
+			return GamePad::ReadControl(0);
+		}
+		else if(address == 0xA1000B)
+		{
+			//Manette 2 control
+			return GamePad::ReadControl(1);
+		}
+		else if(address == 0xA1000D)
+		{
+			//Expansion port data
+			return 0x7F;
 		}
 		else
 		{
@@ -418,14 +466,30 @@ void Genesis::M68KWriteMemoryWORD(dword address, word data)
 		if(address == 0xA10003)
 		{
 			//Manette 1
+			GamePad::Write(0, data, false);
 		}
 		else if(address == 0xA10005)
 		{
 			//Manette 2
+			GamePad::Write(1, data, false);
 		}
 		else if(address == 0xA10007)
 		{
-			//je sais pas
+			//Expansion port data
+		}
+		else if(address == 0xA10009)
+		{
+			//Manette 1 control
+			GamePad::Write(0, data, true);
+		}
+		else if(address == 0xA1000B)
+		{
+			//Manette 2 control
+			GamePad::Write(1, data, true);
+		}
+		else if(address == 0xA1000D)
+		{
+			//Expansion port data
 		}
 		else
 		{

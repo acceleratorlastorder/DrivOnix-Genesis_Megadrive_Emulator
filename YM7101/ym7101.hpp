@@ -32,6 +32,7 @@ public:
 	static void Init();
 	static void Update(int clicks);
 	static bool GetRequestInt();
+	static bool GetIs256Screen();
 	static int GetIntType();
 	static byte GetHCounter();
 	static byte GetVCounter();
@@ -54,6 +55,8 @@ private:
 	word hCounter;
 	word status;
 	bool refresh;
+
+	bool is256Screen;
 
 	bool requestInt;
 	byte lineInt;

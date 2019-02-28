@@ -14,6 +14,7 @@ YM7101& YM7101::get()
 void YM7101::Init()
 {
 	get().vdpResolution = std::pair<int, int>(256, 224);
+	get().is256Screen = true;
 	get().vCounter = 0x0;
 	get().hCounter = 0x0;
 	get().controlPortPending = false;
@@ -49,6 +50,11 @@ void YM7101::Init()
 	get().vCounterFirst = true;
 
 	CRT::ResetScreen();
+}
+
+bool YM7101::GetIs256Screen()
+{
+	return get().is256Screen;
 }
 
 word YM7101::GetAddressRegister()
@@ -1291,10 +1297,12 @@ void YM7101::Update(int clicks)
 	if((get().vdpResolution.first == 256) && cell40)
 	{
 		get().vdpResolution = std::make_pair<int, int>(320, 224);
+		get().is256Screen = false;
 	}
 	else if((get().vdpResolution.first == 320) && !cell40)
 	{
 		get().vdpResolution = std::make_pair<int, int>(256, 224);
+		get().is256Screen = true;
 	}
 
 	bool nextLine = false;

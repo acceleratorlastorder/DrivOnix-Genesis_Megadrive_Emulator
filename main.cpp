@@ -14,6 +14,8 @@ int main(void)
 	Genesis::InsertCartridge();
 
 	Genesis::Init();
+	GamePad::Init();
+	
 	M68k::Init();
 	YM7101::Init();
 
