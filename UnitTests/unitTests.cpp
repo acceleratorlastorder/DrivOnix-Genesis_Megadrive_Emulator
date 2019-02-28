@@ -1828,7 +1828,7 @@ bool Test_ADD()
 		}
 
 		//indique la fin du test
-		std::cout << "End Test_ABCD()" << std::endl;
+		std::cout << "End Test_" << testName << "()" << std::endl;
 
 		return testResult;
 	}
