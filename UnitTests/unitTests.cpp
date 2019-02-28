@@ -282,13 +282,9 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		/*	USED OPCODE
-		*  00000110 (size)00 ((effective address)(mode)000 (register)110(6))
-		*  binary: 00000110 00 000 110
-		*  hex: 0606
-		*/
-		word opcode = 0x0606;
+		word opcode = 0x601;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -312,12 +308,7 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		/*	USED OPCODE
-		*  0101 (data)000 0 (size)00 ((effective address)(mode)001 (register)110)
-		*  binary: 0101 000 0 00 001 110
-		*  hex: 0606
-		*/
-		word opcode = 0x500E;
+		word opcode = 0x5001;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
