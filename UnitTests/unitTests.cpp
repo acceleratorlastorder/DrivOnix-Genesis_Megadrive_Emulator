@@ -271,17 +271,24 @@ bool Test_ADD()
 	}
 	bool Test_ADDI()
 	{
+		/*	EMPTY SIGNATURE
+		*  00000110 (size)00 ((effective address)(mode)000 (register)000)
+		*  binary: 00000110 00 000 000
+		*/
 		const std::string testName = "ADDI";
-
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
 
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x601;
+		/*	USED OPCODE
+		*  00000110 (size)00 ((effective address)(mode)000 (register)110(6))
+		*  binary: 00000110 00 000 110
+		*  hex: 0606
+		*/
+		word opcode = 0x0606;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -293,6 +300,10 @@ bool Test_ADD()
 	}
 	bool Test_ADDQ()
 	{
+		/*	EMPTY SIGNATURE
+		*  0101 (data)000 0 (size)00 ((effective address)(mode)000 (register)000)
+		*  binary: 0101 000 0 00 000 000
+		*/
 		const std::string testName = "ADDQ";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
@@ -301,7 +312,12 @@ bool Test_ADD()
 		CPU_STATE_DEBUG state;
 		M68k::SetCpuState(state);
 
-		word opcode = 0x5001;
+		/*	USED OPCODE
+		*  0101 (data)000 0 (size)00 ((effective address)(mode)001 (register)110)
+		*  binary: 0101 000 0 00 001 110
+		*  hex: 0606
+		*/
+		word opcode = 0x500E;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
 
