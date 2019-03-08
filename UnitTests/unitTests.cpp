@@ -1399,16 +1399,126 @@ bool Test_ADD()
 		bool testResult = true;
 
 		CPU_STATE_DEBUG state;
+		state.registerData[3] = 0x54;
+		state.registerData[2] = 0x5;
+		BitReset(state.CCR, X_FLAG);
+		BitSet(state.CCR, Z_FLAG);
+
 		M68k::SetCpuState(state);
 
-		word opcode = 0x4816;
+		word opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
 		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
 
+		if(state.registerData[3] == 0x49)
+		{
+			std::cout << "\t\tSub Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tSub Test Failed -> Expected : 0x49 - Result : 0x" << std::hex << state.registerData[3] << std::endl;
+			testResult = false;
+		}
 
+		if(TestFlag(state.CCR, 0, 0, 0, 0, 0))
+		{
+			std::cout << "\t\tZ_Flag Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tZ_Flag Test Failed" << std::endl;
+			testResult = false;
+		}
+
+		state.registerData[3] = 0x54;
+		state.registerData[2] = 0x5;
+		BitSet(state.CCR, X_FLAG);
+
+		M68k::SetCpuState(state);
+
+		opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+		if(state.registerData[3] == 0x48)
+		{
+			std::cout << "\t\tSub X Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tSub X Test Failed -> Expected : 0x48 - Result : 0x" << std::hex << state.registerData[3] << std::endl;
+			testResult = false;
+		}
+
+		state.registerData[3] = 0x12;
+		state.registerData[2] = 0x13;
+		BitReset(state.CCR, X_FLAG);
+		BitReset(state.CCR, C_FLAG);
+
+		M68k::SetCpuState(state);
+
+		opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+		if(state.registerData[3] == 0x99)
+		{
+			std::cout << "\t\tSub Borrow Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tSub Borrow Test Failed -> Expected : 0x99 - Result : 0x" << std::hex << state.registerData[3] << std::endl;
+			testResult = false;
+		}
+
+		if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
+		{
+			std::cout << "\t\tC_X_FLAG Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tC_X_Flag Test Failed" << std::endl;
+			testResult = false;
+		}
+
+		state.registerData[3] = 0x12;
+		state.registerData[2] = 0x13;
+		BitSet(state.CCR, X_FLAG);
+		BitReset(state.CCR, C_FLAG);
+
+		M68k::SetCpuState(state);
+
+		opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
+		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+		if(state.registerData[3] == 0x98)
+		{
+			std::cout << "\t\tSub Borrow X Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tSub Borrow X Test Failed -> Expected : 0x98 - Result : 0x" << std::hex << state.registerData[3] << std::endl;
+			testResult = false;
+		}
+
+		if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
+		{
+			std::cout << "\t\tC_X_FLAG X Test Passed" << std::endl;
+		}
+		else
+		{
+			std::cout << "\t\tC_X_Flag X Test Failed" << std::endl;
+			testResult = false;
+		}
 
 		std::cout << "End Test_" << testName << "()" << std::endl;
 		return testResult;
@@ -1843,6 +1953,7 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
+	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ADDA", Test_ADDA()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADDI", Test_ADDI()));
@@ -1896,7 +2007,6 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_RTE", Test_RTE()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RTR", Test_RTR()));
 	TestResults.insert(std::pair<std::string, bool>("Test_RTS", Test_RTS()));
-	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_Scc", Test_Scc()));
 	TestResults.insert(std::pair<std::string, bool>("Test_STOP", Test_STOP()));
 	TestResults.insert(std::pair<std::string, bool>("Test_SUB", Test_SUB()));

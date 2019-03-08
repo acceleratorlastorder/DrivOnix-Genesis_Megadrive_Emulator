@@ -85,6 +85,8 @@ void Genesis::Update()
 	{
 		int CPUcycles = M68k::Update();
 
+		//printf("CPU Cycles : %d\n", CPUcycles);
+
 		YM7101::Update(CPUcycles);
 
 		if(YM7101::GetRequestInt())

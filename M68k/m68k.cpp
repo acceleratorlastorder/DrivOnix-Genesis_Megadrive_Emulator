@@ -115588,9 +115588,9 @@ void M68k::OpcodeRTS()
 
 void M68k::OpcodeSBCD(word opcode)
 {
-	byte rx = (opcode >> 9) & 0x7;
+	byte ry = (opcode >> 9) & 0x7;
 	byte rm = (opcode >> 3) & 0x1;
-	byte ry = opcode & 0x7;
+	byte rx = opcode & 0x7;
 
 	byte src;
 	byte dest;
@@ -115615,19 +115615,8 @@ void M68k::OpcodeSBCD(word opcode)
 
 	src += xflag;
 
-	//BCD OVERFLOW CORRECTION
-	if((dest & 0xF) > 9)
-	{
-		src -= 0x6;
-	}
-
-	if((dest >> 4) > 9)
-	{
-		src -= 0x60;
-	}
 
 	byte newSub;
-
 	byte result;
 
 	if(dest < src)
@@ -115640,26 +115629,41 @@ void M68k::OpcodeSBCD(word opcode)
 		newSub = src - dest;
 
 		result = 0x99 - newSub;
-	}
-	else
-	{
-		result = dest - src;
-	}
 
-	word conditionResult = dest - src;
+		//BCD OVERFLOW CORRECTION
+		if((0x9 - (newSub & 0xF)) < 0x0)
+		{
+			result -= 0x6;
+		}
 
-	if(conditionResult > 0x99)
-	{
+		if((result >> 4) > 0x9)
+		{
+			result -= 0x60;
+		}
+
 		BitSet(get().CCR, C_FLAG);
 		BitSet(get().CCR, X_FLAG);
 	}
 	else
 	{
+		result = dest - src;
+
+		//BCD OVERFLOW CORRECTION
+		if(((dest & 0xF) - (src & 0xF)) < 0x0)
+		{
+			result -= 0x6;
+		}
+
+		if((result >> 4) > 0x9)
+		{
+			result -= 0x60;
+		}
+
 		BitReset(get().CCR, C_FLAG);
 		BitReset(get().CCR, X_FLAG);
 	}
 
-	if((conditionResult & 0xFF) != 0)
+	if((result & 0xFF) != 0)
 	{
 		BitReset(get().CCR, Z_FLAG);
 	}
