@@ -2,6 +2,7 @@
 #define CRT_HPP
 
 #include <algorithm>
+#include <string>
 
 #include <SFML/Config.h>
 #include <SFML/System.h>
@@ -26,12 +27,19 @@ public:
 private:
 	static CRT& get(void);
 
+	void GetConfig();
+
 	sfRenderWindow* window;
 	sfVideoMode mode;
 
 	sfImage* screenImg;
 	sfTexture* screenTex;
 	sfSprite* screenSpr;
+
+	unsigned int pixelSize;
+
+	float sprPosX;
+	float sprPosY;
 
 	byte screenData[320][224][3];
 };

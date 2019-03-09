@@ -1,0 +1,12 @@
+ScreenSize=2;
+
+// Value description //
+
+/*
+
+ScreenSize :
+	1 -> Original screen size (320x224)
+	2 -> Double Screen size (640x448)
+	3 -> FullScreen (in this mode, use Escape key to exit Emulator)
+	
+*/

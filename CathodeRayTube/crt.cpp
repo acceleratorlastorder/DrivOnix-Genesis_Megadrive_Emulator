@@ -13,13 +13,80 @@ CRT& CRT::get(void)
 
 void CRT::Init()
 {
-	get().mode = (sfVideoMode){320, 224, 32};
-    get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
-    get().screenImg = sfImage_createFromColor(320, 224, sfBlack);
+	get().GetConfig();
+
+	if(get().pixelSize == 1 || get().pixelSize == 2)
+	{
+		get().mode = (sfVideoMode){320 * get().pixelSize, 224 * get().pixelSize, 32};
+		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
+		get().sprPosX = 0.0f;
+		get().sprPosY = 0.0f;
+	}
+	else if(get().pixelSize == 3)
+	{
+		sfVideoMode screenParam = sfVideoMode_getDesktopMode();
+
+		get().mode = (sfVideoMode){screenParam.width, screenParam.height, 32};
+		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfFullscreen, NULL);
+
+		int widthMDScreen = get().pixelSize * 320;
+    	int heightMDScreen = get().pixelSize * 224;
+    	
+    	int x = (screenParam.width / 2) - (widthMDScreen / 2);
+    	int y = (screenParam.height / 2) - (heightMDScreen / 2);
+
+    	get().sprPosX = (float)x;
+		get().sprPosY = (float)y;
+	}
+	else
+	{
+		get().mode = (sfVideoMode){320 * get().pixelSize, 224 * get().pixelSize, 32};
+		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
+		get().sprPosX = 0.0f;
+		get().sprPosY = 0.0f;
+	}
+
+    get().screenImg = sfImage_createFromColor(320 * get().pixelSize, 224 * get().pixelSize, sfBlack);
     get().screenTex = sfTexture_createFromImage(get().screenImg, NULL);
 	get().screenSpr = sfSprite_create();
 	sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
-	sfSprite_setPosition(get().screenSpr, (sfVector2f){ 0.0f, 0.0f });
+	sfSprite_setPosition(get().screenSpr, (sfVector2f){ get().sprPosX, get().sprPosY });
+}
+
+void CRT::GetConfig()
+{
+	std::ifstream input("Config/config.txt");
+	for(int i = 0; i < 1; i++)
+	{
+		std::string id;
+		std::string value;
+		std::string empty;
+		std::getline(input, id, '=');
+		std::getline(input, value, ';');
+		std::getline(input, empty, '\n');
+
+		if(id.compare("ScreenSize") == 0)
+		{
+			if(value.at(0) == '1')
+			{
+				get().pixelSize = 1;
+			}
+			else if(value.at(0) == '2')
+			{
+				get().pixelSize = 2;
+			}
+			else if(value.at(0) == '3')
+			{
+				get().pixelSize = 3;
+			}
+			else
+			{
+				get().pixelSize = 1;
+			}
+		}
+	}
+
+	input.close();
 }
 
 void CRT::Render()
@@ -30,6 +97,7 @@ void CRT::Render()
 	if(YM7101::GetIs256Screen())
 	{
 		offsetScreen = (320 - 256) / 2;
+		offsetScreen *= get().pixelSize;
 	}
 
 	for(int x = 0; x < 320; ++x)
@@ -44,13 +112,12 @@ void CRT::Render()
 
           	byte ix;
           	byte iy;
-          	byte pixelSize = 1;
           	
-          	for(ix = 0; ix < pixelSize; ++ix)
+          	for(ix = 0; ix < get().pixelSize; ++ix)
           	{
-            	for(iy = 0; iy < pixelSize; ++iy)
+            	for(iy = 0; iy < get().pixelSize; ++iy)
             	{
-              		sfImage_setPixel(get().screenImg, x * pixelSize + ix, y * pixelSize + iy, color);
+              		sfImage_setPixel(get().screenImg, x * get().pixelSize + ix, y * get().pixelSize + iy, color);
             	}
           	}
         }
@@ -59,7 +126,7 @@ void CRT::Render()
     sfTexture_updateFromImage(get().screenTex, get().screenImg, 0, 0);
     sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
 
-    sfSprite_setPosition(get().screenSpr, (sfVector2f){ (float)offsetScreen, 0.0f });
+    sfSprite_setPosition(get().screenSpr, (sfVector2f){ ((float)offsetScreen + get().sprPosX), get().sprPosY });
 
     sfRenderWindow_clear(get().window, sfBlack);
     sfRenderWindow_drawSprite(get().window, get().screenSpr, NULL);
