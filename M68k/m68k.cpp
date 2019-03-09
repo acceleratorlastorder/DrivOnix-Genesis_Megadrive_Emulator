@@ -42,6 +42,8 @@ void M68k::Init()
 	get().superVisorModeActivated = true;
 	get().programCounter = Genesis::M68KReadMemoryLONG(0x4);
 
+	get().interrupts.clear();
+
 }
 
 void M68k::ClicksMoveInit()
@@ -243,6 +245,7 @@ void M68k::SetAddressRegister(int id, dword result, DATASIZE size)
 
 		case LONG:
 		get().registerAddress[id] = result;
+		break;
 	}
 }
 
@@ -109333,7 +109336,7 @@ void M68k::ExecuteOpcodeOptimized(word opcode)
 		case 0xEFFF:
 		get().OpcodeROL_ROR_Register(opcode);		break;
 		default:
-		std::cout << "Unimplemented Opcode" << std::hex << opcode << std::endl;		break;
+		std::cout << "Unimplemented Opcode 0x" << std::hex << opcode << std::endl;		break;
 	}
 }
 
@@ -109379,7 +109382,8 @@ void M68k::ExecuteOpcode(word opcode)
 	std::cout << "\tN_FLAG = " << TestBit(get().CCR, N_FLAG) << std::endl;
 	std::cout << "\tZ_FLAG = " << TestBit(get().CCR, Z_FLAG) << std::endl;
 	std::cout << "\tV_FLAG = " << TestBit(get().CCR, V_FLAG) << std::endl;
-	std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;*/
+	std::cout << "\tC_FLAG = " << TestBit(get().CCR, C_FLAG) << std::endl;
+	*/
 
 	if(get().IsOpcode(opcode, "00xxxxxxxxxxxxxx"))
 	{//00
@@ -116749,7 +116753,7 @@ void M68k::OpcodeTST(word opcode)
 	}
 
 	//Z_FLAG
-	if((vectorman) == 0)
+	if(vectorman == 0)
 	{
 		BitSet(get().CCR, Z_FLAG);
 	}

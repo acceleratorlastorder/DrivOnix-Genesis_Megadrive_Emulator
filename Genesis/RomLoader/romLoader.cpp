@@ -2,14 +2,20 @@
 
 RomLoader::RomLoader()
 {
-	this->cartridgeSize = 0x0;
-	this->haveSram = false;
+
 }
 
 RomLoader& RomLoader::get()
 {
 	static RomLoader instance;
 	return instance;
+}
+
+void RomLoader::Init()
+{
+	get().cartridgeSize = 0;
+	get().sramSize = 0;
+	get().haveSram = false;
 }
 
 void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest)
@@ -26,29 +32,34 @@ void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::v
 	}
 }
 
+byte RomLoader::GetCountry()
+{
+	return get().header.country[0];
+}
+
 void RomLoader::LoadRomFile(std::string romName)
 {
 	std::string extension = romName.substr(romName.find_last_of("."));
 
 	if(extension == ".bin")
 	{
-		std::cout << "Load BIN rom" << std::endl;
 		get().LoadBINMDGEN(romName);
 	}
 	else if(extension == ".md")
 	{
-		std::cout << "Load MD rom" << std::endl;
 		get().LoadBINMDGEN(romName);
 	}
 	else if(extension == ".gen")
 	{
-		std::cout << "Load GEN rom" << std::endl;
 		get().LoadBINMDGEN(romName);
 	}
 	else if(extension == ".smd")
 	{
-		std::cout << "Load SMD rom" << std::endl;
 		get().LoadSMD(romName);
+	}
+	else if(extension == ".bios")
+	{
+		get().LoadBINMDGEN(romName);
 	}
 	else
 	{
@@ -65,6 +76,7 @@ void RomLoader::LoadBINMDGEN(std::string romName)
 
 	get().cartridgeSize = (long)in.tellg();
 	get().cartridgeMemory.reserve(get().cartridgeSize);
+	std::fill(get().cartridgeMemory.begin(), get().cartridgeMemory.end(), 0);
 
 	in.close();
 
@@ -81,6 +93,7 @@ void RomLoader::LoadSMD(std::string romName)
 	long romSize = (long)in.tellg();
 	get().cartridgeSize = (long)((long)in.tellg() - (long)SMD_HEADER_SIZE);
 	get().cartridgeMemory.reserve(get().cartridgeSize);
+	std::fill(get().cartridgeMemory.begin(), get().cartridgeMemory.end(), 0);
 
 	std::vector<byte> romSMD;
 	romSMD.reserve(romSize);
@@ -137,15 +150,20 @@ void RomLoader::LoadHeader()
 	get().version = 0x0;
 
 	BitSet(version, 7); //overseas
-	BitReset(version, 6); //NTSC
-
-	if(get().header.romEnd > 0x3FFFFF)
+	if(get().header.country[0] == 'J' || get().header.country[0] == 'U')
 	{
-		BitReset(version, 5); //Expansion unit activated 
+		BitReset(version, 6); //NTSC
+		Genesis::SetRegionToPAL(false);
+	}
+	else if(get().header.country[0] == 'E' || get().header.country[0] == 'F')
+	{
+		BitSet(version, 6); //PAL
+		Genesis::SetRegionToPAL(true);
 	}
 	else
 	{
-		BitSet(version, 5);
+		BitReset(version, 6); //NTSC
+		Genesis::SetRegionToPAL(false);
 	}
 }
 
@@ -165,19 +183,10 @@ void RomLoader::Checksum()
 
 	if(checksum != get().header.checksum)
 	{
-		std::cout << std::hex << "Calculated checksum value 0x" << checksum << " doesn't match with header checksum value. Header checksum isn't correct." << std::endl;
-
 		get().cartridgeMemory[0x18E] = (checksum >> 8) & 0xFF;
 		get().cartridgeMemory[0x18F] = (checksum & 0xFF);
 		get().header.checksum = checksum;
-
-		std::cout << "Checksum Fixed ! :)" << std::endl;
 	}
-	else
-	{
-		std::cout << std::hex << "Calculated checksum value 0x" << checksum << " match with header checksum value. Header checksum is correct." << std::endl;
-	}
-
 }
 
 void RomLoader::PrintRomHeader()

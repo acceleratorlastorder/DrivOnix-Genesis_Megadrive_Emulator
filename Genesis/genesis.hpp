@@ -34,9 +34,12 @@ class Genesis
 public:
 	Genesis();
 	static void Init();
+	static void SetRegionToPAL(bool pal);
+	static void ResetM68kMemory();
 	static void AllocM68kMemory();
 	static void InsertCartridge();
 	static void Run();
+	static void Bios(byte country);
 	static void FileBrowser();
 	static char* GetRomName();
 	static byte M68KReadMemoryBYTE(dword address);
@@ -54,6 +57,8 @@ private:
 	unsigned int FPS;
 
 	bool powerOff;
+
+	bool isPAL;
 
 	std::vector<byte> M68kMemory;
 

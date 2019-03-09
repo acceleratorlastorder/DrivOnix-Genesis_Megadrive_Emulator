@@ -2,7 +2,7 @@
 
 Genesis::Genesis()
 {
-
+	this->isPAL = false;
 }
 
 void Genesis::Init()
@@ -20,7 +20,20 @@ void Genesis::Init()
 	get().M68kMemory[0xA1001D] = 0x00;
 	get().M68kMemory[0xA1001F] = 0x00;
 
-	get().FPS = 60;
+	get().FPS = get().isPAL ? 50 : 60;
+}
+
+void Genesis::SetRegionToPAL(bool pal)
+{
+	get().isPAL = pal;
+}
+
+void Genesis::ResetM68kMemory()
+{
+	for(int i = 0; i < M68K_MEM_SIZE; ++i)
+	{
+		get().M68kMemory[i] = 0x00;
+	}
 }
 
 void Genesis::AllocM68kMemory()
@@ -30,9 +43,50 @@ void Genesis::AllocM68kMemory()
 
 void Genesis::InsertCartridge()
 {
-	get().AllocM68kMemory();
-
 	RomLoader::PageMemory(0, 0x400000, 0, get().M68kMemory);
+}
+
+void Genesis::Bios(byte country)
+{
+	sfClock* clock;
+    clock = sfClock_create();
+
+    sfEvent event;
+
+	const double VdpUpdateInterval = 1000/get().FPS;
+
+    double lastFrameTime = 0;
+    
+    get().powerOff = 0;
+
+    while(sfRenderWindow_isOpen(CRT::GetWindow()) && !get().powerOff) //emu loop
+    {
+        while(sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
+        {
+      		if (event.type == sfEvtClosed)
+      		{
+          		sfRenderWindow_close(CRT::GetWindow());
+      		}
+
+      		get().powerOff = GamePad::Update(event);
+    	}
+
+    	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
+
+    	if((lastFrameTime + VdpUpdateInterval) <= currentTime)
+    	{
+      		lastFrameTime = currentTime;
+      			
+      		get().Update();
+      		Genesis::M68KWriteMemoryBYTE(0xFF00FE, country);
+      		CRT::Render();
+    	}
+
+    	if(Genesis::M68KReadMemoryLONG(0xFF00FF) == 0xCAFE) //magic number
+    	{
+    		break;
+    	}
+  	}
 }
 
 void Genesis::Run()
@@ -79,7 +133,7 @@ void Genesis::Update()
 	//INIT_TIMER
 	//START_TIMER
 	int cycleThisUpdate = 0;
-	int cycleThisFrame = M68K_NTSC_CYCLES_PER_SECOND / get().FPS;
+	int cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
 
 	while(cycleThisUpdate < cycleThisFrame)
 	{
@@ -164,7 +218,7 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 		else if(address == 0xA10007)
 		{
 			//Expansion port data
-			return 0x7F;
+			return 0x0;
 		}
 		else if(address == 0xA10009)
 		{
@@ -179,7 +233,7 @@ byte Genesis::M68KReadMemoryBYTE(dword address)
 		else if(address == 0xA1000D)
 		{
 			//Expansion port data
-			return 0x7F;
+			return 0x0;
 		}
 		else
 		{
@@ -381,7 +435,7 @@ word Genesis::M68KReadMemoryWORD(dword address)
 		else if(address == 0xA10007)
 		{
 			//Expansion port data
-			return 0x7F;
+			return 0x0;
 		}
 		else if(address == 0xA10009)
 		{
@@ -396,7 +450,7 @@ word Genesis::M68KReadMemoryWORD(dword address)
 		else if(address == 0xA1000D)
 		{
 			//Expansion port data
-			return 0x7F;
+			return 0x0;
 		}
 		else
 		{

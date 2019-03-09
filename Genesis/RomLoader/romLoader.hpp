@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "../../Bits/bitsUtils.hpp"
+#include "../genesis.hpp"
 
 #define SMD_HEADER_SIZE 512
 #define SMD_BLOCK_SIZE 16384
@@ -35,8 +36,10 @@ class RomLoader
 {
 public:
 	RomLoader();
+	static void Init();
 	static void LoadRomFile(std::string romName);
 	static void PrintRomHeader();
+	static byte GetCountry();
 	static byte GetVersion();
 	static void PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest);
 
