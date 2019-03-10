@@ -54,6 +54,7 @@ void Genesis::Bios(byte country)
     sfEvent event;
 
 	const double VdpUpdateInterval = 1000/get().FPS;
+	get().cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
 
     double lastFrameTime = 0;
     
@@ -99,6 +100,8 @@ void Genesis::Run()
 
 	const double VdpUpdateInterval = 1000/get().FPS;
 
+	get().cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
+
     double lastFrameTime = 0;
     
     get().powerOff = 0;
@@ -133,9 +136,8 @@ void Genesis::Update()
 	//INIT_TIMER
 	//START_TIMER
 	int cycleThisUpdate = 0;
-	int cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
 
-	while(cycleThisUpdate < cycleThisFrame)
+	while(cycleThisUpdate < get().cycleThisFrame)
 	{
 		int CPUcycles = M68k::Update();
 

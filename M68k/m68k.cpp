@@ -109363,8 +109363,8 @@ bool M68k::IsOpcode(word opcode, std::string mask)
 void M68k::ExecuteOpcode(word opcode)
 {
 
-	get().SetUnitTestsMode();
-	/*dword PCDebug = get().programCounter - 2;
+	/*get().SetUnitTestsMode();
+	dword PCDebug = get().programCounter - 2;
 	std::cout << "ProgramCounter 0x" << std::hex << PCDebug << std::endl;
 	std::cout << "\t 0x" << std::hex << opcode << std::endl;
 

@@ -1,4 +1,4 @@
-ScreenSize=2;
+ScreenSize=1;
 
 // Value description //
 

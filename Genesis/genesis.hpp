@@ -55,6 +55,7 @@ private:
 	char romName[2048];
 
 	unsigned int FPS;
+	int cycleThisFrame;
 
 	bool powerOff;
 
