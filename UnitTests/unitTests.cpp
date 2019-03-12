@@ -957,6 +957,8 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+<<<<<<< HEAD
+=======
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -979,6 +981,36 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+>>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
+
+
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+
+
+		std::cout << "End Test_" << testName << "()" << std::endl;
+		return testResult;
+	}
+<<<<<<< HEAD
+	bool Test_LSL_LSR_TO_REGISTER()
+	{
+		const std::string testName = "Test_LSL_LSR_TO_REGISTER";
+=======
+	bool Test_LSL_LSR_TO_MEMORY()
+	{
+		const std::string testName = "Test_LSL_LSR_TO_MEMORY";
+>>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
+
+		std::cout << "Start Test_" << testName << "()" << std::endl;
+		bool testResult = true;
+
+		CPU_STATE_DEBUG state;
+		M68k::SetCpuState(state);
+
+		word opcode = 0x4816;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+<<<<<<< HEAD
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1001,6 +1033,8 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+=======
+>>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1532,8 +1566,13 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
+<<<<<<< HEAD
 		word opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
 		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+=======
+		word opcode = 0x4816;
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+>>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -2149,6 +2188,7 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
 
+	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
 
 	/**
 	 * END
