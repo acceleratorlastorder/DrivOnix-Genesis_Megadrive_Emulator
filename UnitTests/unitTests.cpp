@@ -1915,7 +1915,7 @@ bool Test_ADD()
 	}
 	bool Test_UNLK()
 	{
-		const std::string testName = "NBCD";
+		const std::string testName = "UNLK";
 
 		std::cout << "Start Test_" << testName << "()" << std::endl;
 		bool testResult = true;
@@ -1936,7 +1936,6 @@ bool Test_ADD()
 		return testResult;
 	}
 
-
 	bool Test_NBCD()
 	{
 		/*	EMPTY SIGNATURE
@@ -1950,12 +1949,15 @@ bool Test_ADD()
 
 		CPU_STATE_DEBUG state;
 
-		dword value_1 = 0x3;
-		dword value_2 = 0x6;
+		word opcode;
+		dword result;
+		dword value_1 = 0x8;
+		dword expectedResult = 0x92;
 
-		state.registerData[7] = value_1;
+		state.CCR = 0x0000;
+
 		state.registerAddress[6] = 0xE00000;
-		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_2);
+		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_1);
 
 		M68k::SetCpuState(state);
 		/*	USED OPCODE
@@ -1963,7 +1965,41 @@ bool Test_ADD()
 		 *  binary: 0100100000010110
 		 *  hex: 0x4806
 		 */
-		word opcode = 0x4816;
+		opcode = 0x4816;
+
+		//execute the opcode
+		M68k::ExecuteOpcode(opcode);
+		state = M68k::GetCpuState();
+
+		result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
+
+		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+
+		if(result == expectedResult && TestFlag(state.CCR, 1, 0, 0, 0, 1))
+		{
+			std::cout << "\t\tTest NBCD Operation with X Unset Passed" << std::endl;
+		}
+		else
+		{
+			testResult = false;
+			std::cout << "\t\tTest NBCD Operation with X Unset Failed" << std::endl;
+			if(!TestFlag(state.CCR, 1, 0, 0, 0, 1)){
+				std::cout << "\t\tflag test failed !" << std::endl;
+			}
+			if (result != expectedResult) {
+				std::cout << "\t\toperation result is false result: " << std::uppercase << std::hex << result << " should be: " << std::uppercase << std::hex << expectedResult << std::endl;
+			}
+		}
+
+		expectedResult = 0x91;
+		//Test BCD Operation with X Set
+		state.CCR = 0x0000;
+		BitSet(state.CCR, X_FLAG);
+		state.registerAddress[6] = 0xE00000;
+		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_1);
+
+		M68k::SetCpuState(state);
 
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
 
@@ -1971,46 +2007,29 @@ bool Test_ADD()
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
 
-		dword result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
+		result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
 
-		if(state.registerData[6] == (value_2 - value_1))
+		if(result == 0x91 && TestFlag(state.CCR, 1, 0, 0, 0, 1))
 		{
-			std::cout << "\t\tTest BCD Operation with X Reset Passed" << std::endl;
+			std::cout << "\t\tTest NBCD Operation with X Set Passed" << std::endl;
 		}
 		else
 		{
-			std::cout << "\t\tTest BCD Operation with X Reset Failed" << std::endl;
 			testResult = false;
-		}
-
-		//Test BCD Operation with X Set
-		state.CCR = 0x0000;
-		BitSet(state.CCR, X_FLAG);
-		state.registerData[4] = 0x4;
-		state.registerData[6] = 0x9;
-
-		M68k::SetCpuState(state);
-
-		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-		M68k::ExecuteOpcode(opcode);
-
-		state = M68k::GetCpuState();
-
-		if(state.registerData[6] == 0x14)
-		{
-			std::cout << "\t\tTest BCD Operation with X Set Passed" << std::endl;
-		}
-		else
-		{
-			std::cout << "\t\tTest BCD Operation with X Set Failed" << std::endl;
-			testResult = false;
+			std::cout << "\t\tTest NBCD Operation with X Set Failed" << std::endl;
+			if(!TestFlag(state.CCR, 1, 0, 0, 0, 1)){
+				std::cout << "\t\tflag test failed !" << std::endl;
+			}
+			if (result != expectedResult) {
+				std::cout << "\t\toperation result is false result: " << std::uppercase << std::hex << result << " should be: " << std::uppercase << std::hex << expectedResult << std::endl;
+			}
 		}
 
 		//Test C_FLAG and X_FLAG
 		state.CCR = 0x0000;
-		state.registerData[4] = 0x99;
-		state.registerData[6] = 0x1;
+		BitSet(state.CCR, X_FLAG);
+		value_1 = 0x99;
+		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_1);
 
 		M68k::SetCpuState(state);
 
@@ -2019,40 +2038,18 @@ bool Test_ADD()
 		M68k::ExecuteOpcode(opcode);
 
 		state = M68k::GetCpuState();
+		result = Genesis::M68KReadMemoryBYTE(state.registerAddress[6]);
 
-		//et on test
-		if(TestFlag(state.CCR, 1, 0, 0, 0, 1))
+		std::cout << "\t\tvalue_1 0x" << std::uppercase << std::hex << value_1 << std::endl;
+		std::cout << "\t\tresult  0x" << std::uppercase << std::hex << result << std::endl;
+
+		if(result == 0x99 && TestFlag(state.CCR, 1, 0, 0, 0, 1))
 		{
 			std::cout << "\t\tTest C_FLAG and X_FLAG Passed" << std::endl;
 		}
 		else
 		{
 			std::cout << "\t\tTest C_FLAG and X_FLAG Failed" << std::endl;
-			testResult = false;
-		}
-
-		//Test Z_FLAG
-		state.CCR = 0x0000;
-		BitSet(state.CCR, Z_FLAG);
-		state.registerData[4] = 0x2;
-		state.registerData[6] = 0x1;
-
-		M68k::SetCpuState(state);
-
-		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-		M68k::ExecuteOpcode(opcode);
-
-		state = M68k::GetCpuState();
-
-		//et on test
-		if(TestFlag(state.CCR, 0, 0, 0, 0, 0))
-		{
-			std::cout << "\t\tTest Z_FLAG Passed" << std::endl;
-		}
-		else
-		{
-			std::cout << "\t\tTest Z_FLAG Failed" << std::endl;
 			testResult = false;
 		}
 
@@ -2078,8 +2075,6 @@ int main()
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ABCD", Test_ABCD()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADD", Test_ADD()));
-	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
-	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
 
 	TestResults.insert(std::pair<std::string, bool>("Test_ADDA", Test_ADDA()));
 	TestResults.insert(std::pair<std::string, bool>("Test_ADDI", Test_ADDI()));
@@ -2151,6 +2146,8 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_TRAPV", Test_TRAPV()));
 	TestResults.insert(std::pair<std::string, bool>("Test_TST", Test_TST()));
 
+	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
+	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
 
 
 	/**
