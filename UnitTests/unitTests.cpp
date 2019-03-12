@@ -957,8 +957,6 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-<<<<<<< HEAD
-=======
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -981,36 +979,6 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
->>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
-
-
-		M68k::ExecuteOpcode(opcode);
-		state = M68k::GetCpuState();
-
-
-
-		std::cout << "End Test_" << testName << "()" << std::endl;
-		return testResult;
-	}
-<<<<<<< HEAD
-	bool Test_LSL_LSR_TO_REGISTER()
-	{
-		const std::string testName = "Test_LSL_LSR_TO_REGISTER";
-=======
-	bool Test_LSL_LSR_TO_MEMORY()
-	{
-		const std::string testName = "Test_LSL_LSR_TO_MEMORY";
->>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
-
-		std::cout << "Start Test_" << testName << "()" << std::endl;
-		bool testResult = true;
-
-		CPU_STATE_DEBUG state;
-		M68k::SetCpuState(state);
-
-		word opcode = 0x4816;
-		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-<<<<<<< HEAD
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1033,8 +1001,6 @@ bool Test_ADD()
 
 		word opcode = 0x4816;
 		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-=======
->>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
 
 
 		M68k::ExecuteOpcode(opcode);
@@ -1566,13 +1532,8 @@ bool Test_ADD()
 
 		M68k::SetCpuState(state);
 
-<<<<<<< HEAD
 		word opcode = 0x8702; //dest = d3 > src = d2 > rm = 0
 		std::cout << "\t\texecute\n" << testName << " with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-=======
-		word opcode = 0x4816;
-		std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
->>>>>>> 7117df50bdc79b657cde8d7fc24f27f3eadb8aa4
 
 		M68k::ExecuteOpcode(opcode);
 		state = M68k::GetCpuState();
@@ -2068,6 +2029,7 @@ bool Test_ADD()
 		state.CCR = 0x0000;
 		BitSet(state.CCR, X_FLAG);
 		value_1 = 0x99;
+		expectedResult = 0x0;
 		Genesis::M68KWriteMemoryBYTE(state.registerAddress[6], value_1);
 
 		M68k::SetCpuState(state);
@@ -2082,14 +2044,20 @@ bool Test_ADD()
 		std::cout << "\t\tvalue_1 0x" << std::uppercase << std::hex << value_1 << std::endl;
 		std::cout << "\t\tresult  0x" << std::uppercase << std::hex << result << std::endl;
 
-		if(result == 0x99 && TestFlag(state.CCR, 1, 0, 0, 0, 1))
+		if(result == expectedResult && TestFlag(state.CCR, 1, 0, 0, 0, 1))
 		{
-			std::cout << "\t\tTest C_FLAG and X_FLAG Passed" << std::endl;
+			std::cout << "\t\tTest 0x99 with X flag set Passed !" << std::endl;
 		}
 		else
 		{
-			std::cout << "\t\tTest C_FLAG and X_FLAG Failed" << std::endl;
+			std::cout << "\t\tTest 0x99 with X flag set Failed !" << std::endl;
 			testResult = false;
+			if(!TestFlag(state.CCR, 1, 0, 0, 0, 1)){
+				std::cout << "\t\tflag test failed !" << std::endl;
+			}
+			if (result != expectedResult) {
+				std::cout << "\t\toperation result is false result: 0x" << std::uppercase << std::hex << result << " should be: 0x" << std::uppercase << std::hex << expectedResult << std::endl;
+			}
 		}
 
 		//indique la fin du test
@@ -2104,7 +2072,6 @@ bool Test_ADD()
 int main()
 {
 	std::map<std::string, bool> TestResults;
-
 
 	M68k::SetUnitTestsMode();
 
@@ -2186,8 +2153,6 @@ int main()
 	TestResults.insert(std::pair<std::string, bool>("Test_TST", Test_TST()));
 
 	TestResults.insert(std::pair<std::string, bool>("Test_SBCD", Test_SBCD()));
-	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
-
 	TestResults.insert(std::pair<std::string, bool>("Test_NBCD", Test_NBCD()));
 
 	/**
