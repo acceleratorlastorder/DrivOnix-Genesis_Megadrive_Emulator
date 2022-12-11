@@ -110360,7 +110360,6 @@ void M68k::OpcodeADD(word opcode)
 			case BYTE:
 			{
 				signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
-
 				if(eggman > INT8_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -110375,7 +110374,6 @@ void M68k::OpcodeADD(word opcode)
 			case WORD:
 			{
 				signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
-
 				if(eggman > INT16_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -110390,7 +110388,6 @@ void M68k::OpcodeADD(word opcode)
 			case LONG:
 			{
 				int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
-
 				if(eggman > INT32_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -110561,8 +110558,7 @@ void M68k::OpcodeADD(word opcode)
 		{
 			case BYTE:
 			{
-				signed_word eggman = (signed_byte)dest.operand + (signed_byte)src.operand;
-
+				signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
 				if(eggman > INT8_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -110576,8 +110572,7 @@ void M68k::OpcodeADD(word opcode)
 
 			case WORD:
 			{
-				signed_dword eggman = (signed_word)dest.operand + (signed_word)src.operand;
-
+				signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
 				if(eggman > INT16_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -110591,8 +110586,7 @@ void M68k::OpcodeADD(word opcode)
 
 			case LONG:
 			{
-				int64_t eggman = (signed_dword)dest.operand + (signed_dword)src.operand;
-
+				int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
 				if(eggman > INT32_MAX)
 				{
 					BitSet(get().CCR, V_FLAG);
@@ -114207,20 +114201,17 @@ void M68k::OpcodeNBCD(word opcode)
 
 	dest += xflag;
 
-	//BCD OVERFLOW CORRECTION
-	if((dest & 0xF) > 9)
+	word result = 0x9A - dest;
+
+	result = result & 0xFF;
+
+	if ((result & 0x0F) == 0xA)
 	{
-		dest -= 0x6;
+			result = (result & 0xF0) + 0x10;
 	}
 
-	if((dest >> 4) > 9)
+	if(result != 0x9A)
 	{
-		dest -= 0x60;
-	}
-
-	if(dest != 0)
-	{
-		dest--;
 		BitSet(get().CCR, C_FLAG);
 		BitSet(get().CCR, X_FLAG);
 	}
@@ -114230,11 +114221,9 @@ void M68k::OpcodeNBCD(word opcode)
 		BitReset(get().CCR, X_FLAG);
 	}
 
-	word result = 0x99 - dest;
-
 	EA_DATA set = SetEAOperand(type, eaReg, (byte)result, BYTE, 0);
 
-	if((result & 0xFF) != 0)
+	if((result & 0xFF) != 0x9A)
 	{
 		BitReset(get().CCR, Z_FLAG);
 	}
