@@ -78,7 +78,7 @@ Actually not working
 ## Resources
 Resources were used to understand and test the Genesis hardware. Some of these include:
 * <https://github.com/Emu-Docs/Emu-Docs/tree/master/Genesis>
-* <https://www.nxp.com/files-static/archives/doc/ref_manual/M68000PRM.pdf>
+* <https://www.nxp.com/docs/en/reference-manual/M68000PRM.pdf>
 * <https://wiki.megadrive.org/index.php?title=Main_68k_memory_map>
 * <https://wiki.megadrive.org/index.php?title=VDP_Ports>
 * <https://wiki.megadrive.org/index.php?title=IO_Registers>
