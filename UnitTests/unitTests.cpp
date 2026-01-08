@@ -26,7 +26,7 @@ bool Test_ABCD() {
     const std::string testName = "ABCD";
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
 
     //Test BCD Operation with X Reset
     state.CCR = 0x0000;
@@ -126,7 +126,7 @@ bool Test_ADD() {
     //Indique le debut du test
     std::cout << "Start Test_ADD()" << std::endl;
     const std::string testName = "ADD";
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     bool testResult = true;
     //Test NZVC_FLAG
     state.CCR = 0x0000;
@@ -231,7 +231,7 @@ bool Test_ADDA() {
     const std::string testName = "ADDA";
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
 
     //Test ADDA with destination register D0 and source register D1
     state.CCR = 0x0000;
@@ -407,7 +407,7 @@ bool Test_ADDI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     /*	USED OPCODE
@@ -434,7 +434,7 @@ bool Test_ADDQ() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     /*	USED OPCODE
@@ -457,7 +457,7 @@ bool Test_ADDX() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xD101;
@@ -475,7 +475,7 @@ bool Test_AND() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xC001;
@@ -493,7 +493,7 @@ bool Test_ANDI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x201;
@@ -505,13 +505,74 @@ bool Test_ANDI() {
     std::cout << "End Test_" << testName << "()" << std::endl;
     return testResult;
 }
+bool Test_ANDI_TO_CCR() {
+    const std::string testName = "ANDI_TO_CCR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x000F;
+    state.programCounter = 0xE00000;
+    Genesis::M68KWriteMemoryWORD(state.programCounter, 0x0005);
+
+    M68k::SetCpuState(state);
+
+    word opcode = 0x023C;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.CCR == 0x0005) {
+        std::cout << "\t\tTest ANDI_TO_CCR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest ANDI_TO_CCR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_ANDI_TO_SR() {
+    const std::string testName = "ANDI_TO_SR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    M68k::Init();
+    M68k::SetUnitTestsMode();
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x270F;
+    state.programCounter = 0xE00000;
+    Genesis::M68KWriteMemoryWORD(state.programCounter, 0x0F0F);
+
+    M68k::SetCpuState(state);
+
+    word opcode = 0x027C;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.CCR == 0x070F) {
+        std::cout << "\t\tTest ANDI_TO_SR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest ANDI_TO_SR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
 bool Test_ASL_ASR_TO_MEMORY() {
     const std::string testName = "Test_ASL_ASR_TO_MEMORY";
 
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xE4A6;
@@ -529,7 +590,7 @@ bool Test_ASL_ASR_TO_REGISTER() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xE4A6;
@@ -547,7 +608,7 @@ bool Test_Bcc() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -565,7 +626,7 @@ bool Test_BCHG() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x554;
@@ -583,7 +644,7 @@ bool Test_BCLR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x581;
@@ -601,7 +662,7 @@ bool Test_BRA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -811,6 +872,33 @@ bool Test_DIVS() {
     std::cout << "End Test_" << testName << "()" << std::endl;
     return testResult;
 }
+bool Test_DIVU() {
+    const std::string testName = "DIVU";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    CPU_STATE_DEBUG state = {};
+    state.registerData[0] = 0x4;
+    state.registerData[1] = 0x10;
+    M68k::SetCpuState(state);
+
+    word opcode = 0x82C0;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.registerData[1] == 0x00000004) {
+        std::cout << "\t\tTest DIVU Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest DIVU Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
 bool Test_EOR() {
     const std::string testName = "EOR";
 
@@ -843,6 +931,67 @@ bool Test_EORI() {
 
     M68k::ExecuteOpcode(opcode);
     state = M68k::GetCpuState();
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_EORI_TO_CCR() {
+    const std::string testName = "EORI_TO_CCR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x0005;
+    state.programCounter = 0xE00000;
+    Genesis::M68KWriteMemoryWORD(state.programCounter, 0x000A);
+
+    M68k::SetCpuState(state);
+
+    word opcode = 0x0A3C;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.CCR == 0x000F) {
+        std::cout << "\t\tTest EORI_TO_CCR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest EORI_TO_CCR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_EORI_TO_SR() {
+    const std::string testName = "EORI_TO_SR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    M68k::Init();
+    M68k::SetUnitTestsMode();
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x2705;
+    state.programCounter = 0xE00000;
+    Genesis::M68KWriteMemoryWORD(state.programCounter, 0x00FF);
+
+    M68k::SetCpuState(state);
+
+    word opcode = 0x0A7C;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.CCR == (0x2705 ^ 0x00FF)) {
+        std::cout << "\t\tTest EORI_TO_SR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest EORI_TO_SR Failed" << std::endl;
+    }
 
     std::cout << "End Test_" << testName << "()" << std::endl;
     return testResult;
@@ -1027,6 +1176,113 @@ bool Test_MOVE() {
     std::cout << "End Test_" << testName << "()" << std::endl;
     return testResult;
 }
+bool Test_MOVE_TO_CCR() {
+    const std::string testName = "MOVE_TO_CCR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    CPU_STATE_DEBUG state = {};
+    state.registerData[0] = 0x1F;
+    M68k::SetCpuState(state);
+
+    word opcode = 0x44C0;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if ((state.CCR & 0x001F) == 0x001F) {
+        std::cout << "\t\tTest MOVE_TO_CCR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest MOVE_TO_CCR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_MOVE_FROM_SR() {
+    const std::string testName = "MOVE_FROM_SR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    M68k::Init();
+    M68k::SetUnitTestsMode();
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x2705;
+    M68k::SetCpuState(state);
+
+    word opcode = 0x40C0;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if ((state.registerData[0] & 0xFFFF) == 0x2705) {
+        std::cout << "\t\tTest MOVE_FROM_SR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest MOVE_FROM_SR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_MOVE_TO_SR() {
+    const std::string testName = "MOVE_TO_SR";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    M68k::Init();
+    M68k::SetUnitTestsMode();
+
+    CPU_STATE_DEBUG state = {};
+    state.CCR = 0x2700;
+    state.registerData[0] = 0x2705;
+    M68k::SetCpuState(state);
+
+    word opcode = 0x46C0;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.CCR == 0x2705) {
+        std::cout << "\t\tTest MOVE_TO_SR Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest MOVE_TO_SR Failed" << std::endl;
+    }
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_MOVE_USP() {
+    const std::string testName = "MOVE_USP";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    M68k::Init();
+    M68k::SetUnitTestsMode();
+
+    CPU_STATE_DEBUG state = {};
+    state.registerAddress[0] = 0x12345678;
+    M68k::SetCpuState(state);
+
+    word opcode = 0x4E60;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
 bool Test_MOVEA() {
     const std::string testName = "MOVEA";
 
@@ -1113,6 +1369,33 @@ bool Test_MULS() {
 
     M68k::ExecuteOpcode(opcode);
     state = M68k::GetCpuState();
+
+    std::cout << "End Test_" << testName << "()" << std::endl;
+    return testResult;
+}
+bool Test_MULU() {
+    const std::string testName = "MULU";
+
+    std::cout << "Start Test_" << testName << "()" << std::endl;
+    bool testResult = true;
+
+    CPU_STATE_DEBUG state = {};
+    state.registerData[0] = 0x4;
+    state.registerData[1] = 0x3;
+    M68k::SetCpuState(state);
+
+    word opcode = 0xC2C0;
+    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
+
+    M68k::ExecuteOpcode(opcode);
+    state = M68k::GetCpuState();
+
+    if (state.registerData[1] == 0x0000000C) {
+        std::cout << "\t\tTest MULU Passed" << std::endl;
+    } else {
+        testResult = false;
+        std::cout << "\t\tTest MULU Failed" << std::endl;
+    }
 
     std::cout << "End Test_" << testName << "()" << std::endl;
     return testResult;
@@ -1907,6 +2190,8 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_ADDX", Test_ADDX()));
     TestResults.insert(std::pair < std::string, bool > ("Test_AND", Test_AND()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ANDI", Test_ANDI()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_CCR", Test_ANDI_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_SR", Test_ANDI_TO_SR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_MEMORY", Test_ASL_ASR_TO_MEMORY()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_REGISTER", Test_ASL_ASR_TO_REGISTER()));
     TestResults.insert(std::pair < std::string, bool > ("Test_Bcc", Test_Bcc()));
@@ -1924,8 +2209,11 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_CMPM", Test_CMPM()));
     TestResults.insert(std::pair < std::string, bool > ("Test_DBcc", Test_DBcc()));
     TestResults.insert(std::pair < std::string, bool > ("Test_DIVS", Test_DIVS()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_DIVU", Test_DIVU()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EOR", Test_EOR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EORI", Test_EORI()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_CCR", Test_EORI_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_SR", Test_EORI_TO_SR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EXG", Test_EXG()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EXT", Test_EXT()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ILLEGAL", Test_ILLEGAL()));
@@ -1936,11 +2224,16 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_MEMORY", Test_LSL_LSR_TO_MEMORY()));
     TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_REGISTER", Test_LSL_LSR_TO_REGISTER()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVE", Test_MOVE()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_CCR", Test_MOVE_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_FROM_SR", Test_MOVE_FROM_SR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_SR", Test_MOVE_TO_SR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_USP", Test_MOVE_USP()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEA", Test_MOVEA()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEM", Test_MOVEM()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEP", Test_MOVEP()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEQ", Test_MOVEQ()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MULS", Test_MULS()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MULU", Test_MULU()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NEG", Test_NEG()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NEGX", Test_NEGX()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NOP", Test_NOP()));
