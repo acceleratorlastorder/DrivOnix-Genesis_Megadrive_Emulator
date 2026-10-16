@@ -4,10 +4,8 @@
 #include <iostream>
 #include <map>
 #include <string>
-#include <windows.h>
 
 #include "../Bits/bitsUtils.hpp"
-#include "../Genesis/genesis.hpp"
 
 #define C_FLAG 0
 #define V_FLAG 1
@@ -242,7 +240,6 @@ private:
 	//--------------------------
 	//Start CPU Unit Test
 	bool unitTests;
-	CPU_STATE_DEBUG cpuStateDebug;
 	//End CPU Unit Test
 	//--------------------------
 	//Start CPU clicks

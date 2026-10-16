@@ -4,3 +4,4 @@
 *.smd
 *.gen
 output.txt
+/build/

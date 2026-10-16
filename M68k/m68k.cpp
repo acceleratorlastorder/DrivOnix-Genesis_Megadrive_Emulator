@@ -1,5 +1,17 @@
 #include "m68k.hpp"
 
+#ifdef DRIVONIX_CPU_TESTS
+#include "../UnitTests/cpuTestMemory.hpp"
+#else
+#include "../Genesis/genesis.hpp"
+#endif
+
+namespace
+{
+	const word statusRegisterMask = 0xA71F; // Implemented MC68000 SR bits.
+	const word conditionCodeMask = 0x001F;
+}
+
 M68k::M68k()
 {
 	this->firstInit = true;
@@ -99,22 +111,30 @@ void M68k::ClicksMoveInit()
 
 void M68k::SetCpuState(CPU_STATE_DEBUG cpuState)
 {
-	get().cpuStateDebug = cpuState;
-
-	get().programCounter = get().cpuStateDebug.programCounter;
-	get().CCR = get().cpuStateDebug.CCR;
-	get().stop = get().cpuStateDebug.stop;
+	get().programCounter = cpuState.programCounter;
+	get().CCR = cpuState.CCR;
+	get().stop = cpuState.stop;
+	get().superVisorModeActivated = TestBit(cpuState.CCR, 13);
 
 	for(int i = 0; i < 8; ++i)
 	{
-		get().registerData[i] = get().cpuStateDebug.registerData[i];
-		get().registerAddress[i] = get().cpuStateDebug.registerAddress[i];
+		get().registerData[i] = cpuState.registerData[i];
+		get().registerAddress[i] = cpuState.registerAddress[i];
 	}
 }
 
 CPU_STATE_DEBUG M68k::GetCpuState()
 {
-	return get().cpuStateDebug;
+	CPU_STATE_DEBUG state = {};
+	state.programCounter = get().programCounter;
+	state.CCR = get().CCR;
+	state.stop = get().stop;
+	for(int i = 0; i < 8; ++i)
+	{
+		state.registerData[i] = get().registerData[i];
+		state.registerAddress[i] = get().registerAddress[i];
+	}
+	return state;
 }
 
 void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
@@ -110211,19 +110231,6 @@ void M68k::ExecuteOpcode(word opcode)
 		get().OpcodeLEA(opcode);
 	}
 
-	//copy state for unit test
-	if(get().unitTests)
-	{
-		get().cpuStateDebug.programCounter = get().programCounter;
-		get().cpuStateDebug.CCR = get().CCR;
-		get().cpuStateDebug.stop = get().stop;
-
-		for(int i = 0; i < 8; ++i)
-		{
-			get().cpuStateDebug.registerData[i] = get().registerData[i];
-			get().cpuStateDebug.registerAddress[i] = get().registerAddress[i];
-		}
-	}
 }
 
 void M68k::OpcodeABCD(word opcode)
@@ -111527,7 +111534,7 @@ void M68k::OpcodeANDI_To_SR()
 
 		get().programCounter += 2;
 
-		get().CCR &= imm;
+		get().CCR = (get().CCR & imm) & statusRegisterMask;
 
 		get().opcodeClicks += 20;
 	}
@@ -111588,9 +111595,14 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 
 	signed_dword result = 0;
 
-	if(dr) //ShiftLeft
+	if(shiftCount == 0)
 	{
-		bool bitSet = TestBit(toShift, numBits - shiftCount);
+		result = toShift;
+		BitReset(get().CCR, C_FLAG);
+	}
+	else if(dr) //ShiftLeft
+	{
+		bool bitSet = shiftCount != 0 && TestBit(toShift, numBits - shiftCount);
 
 		if(shiftCount == 0)
 		{
@@ -111627,7 +111639,7 @@ void M68k::OpcodeASL_ASR_Register(word opcode)
 	}
 	else //ShiftRight
 	{
-		bool bitSet = TestBit(toShift, shiftCount - 1);
+		bool bitSet = shiftCount != 0 && TestBit(toShift, shiftCount - 1);
 
 		if(shiftCount == 0)
 		{
@@ -112806,7 +112818,7 @@ void M68k::OpcodeDIVU(word opcode)
 
 	bool overflow = false;
 	dword div = unsignedReg / (word)src.operand;
-	if(div > 0x7FFF)
+	if(div > 0xFFFF)
 	{
 		overflow = true;
 	}
@@ -112819,6 +112831,8 @@ void M68k::OpcodeDIVU(word opcode)
 	{
 		BitReset(get().CCR, V_FLAG);
 	}
+
+	BitReset(get().CCR, C_FLAG);
 
 	if(!overflow)
 	{
@@ -113045,7 +113059,7 @@ void M68k::OpcodeEORI_To_CCR()
 	loCCR ^= loImm;
 
 	get().CCR &= 0xFF00;
-	get().CCR |= loCCR;
+	get().CCR |= loCCR & conditionCodeMask;
 
 	get().opcodeClicks += 20;
 }
@@ -113058,7 +113072,7 @@ void M68k::OpcodeEORI_To_SR()
 
 		get().programCounter += 2;
 
-		get().CCR ^= imm;
+		get().CCR = (get().CCR ^ imm) & statusRegisterMask;
 
 		get().opcodeClicks += 20;
 	}
@@ -113682,7 +113696,7 @@ void M68k::OpcodeMOVE_To_CCR(word opcode)
 	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
 
 	get().CCR &= 0xFF00;
-	get().CCR |= (byte)src.operand;
+	get().CCR |= src.operand & conditionCodeMask;
 
 	get().programCounter += src.PCadvance;
 
@@ -113701,7 +113715,7 @@ void M68k::OpcodeMOVE_To_SR(word opcode)
 	{
 		EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
 
-		get().CCR = (word)src.operand;
+		get().CCR = src.operand & statusRegisterMask;
 
 		get().programCounter += src.PCadvance;
 
@@ -113723,19 +113737,12 @@ void M68k::OpcodeMOVE_From_SR(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	if(get().superVisorModeActivated)
-	{
-		EA_DATA src = get().SetEAOperand(type, eaReg, get().CCR, WORD, 0);
-		get().programCounter += src.PCadvance;
+	// This instruction is unprivileged on the MC68000 used by the Genesis.
+	EA_DATA src = get().SetEAOperand(type, eaReg, get().CCR & statusRegisterMask, WORD, 0);
+	get().programCounter += src.PCadvance;
 
-		get().opcodeClicks += (type == EA_DATA_REG) ? 6 : 8;
-		get().opcodeClicks += src.cycles;
-	}
-	else
-	{
-		get().RequestInt(M68k::INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-		get().opcodeClicks += 34;
-	}
+	get().opcodeClicks += (type == EA_DATA_REG) ? 6 : 8;
+	get().opcodeClicks += src.cycles;
 }
 
 void M68k::OpcodeMOVE_USP(word opcode)
@@ -114153,8 +114160,8 @@ void M68k::OpcodeMULU(word opcode)
 
 	EA_DATA data = get().GetEAOperand(type, eaReg, WORD, false, 0);
 	data.operand = (word)data.operand;
-	signed_word dataReg = (word)get().registerData[reg];
-	signed_dword result = (word)dataReg * (word)data.operand;
+	dword dataReg = (word)get().registerData[reg];
+	dword result = dataReg * (dword)data.operand;
 	get().registerData[reg] = result;
 	get().programCounter += data.PCadvance;
 
@@ -114165,7 +114172,6 @@ void M68k::OpcodeMULU(word opcode)
 	BitReset(get().CCR, V_FLAG);
 
 	dword vectorman = result;
-	vectorman &= 0xFFFF;
 
 	//Z_FLAG
 	if((vectorman) == 0)
@@ -114178,7 +114184,7 @@ void M68k::OpcodeMULU(word opcode)
 	}
 
 	//N_FLAG
-	if(TestBit(vectorman, 15))
+	if(TestBit(vectorman, 31))
 	{
 		BitSet(get().CCR, N_FLAG);
 	}
