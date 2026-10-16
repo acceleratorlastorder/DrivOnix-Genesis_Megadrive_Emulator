@@ -38,7 +38,7 @@ void Genesis::ResetM68kMemory()
 
 void Genesis::AllocM68kMemory()
 {
-	get().M68kMemory.reserve(M68K_MEM_SIZE);
+	get().M68kMemory.resize(M68K_MEM_SIZE);
 }
 
 void Genesis::InsertCartridge()

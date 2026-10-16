@@ -26,7 +26,7 @@ bool Test_ABCD() {
     const std::string testName = "ABCD";
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
 
     //Test BCD Operation with X Reset
     state.CCR = 0x0000;
@@ -126,7 +126,7 @@ bool Test_ADD() {
     //Indique le debut du test
     std::cout << "Start Test_ADD()" << std::endl;
     const std::string testName = "ADD";
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     bool testResult = true;
     //Test NZVC_FLAG
     state.CCR = 0x0000;
@@ -227,175 +227,32 @@ bool Test_ADD() {
 //OPCODE TESTS
 ////////////////////////////////////////
 bool Test_ADDA() {
-    std::cout << "Start Test_ADDA()" << std::endl;
-    const std::string testName = "ADDA";
-    bool testResult = true;
-
-    CPU_STATE_DEBUG state;
-
-    //Test ADDA with destination register D0 and source register D1
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x1;
-    state.registerData[1] = 0x2;
-
-    M68k::SetCpuState(state);
-
-    word opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    if (state.registerData[0] == 0x3) {
-        std::cout << "\t\tTest ADDA with destination register D0 and source register D1 Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest ADDA with destination register D0 and source register D1 Failed" << std::endl;
-        testResult = false;
+    // ADDA always writes an address register and never changes the status flags.
+    struct Case { word opcode; dword data; dword address; dword otherAddress; dword expected; };
+    const Case cases[] = {
+        {0xD1C0, 1, 2, 0, 3},             // ADDA.L D0,A0
+        {0xD0C9, 0, 2, 1, 3},             // ADDA.W A1,A0
+        {0xD0C0, 0xFFFF, 0x10000, 0, 0xFFFF}, // word source is sign extended
+        {0xD1C0, 1, 0xFFFFFFFF, 0, 0}      // 32-bit address arithmetic wraps
+    };
+    bool ok = true;
+    for (const Case& test : cases) {
+        CPU_STATE_DEBUG state = {};
+        state.CCR = 0x271F;
+        state.registerData[0] = test.data;
+        state.registerAddress[0] = test.address;
+        state.registerAddress[1] = test.otherAddress;
+        M68k::SetCpuState(state);
+        M68k::ExecuteOpcode(test.opcode);
+        state = M68k::GetCpuState();
+        if (state.registerAddress[0] != test.expected ||
+            state.registerData[0] != test.data ||
+            state.registerAddress[1] != test.otherAddress || state.CCR != 0x271F) {
+            std::cerr << "ADDA failed for opcode 0x" << std::hex << test.opcode << std::endl;
+            ok = false;
+        }
     }
-
-    //Test ADDA with destination register A0 and source register A1
-    state.CCR = 0x0000;
-    state.registerData[8] = 0x1;
-    state.registerData[9] = 0x2;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD0C8;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    if (state.registerData[8] == 0x3) {
-        std::cout << "\t\tTest ADDA with destination register A0 and source register A1 Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest ADDA with destination register A0 and source register A1 Failed" << std::endl;
-        testResult = false;
-    }
-    //Test C_FLAG
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x7FFF;
-    state.registerData[1] = 0x1;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    //set the C_FLAG and test
-    BitSet(state.CCR, C_FLAG);
-
-    if (TestFlag(state.CCR, 1, 0, 0, 0, 0)) {
-        std::cout << "\t\tTest C_FLAG Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest C_FLAG Failed" << std::endl;
-        testResult = false;
-    }
-
-    //Test V_FLAG
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x8000;
-    state.registerData[1] = 0x1;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    //set the V_FLAG and test
-    BitSet(state.CCR, V_FLAG);
-
-    if (TestFlag(state.CCR, 0, 1, 0, 0, 0)) {
-        std::cout << "\t\tTest V_FLAG Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest V_FLAG Failed" << std::endl;
-        testResult = false;
-    }
-
-    //Test Z_FLAG
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x0;
-    state.registerData[1] = 0x0;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    //set the Z_FLAG and test
-    BitSet(state.CCR, Z_FLAG);
-
-    if (TestFlag(state.CCR, 0, 0, 1, 0, 0)) {
-        std::cout << "\t\tTest Z_FLAG Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest Z_FLAG Failed" << std::endl;
-        testResult = false;
-    }
-
-    //Test N_FLAG
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x1;
-    state.registerData[1] = 0x7FFF;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    //set the N_FLAG and test
-    BitSet(state.CCR, N_FLAG);
-
-    if (TestFlag(state.CCR, 0, 0, 0, 1, 0)) {
-        std::cout << "\t\tTest N_FLAG Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest N_FLAG Failed" << std::endl;
-        testResult = false;
-    }
-
-    //Test X_FLAG
-    state.CCR = 0x0000;
-    state.registerData[0] = 0x1;
-    state.registerData[1] = 0x8000;
-
-    M68k::SetCpuState(state);
-
-    opcode = 0xD1C0;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-
-    state = M68k::GetCpuState();
-
-    //set the X_FLAG and test
-    BitSet(state.CCR, X_FLAG);
-
-    if (TestFlag(state.CCR, 0, 0, 0, 0, 1)) {
-        std::cout << "\t\tTest X_FLAG Passed" << std::endl;
-    } else {
-        std::cout << "\t\tTest X_FLAG Failed" << std::endl;
-        testResult = false;
-    }
-
-    std::cout << "End Test_" << testName << "()" << std::endl;
-    return testResult;
+    return ok;
 }
 
 bool Test_ADDI() {
@@ -407,7 +264,7 @@ bool Test_ADDI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     /*	USED OPCODE
@@ -434,7 +291,7 @@ bool Test_ADDQ() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     /*	USED OPCODE
@@ -457,7 +314,7 @@ bool Test_ADDX() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xD101;
@@ -475,7 +332,7 @@ bool Test_AND() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xC001;
@@ -493,7 +350,7 @@ bool Test_ANDI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x201;
@@ -506,40 +363,50 @@ bool Test_ANDI() {
     return testResult;
 }
 bool Test_ASL_ASR_TO_MEMORY() {
-    const std::string testName = "Test_ASL_ASR_TO_MEMORY";
-
-    std::cout << "Start Test_" << testName << "()" << std::endl;
-    bool testResult = true;
-
-    CPU_STATE_DEBUG state;
-    M68k::SetCpuState(state);
-
-    word opcode = 0xE4A6;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-    state = M68k::GetCpuState();
-
-    std::cout << "End Test_" << testName << "()" << std::endl;
-    return testResult;
+    struct Case { word opcode; word operand; word expected; word status; };
+    const Case cases[] = {
+        {0xE0D6, 0xFFFF, 0xFFFF, 0x2719}, // ASR.W (A6), negative sign fill
+        {0xE0D6, 3, 1, 0x2711},
+        {0xE1D6, 1, 2, 0x2700}           // ASL.W (A6)
+    };
+    bool ok = true;
+    for (const Case& test : cases) {
+        CPU_STATE_DEBUG state = {};
+        state.CCR = 0x271F;
+        state.registerAddress[6] = 0xE00020;
+        Genesis::M68KWriteMemoryWORD(0xE00020, test.operand);
+        M68k::SetCpuState(state);
+        M68k::ExecuteOpcode(test.opcode);
+        state = M68k::GetCpuState();
+        if (Genesis::M68KReadMemoryWORD(0xE00020) != test.expected ||
+            state.CCR != test.status || state.registerAddress[6] != 0xE00020) {
+            std::cerr << "ASL/ASR memory test failed" << std::endl;
+            ok = false;
+        }
+    }
+    return ok;
 }
 bool Test_ASL_ASR_TO_REGISTER() {
-    const std::string testName = "Test_ASL_ASR_TO_REGISTER";
-
-    std::cout << "Start Test_" << testName << "()" << std::endl;
-    bool testResult = true;
-
-    CPU_STATE_DEBUG state;
-    M68k::SetCpuState(state);
-
-    word opcode = 0xE4A6;
-    std::cout << "\t\texecute test [" << testName << "] with opcode 0x" << std::uppercase << std::hex << opcode << std::endl;
-
-    M68k::ExecuteOpcode(opcode);
-    state = M68k::GetCpuState();
-
-    std::cout << "End Test_" << testName << "()" << std::endl;
-    return testResult;
+    // A zero register count preserves the operand/X, clears C/V, and updates N/Z.
+    const word opcodes[] = {0xE4A6, 0xE5A6}; // ASR.L/ASL.L D2,D6
+    const dword operands[] = {0x80000001, 0, 1};
+    const word expected[] = {0x2718, 0x2714, 0x2710};
+    bool ok = true;
+    for (word opcode : opcodes) {
+        for (int i = 0; i < 3; ++i) {
+            CPU_STATE_DEBUG state = {};
+            state.CCR = 0x271F;
+            state.registerData[6] = operands[i];
+            M68k::SetCpuState(state);
+            M68k::ExecuteOpcode(opcode);
+            state = M68k::GetCpuState();
+            if (state.registerData[6] != operands[i] || state.CCR != expected[i]) {
+                std::cerr << "ASL/ASR zero-count register test failed" << std::endl;
+                ok = false;
+            }
+        }
+    }
+    return ok;
 }
 bool Test_Bcc() {
     const std::string testName = "Bcc";
@@ -547,7 +414,7 @@ bool Test_Bcc() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -565,7 +432,7 @@ bool Test_BCHG() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x554;
@@ -583,7 +450,7 @@ bool Test_BCLR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x581;
@@ -601,7 +468,7 @@ bool Test_BRA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -619,7 +486,7 @@ bool Test_BSET() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x5EC;
@@ -637,7 +504,7 @@ bool Test_BSR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x6101;
@@ -655,7 +522,7 @@ bool Test_BTST() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x102;
@@ -673,7 +540,7 @@ bool Test_CHK() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -691,7 +558,7 @@ bool Test_CLR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -709,7 +576,7 @@ bool Test_CMP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -727,7 +594,7 @@ bool Test_CMPA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xBFCE;
@@ -745,7 +612,7 @@ bool Test_CMPI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xC01;
@@ -763,7 +630,7 @@ bool Test_CMPM() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0xB10B;
@@ -781,7 +648,7 @@ bool Test_DBcc() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -799,7 +666,7 @@ bool Test_DIVS() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -817,7 +684,7 @@ bool Test_EOR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -835,7 +702,7 @@ bool Test_EORI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -853,7 +720,7 @@ bool Test_EXG() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -871,7 +738,7 @@ bool Test_EXT() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -889,7 +756,7 @@ bool Test_ILLEGAL() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -907,7 +774,7 @@ bool Test_JMP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -925,7 +792,7 @@ bool Test_JSR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -943,7 +810,7 @@ bool Test_LEA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -961,7 +828,7 @@ bool Test_LINK() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -979,7 +846,7 @@ bool Test_LSL_LSR_TO_REGISTER() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -997,7 +864,7 @@ bool Test_LSL_LSR_TO_MEMORY() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1015,7 +882,7 @@ bool Test_MOVE() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1033,7 +900,7 @@ bool Test_MOVEA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1051,7 +918,7 @@ bool Test_MOVEM() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1069,7 +936,7 @@ bool Test_MOVEP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1087,7 +954,7 @@ bool Test_MOVEQ() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1105,7 +972,7 @@ bool Test_MULS() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1123,7 +990,7 @@ bool Test_NEG() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1141,7 +1008,7 @@ bool Test_NEGX() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1159,7 +1026,7 @@ bool Test_NOP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1177,7 +1044,7 @@ bool Test_NOT() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1195,7 +1062,7 @@ bool Test_OR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1213,7 +1080,7 @@ bool Test_ORI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x1;
@@ -1231,7 +1098,7 @@ bool Test_ORI_TO_CCR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x3D;
@@ -1249,7 +1116,7 @@ bool Test_ORI_TO_SR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x7D;
@@ -1267,7 +1134,7 @@ bool Test_PEA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1285,7 +1152,7 @@ bool Test_RESET() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4E71;
@@ -1303,7 +1170,7 @@ bool Test_ROL_ROR_TO_REGISTER() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1321,7 +1188,7 @@ bool Test_ROL_ROR_TO_MEMORY() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1339,7 +1206,7 @@ bool Test_ROXL_ROXR_TO_MEMORY() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1357,7 +1224,7 @@ bool Test_ROXL_ROXR_TO_REGISTER() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1375,7 +1242,7 @@ bool Test_RTE() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1393,7 +1260,7 @@ bool Test_RTR() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1411,7 +1278,7 @@ bool Test_RTS() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1429,7 +1296,7 @@ bool Test_SBCD() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     state.registerData[3] = 0x54;
     state.registerData[2] = 0x5;
     BitReset(state.CCR, X_FLAG);
@@ -1539,7 +1406,7 @@ bool Test_Scc() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1557,7 +1424,7 @@ bool Test_STOP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1575,7 +1442,7 @@ bool Test_SUB() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1593,7 +1460,7 @@ bool Test_SUBA() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1611,7 +1478,7 @@ bool Test_SUBI() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1629,7 +1496,7 @@ bool Test_SUBQ() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1647,7 +1514,7 @@ bool Test_SUBX() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1665,7 +1532,7 @@ bool Test_SWAP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1683,7 +1550,7 @@ bool Test_TAS() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1701,7 +1568,7 @@ bool Test_TRAP() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1719,7 +1586,7 @@ bool Test_TRAPV() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1737,7 +1604,7 @@ bool Test_TST() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1755,7 +1622,7 @@ bool Test_UNLK() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
     M68k::SetCpuState(state);
 
     word opcode = 0x4816;
@@ -1778,7 +1645,7 @@ bool Test_NBCD() {
     std::cout << "Start Test_" << testName << "()" << std::endl;
     bool testResult = true;
 
-    CPU_STATE_DEBUG state;
+    CPU_STATE_DEBUG state = {};
 
     word opcode;
     dword result;
@@ -1896,6 +1763,8 @@ int main() {
     M68k::SetUnitTestsMode();
 
     Genesis::AllocM68kMemory();
+    M68k::Init();
+    M68k::SetUnitTestsMode();
     Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
 
     TestResults.insert(std::pair < std::string, bool > ("Test_ABCD", Test_ABCD()));
@@ -1907,6 +1776,8 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_ADDX", Test_ADDX()));
     TestResults.insert(std::pair < std::string, bool > ("Test_AND", Test_AND()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ANDI", Test_ANDI()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_CCR", Test_ANDI_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_SR", Test_ANDI_TO_SR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_MEMORY", Test_ASL_ASR_TO_MEMORY()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_REGISTER", Test_ASL_ASR_TO_REGISTER()));
     TestResults.insert(std::pair < std::string, bool > ("Test_Bcc", Test_Bcc()));
@@ -1924,8 +1795,11 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_CMPM", Test_CMPM()));
     TestResults.insert(std::pair < std::string, bool > ("Test_DBcc", Test_DBcc()));
     TestResults.insert(std::pair < std::string, bool > ("Test_DIVS", Test_DIVS()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_DIVU", Test_DIVU()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EOR", Test_EOR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EORI", Test_EORI()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_CCR", Test_EORI_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_SR", Test_EORI_TO_SR()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EXG", Test_EXG()));
     TestResults.insert(std::pair < std::string, bool > ("Test_EXT", Test_EXT()));
     TestResults.insert(std::pair < std::string, bool > ("Test_ILLEGAL", Test_ILLEGAL()));
@@ -1936,11 +1810,16 @@ int main() {
     TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_MEMORY", Test_LSL_LSR_TO_MEMORY()));
     TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_REGISTER", Test_LSL_LSR_TO_REGISTER()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVE", Test_MOVE()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_CCR", Test_MOVE_TO_CCR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_FROM_SR", Test_MOVE_FROM_SR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_SR", Test_MOVE_TO_SR()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_USP", Test_MOVE_USP()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEA", Test_MOVEA()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEM", Test_MOVEM()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEP", Test_MOVEP()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MOVEQ", Test_MOVEQ()));
     TestResults.insert(std::pair < std::string, bool > ("Test_MULS", Test_MULS()));
+    TestResults.insert(std::pair < std::string, bool > ("Test_MULU", Test_MULU()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NEG", Test_NEG()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NEGX", Test_NEGX()));
     TestResults.insert(std::pair < std::string, bool > ("Test_NOP", Test_NOP()));
@@ -1992,5 +1871,5 @@ int main() {
         std::cout << "There is " << testErrorCount << " known errors !" << std::endl;
     }
 
-    system("pause");
+    return testErrorCount == 0 ? 0 : 1;
 }
