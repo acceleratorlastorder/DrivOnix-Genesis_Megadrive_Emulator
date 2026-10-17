@@ -4,7 +4,10 @@ Expanded CPU specifications and complete opcode-word coverage
 This completes the original 84 instruction-test groups and exercises every
 possible 16-bit opcode word. It is not an exhaustive proof over all register,
 memory, pin, and timing states, and does not make the current CPU implementation
-correct. No production opcode handler is changed by this test work.
+correct. Completing the portable sweep also required a narrow CPU fix: reject
+illegal MOVE/MOVEA forms before timing-table access and make ILLEGAL raise
+synchronous vector 4 with the correct stack frame, fault PC and 34-cycle total.
+Other instruction implementations remain outside this test-completion work.
 
 The existing C++ assertions, original PDF test-design guide, 28 JSON examples,
 and pinned MAME vectors remain useful independent layers. The 67 old unasserted

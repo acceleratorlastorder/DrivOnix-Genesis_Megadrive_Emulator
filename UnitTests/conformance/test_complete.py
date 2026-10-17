@@ -69,6 +69,14 @@ class Specifications(unittest.TestCase):
         self.assertIsNone(normalized["length"])
         self.assertEqual(normalized["sr_mask"] & 0xC, 0)
 
+    def test_reference_normalization_does_not_mutate_input_or_actual_state(self):
+        c = next(inputs([0x82C0]))
+        actual = {**c["final"], "cycles": 140, "ram": {}, "sr": 0x271F}
+        before_case, before_actual = copy.deepcopy(c), copy.deepcopy(actual)
+        expected_from_reference(c, actual, {"82c0": "DIVU D0, D1"})
+        self.assertEqual(c, before_case)
+        self.assertEqual(actual, before_actual)
+
     def test_compressed_baselines_round_trip_deterministically(self):
         with tempfile.TemporaryDirectory() as where:
             path = Path(where) / "baseline.json.gz"
@@ -81,6 +89,19 @@ class Specifications(unittest.TestCase):
 
 
 class WorkerSequences(unittest.TestCase):
+    def test_illegal_move_forms_never_index_outside_cycle_tables(self):
+        # Before the legality guard these read process-dependent memory as cycles,
+        # or trip ASan/UBSan. Full sweep cases still check complete exception state.
+        words = (0x0E3E, 0x1008, 0x1040, 0x203D, 0x203E, 0x203F, 0x207D, 0x25C0, 0x2FFF)
+        for optimized in (False, True):
+            cases = list(inputs(words))
+            for item, state, error in execute(WORKER, cases, optimized):
+                with self.subTest(opcode=f"{item['opcode']:04x}", optimized=optimized):
+                    self.assertIsNone(error)
+                    self.assertEqual(state["cycles"], 34)
+                    for register in [*(f"d{i}" for i in range(8)), *(f"a{i}" for i in range(7))]:
+                        self.assertEqual(state[register], item["initial"][register])
+
     def test_multi_instruction_wire_protocol_runs_both_real_decoders(self):
         c = case("adapter", "two MOVEQ instructions", [0x7001, 0x7202],
                  expected={"d0": 1, "d1": 2, "sr": 0x2710}, actions=[0, 0], cycles=8)

@@ -1,9 +1,11 @@
 Expanded CPU test coverage, 2026-10-17
 ====================================
 
-CPU implementation: e013d2e6a896a817bcdc7f3aad5d5e39ecb2b4d6 (PR #2 master).
-This change adds tests and test-only state/interrupt/reset adapters; no production
-opcode handler is corrected or replaced. Linux x86-64, GCC 14.2, Debug, Python 3.13.
+CPU base: e013d2e6a896a817bcdc7f3aad5d5e39ecb2b4d6 (PR #2 master), plus the narrow
+MOVE/MOVEA legality and synchronous ILLEGAL exception fix in this PR. Invalid
+forms previously read outside the cycle table, producing process-dependent timing.
+The fix raises vector 4 with the fault PC, saved SR and 34 cycles. Other opcode
+implementations are unchanged. Linux x86-64, GCC 14.2, Debug, Python 3.13.
 Sources, scope, masks and runnable commands are documented in COMPLETE.txt.
 
 All 84 original instruction groups have real specifications. The 67 unasserted
@@ -15,31 +17,31 @@ immediate bit numbers, effective address modes and control/exception sequences.
 Readability/specification layer, PER decoder:
 
 Executed                                      8,129
-Passed all checked assertions                  6,194
-Failed an assertion                            1,934
+Passed all checked assertions                  6,195
+Failed an assertion                            1,933
 Crashed                                            1
 
 One-pattern complete decode regression run, PER decoder (includes those cases):
 
 Executed                                     73,665
-Passed all checked assertions                 45,747
-Failed an assertion                           27,917
+Passed all checked assertions                 48,567
+Failed an assertion                           25,097
 Crashed                                            1
 Distinct opcode words                         65,536 / 65,536
 Catalogue legal encodings plus 0x4AFC         45,816 / 45,816
 Other opcode words tested                     19,720 / 19,720
 
-Full eight-pattern sweep, PER decoder (includes readable cases):
+The full eight-pattern command defines 532,417 cases per decoder (1,064,834
+evaluations across both), including readable specifications. The corrected local
+full audit report is under build/complete-cpu-corrected/report.json; use the
+commands in COMPLETE.txt to reproduce it. The quick CI run covers every opcode
+word with one fixed pattern, and reports all remaining failures explicitly.
 
-Executed                                    532,417
-Passed all checked assertions                247,939
-Failed an assertion                          284,469
-Crashed                                            9
-
-Both decoders completed all eight input patterns: 1,064,834 evaluations in total.
-The full diagnostic report is under build/complete-cpu-full/report.json. The
-quick CI run covers every opcode word with one fixed pattern; the full eight-
-pattern audit is available with the commands in COMPLETE.txt.
+After the legality/exception correction, all readable and quick-sweep expected
+outputs had the exact same digest as before it. The reviewed snapshots only
+removed resolved wrong bits: zero new wrong-bit cases were accepted. In
+particular, nondeterministic invalid-MOVE cycles were fixed at their source,
+not accepted by broadening timing masks or disabling illegal-word assertions.
 
 The differential expectations come from pinned Musashi, checked against every
 readable specification with exactly three documented independent-reference
@@ -50,8 +52,8 @@ active readable and complete-decode tests, including both TRAPV outcomes.
 Expanded readable cases with ASan/UBSan, PER decoder:
 
 Executed                                      8,129
-Passed all checked assertions                  5,670
-Failed an assertion                              915
+Passed all checked assertions                  5,671
+Failed an assertion                              914
 Crashed/stopped on undefined behavior           1,544
 
 These are failing CPU cases, not 1,544 distinct source bugs. Examples include

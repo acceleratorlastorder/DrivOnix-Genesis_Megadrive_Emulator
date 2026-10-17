@@ -4,7 +4,6 @@ No DrivOnix output is used to construct expected results. The pinned reference
 supplies differential expectations; readable specifications remain authoritative
 where the reference itself has documented defects.
 """
-import copy
 from specifications import PC, DATA, SSP, USP, HANDLER, bytes_at, case
 
 PATTERNS = (0, 1, 0xFFFFFFFF, 0x7FFFFFFF, 0x80000000, 0x8000, 0xFFFF, 0x5555AAAA)
@@ -69,7 +68,9 @@ def inputs(opcodes, pattern_index=0):
 
 
 def expected_from_reference(test, actual, catalog):
-    result = copy.deepcopy(test)
+    # Initial state is read-only. Copy only fields we replace below; recursively
+    # cloning every seeded RAM byte dominates a complete opcode-word sweep.
+    result = dict(test)
     result["final"] = {field: value for field, value in actual.items() if field not in ("cycles", "ram")}
     result["expected_ram"] = {**test["initial"]["ram"], **actual["ram"]}
     result["length"] = actual["cycles"]
