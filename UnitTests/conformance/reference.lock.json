@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "source": {
+    "repository": "kstenerud/Musashi",
+    "commit": "313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd",
+    "license": "Musashi MIT; bundled SoftFloat notices retained in source files"
+  },
+  "files": [
+    {
+      "cache_path": "reference/history.txt",
+      "bytes": 5450,
+      "git_blob_sha": "e2205dccb1d7796c366f199e3bc631ca3a6e4052",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/history.txt"
+    },
+    {
+      "cache_path": "reference/m68k.h",
+      "bytes": 15856,
+      "git_blob_sha": "2868f505bdc16a73aa44e27b8f2c25674fb40ded",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68k.h"
+    },
+    {
+      "cache_path": "reference/m68k_in.c",
+      "bytes": 239644,
+      "git_blob_sha": "e8dd8d98c7777114da67b1c4f3e8425a40d964f1",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68k_in.c"
+    },
+    {
+      "cache_path": "reference/m68kconf.h",
+      "bytes": 10040,
+      "git_blob_sha": "0d921fbbadef265928800a64d2e40af13bca5a8d",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kconf.h"
+    },
+    {
+      "cache_path": "reference/m68kcpu.c",
+      "bytes": 52531,
+      "git_blob_sha": "4c9981fd935a3dd25eb2b2dd9faf34e978193875",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kcpu.c"
+    },
+    {
+      "cache_path": "reference/m68kcpu.h",
+      "bytes": 72113,
+      "git_blob_sha": "a743cdbd6b8a2f29c1ced80e86d4adda8cd35970",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kcpu.h"
+    },
+    {
+      "cache_path": "reference/m68kdasm.c",
+      "bytes": 111075,
+      "git_blob_sha": "feaac5ab2066fc3060476ad1f9b3300ba531736d",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kdasm.c"
+    },
+    {
+      "cache_path": "reference/m68kfpu.c",
+      "bytes": 41351,
+      "git_blob_sha": "0367a7400b92f8f49015835d09b30217078de357",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kfpu.c"
+    },
+    {
+      "cache_path": "reference/m68kmake.c",
+      "bytes": 43967,
+      "git_blob_sha": "c7f1efba33fad9104b841e3da58df37cc4f03e64",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kmake.c"
+    },
+    {
+      "cache_path": "reference/m68kmmu.h",
+      "bytes": 9002,
+      "git_blob_sha": "b6d90986cff80f0a8f752e8b89cdb839294161ae",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/m68kmmu.h"
+    },
+    {
+      "cache_path": "reference/readme.txt",
+      "bytes": 12285,
+      "git_blob_sha": "0a1bc8361dff802c098ae408b7d6bcfe82670db6",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/readme.txt"
+    },
+    {
+      "cache_path": "reference/softfloat/README.txt",
+      "bytes": 3450,
+      "git_blob_sha": "9500d25e8a3c605a5bd474779de9872b098a39fb",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/README.txt"
+    },
+    {
+      "cache_path": "reference/softfloat/mamesf.h",
+      "bytes": 2856,
+      "git_blob_sha": "c4195039486dc26129df41dfc71b96aa0b04d17d",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/mamesf.h"
+    },
+    {
+      "cache_path": "reference/softfloat/milieu.h",
+      "bytes": 2232,
+      "git_blob_sha": "10687b755d0deba0ad8aa0841e210cb8d91f2f5c",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/milieu.h"
+    },
+    {
+      "cache_path": "reference/softfloat/softfloat-macros",
+      "bytes": 24993,
+      "git_blob_sha": "5de9031de545e9674f9cf64295c2b4d9a50e0344",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/softfloat-macros"
+    },
+    {
+      "cache_path": "reference/softfloat/softfloat-specialize",
+      "bytes": 16695,
+      "git_blob_sha": "a3113badfda7c2873bb30afcfae24e1599022ce7",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/softfloat-specialize"
+    },
+    {
+      "cache_path": "reference/softfloat/softfloat.c",
+      "bytes": 158817,
+      "git_blob_sha": "400fd593fdca4c299c935caaabaf54e5b0049b2e",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/softfloat.c"
+    },
+    {
+      "cache_path": "reference/softfloat/softfloat.h",
+      "bytes": 17855,
+      "git_blob_sha": "92135e6634818e11a9e3d076de4ada5428ed2e10",
+      "url": "https://raw.githubusercontent.com/kstenerud/Musashi/313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd/softfloat/softfloat.h"
+    }
+  ]
+}

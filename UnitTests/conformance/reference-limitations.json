@@ -1,0 +1,12 @@
+{
+  "DIVU quotient/remainder 4294967288/4": {
+    "sr": 1
+  },
+  "DIVS quotient/remainder 65535/1": {
+    "sr": 1
+  },
+  "DIVS quotient/remainder -2147483648/-1": {
+    "d1": 2147483648,
+    "sr": 2
+  }
+}

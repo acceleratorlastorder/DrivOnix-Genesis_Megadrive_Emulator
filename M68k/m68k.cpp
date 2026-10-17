@@ -170,6 +170,13 @@ int M68k::StepVector(bool optimized)
 	ExecuteOpcode(opcode);
 	return get().opcodeClicks;
 }
+
+void M68k::VectorIRQ(unsigned level)
+{
+	if(level > 0 && level <= 7) RequestAutoVectorInt(INT_TYPE(level));
+}
+
+void M68k::VectorReset() { Init(); }
 #endif
 
 void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
@@ -113226,8 +113233,18 @@ void M68k::OpcodeEXT(word opcode)
 
 void M68k::OpcodeILLEGAL()
 {
-	get().OpcodeTRAP(4);
-
+	// Illegal instructions are synchronous vector 4 exceptions. TRAP #4 uses
+	// vector 36 and must not be queued here or charged a second set of cycles.
+	const word savedStatus = get().CCR;
+	const dword faultingPC = get().programCounter - 2;
+	get().CCR = (get().CCR | 0x2000) & ~word(0x8000);
+	get().CheckPrivilege();
+	get().registerAddress[7] -= 4;
+	Genesis::M68KWriteMemoryLONG(get().registerAddress[7], faultingPC);
+	get().registerAddress[7] -= 2;
+	Genesis::M68KWriteMemoryWORD(get().registerAddress[7], savedStatus);
+	get().programCounter = Genesis::M68KReadMemoryLONG(4 * 4);
+	get().stop = false;
 	get().opcodeClicks += 34;
 }
 
@@ -113620,6 +113637,17 @@ void M68k::OpcodeMOVE(word opcode)
 	byte srcMode = (opcode >> 3) & 0x7;
 	byte srcReg = (opcode & 0x7);
 
+	// Reserved source/destination forms must not index the 12x9 timing tables.
+	// The broad MOVE decoder can also receive size 00 and byte address-register
+	// forms, which are illegal on the MC68000.
+	if(tempSize == 0 || (srcMode == EA_MODE_7 && srcReg > EA_MODE_7_IMMEDIATE) ||
+	   (destMode == EA_MODE_7 && destReg > EA_MODE_7_ABS_ADDRESS_LONG) ||
+	   (tempSize == 1 && (srcMode == EA_ADDRESS_REG || destMode == EA_ADDRESS_REG)))
+	{
+		get().OpcodeILLEGAL();
+		return;
+	}
+
 	EA_TYPES destType = (EA_TYPES)destMode;
 	EA_TYPES srcType = (EA_TYPES)srcMode;
 
@@ -113806,6 +113834,13 @@ void M68k::OpcodeMOVEA(word opcode)
 	byte destReg = (opcode >> 9) & 0x7;
 	byte srcMode = (opcode >> 3) & 0x7;
 	byte srcReg = (opcode & 0x7);
+
+	if((tempSize != 2 && tempSize != 3) ||
+	   (srcMode == EA_MODE_7 && srcReg > EA_MODE_7_IMMEDIATE))
+	{
+		get().OpcodeILLEGAL();
+		return;
+	}
 
 	EA_TYPES srcType = (EA_TYPES)srcMode;
 

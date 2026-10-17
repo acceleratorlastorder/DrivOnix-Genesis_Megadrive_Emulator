@@ -1,6 +1,11 @@
 MC68000 executable specifications
 ================================
 
+The expanded suite is documented in COMPLETE.txt: all 84 original instruction
+groups now have real specifications, all 65,536 opcode words are exercised, and
+the Z80 corpus/worker contract is prepared. This file describes the first
+handwritten/MAME corpus layer, which remains independently available.
+
 Keep two complementary kinds of tests: small, readable project cases explaining
 an instruction's result, and broad independent single-step vectors. This work
 adds the baseline for correcting the CPU later; it changes no opcode handlers.
@@ -101,8 +106,11 @@ and unsupported status remain visible even when an existing status is allowed.
 The gate compares the selected expectations and source pins, using canonical
 JSON hashes so checkout line endings do not change the plan.
 
-CI runs all five CTest targets, the fixed external sample on Ubuntu and Windows,
-and CTest with address/undefined-behavior sanitizers on Linux. It uploads both
+CI runs seven ordinary CTest targets, the fixed external sample and complete
+opcode-word regression sweep on Ubuntu and Windows, and seven targets with
+address/undefined-behavior sanitizers on Linux. Expanded unsafe CPU cases remain
+reported as crashes under a separate reviewed regression profile that rejects
+new failures (see COMPLETE.txt). CI uploads diagnostic
 diagnostic reports. Green CI means these regression checks passed, not that all
 MC68000 vectors pass. Full-corpus runs remain available with the commands above.
 
@@ -115,4 +123,6 @@ do not automatically regenerate baselines as part of CI. The explicit
 --baseline PATH. A new readable specification changes the plan, so run strict or
 audit first, inspect all differences, and review the regenerated snapshot.
 
-See BASELINE.txt for the first full diagnostic run and its remaining failures.
+See BASELINE.txt for the first full diagnostic run and COVERAGE.txt for the
+expanded suite. Both documents preserve failures rather than changing expected
+hardware results to match DrivOnix.

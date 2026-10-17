@@ -58,20 +58,47 @@ namespace
     }
 }
 
-int main()
+#ifdef DRIVONIX_REFERENCE
+int ReferenceOpcodeValid(unsigned opcode);
+#endif
+
+int main(int argc, char** argv)
 {
     try
     {
+#ifdef DRIVONIX_REFERENCE
+        if (argc == 2 && std::string(argv[1]) == "--catalog")
+        {
+            Genesis::AllocM68kMemory();
+            M68k::Init();
+            for (unsigned opcode = 0; opcode < 65536; ++opcode)
+                std::cout << ReferenceOpcodeValid(opcode) << '\n';
+            return 0;
+        }
+#endif
         FILE* protocol = OpenProtocol();
         Genesis::AllocM68kMemory();
         CpuTestMemory::SetFlatBus(true);
         dword magic;
         while (Read32(magic, true))
         {
-            if (magic != 0x31515644) throw std::runtime_error("invalid request magic/version");
+            if (magic != 0x31515644 && magic != 0x32515644) throw std::runtime_error("invalid request magic/version");
             const dword id = Read32();
             const dword dispatch = Read32();
             if (dispatch > 1) throw std::runtime_error("invalid dispatch");
+            std::vector<dword> actions;
+            if (magic == 0x32515644)
+            {
+                const dword count = Read32();
+                if (count == 0 || count > 100) throw std::runtime_error("invalid action count");
+                for (dword i = 0; i < count; ++i)
+                {
+                    dword action = Read32();
+                    if (action > 9) throw std::runtime_error("invalid CPU action");
+                    actions.push_back(action);
+                }
+            }
+            else actions.push_back(0);
             CPU_VECTOR_STATE initial = {};
             initial.cpu.programCounter = Read32();
             initial.cpu.CCR = word(Read32());
@@ -101,7 +128,13 @@ int main()
             M68k::Init();
             M68k::LoadVectorState(initial);
             CpuTestMemory::ObserveWrites();
-            const int cycles = M68k::StepVector(dispatch == 1);
+            int cycles = 0;
+            for (dword action : actions)
+            {
+                if (action == 0) cycles += M68k::StepVector(dispatch == 1);
+                else if (action == 9) M68k::VectorReset();
+                else M68k::VectorIRQ(action - 1);
+            }
             const CPU_VECTOR_STATE final = M68k::ReadVectorState();
             const std::vector<dword>& writes = CpuTestMemory::WrittenAddresses();
             addresses.insert(addresses.end(), writes.begin(), writes.end());

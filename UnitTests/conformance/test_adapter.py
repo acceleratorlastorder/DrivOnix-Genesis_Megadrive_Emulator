@@ -8,9 +8,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from corpus import CorpusError, REGISTERS, decode, git_blob_sha, handwritten, indices, normalize, verified_bytes
-from protocol import compare, execute, responses
+from protocol import compare, execute, responses, request
 from run import failing_bits, gate, operation
 
 
@@ -175,7 +176,10 @@ sys.stdout.buffer.write(struct.pack('<25I',0x31525644,index,4,*([0]*22)))
             cases = [normal_case() for _ in range(3)]
             for index, case in enumerate(cases):
                 case["index"] = index
-            results = list(execute([sys.executable, str(fake)], cases, False))
+            with patch("protocol.request", wraps=request) as encode:
+                results = list(execute([sys.executable, str(fake)], cases, False))
+                # Recovery must not repeatedly re-encode thousands of later cases.
+                self.assertEqual(encode.call_count, len(cases))
             self.assertEqual([case["index"] for case, _, _ in results], [0, 1, 2])
             self.assertIsNone(results[0][2])
             self.assertEqual(results[1][2]["return_code"], 7)

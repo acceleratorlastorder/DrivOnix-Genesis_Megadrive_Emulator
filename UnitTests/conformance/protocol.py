@@ -17,6 +17,10 @@ def request(case, optimized):
     values = [0x31515644, case["index"], int(optimized), initial["pc"], initial["sr"],
               *(initial[f"d{i}"] for i in range(8)), *(initial[f"a{i}"] for i in range(7)),
               initial["usp"], initial["ssp"], len(ram)]
+    if "actions" in case:
+        actions = case["actions"]
+        values[0] = 0x32515644
+        values[3:3] = [len(actions), *actions]
     for address, value in sorted(ram.items()):
         values.extend((address, value))
     values.append(len(addresses))
@@ -53,11 +57,18 @@ def responses(data, allow_partial=False):
 def execute(worker, cases, optimized, timeout=60):
     """A CPU crash is attached to its case; later cases run in a fresh worker."""
     remaining = list(cases)
+    if len(remaining) > 256:
+        # A broken opcode can crash many vectors. Bound recovery traffic rather
+        # than re-sending an entire multi-thousand-case group after every crash.
+        for first in range(0, len(remaining), 256):
+            yield from execute(worker, remaining[first:first + 256], optimized, timeout)
+        return
+    encoded = [request(case, optimized) for case in remaining]
     while remaining:
         timed_out = False
         try:
             command = list(worker) if isinstance(worker, (tuple, list)) else [str(worker)]
-            run = subprocess.run(command, input=b"".join(request(c, optimized) for c in remaining),
+            run = subprocess.run(command, input=b"".join(encoded),
                                  capture_output=True, timeout=timeout)
             output, errors, code = run.stdout, run.stderr, run.returncode
         except subprocess.TimeoutExpired as error:
@@ -73,6 +84,7 @@ def execute(worker, cases, optimized, timeout=60):
                 raise CorpusError("Worker reordered case IDs")
             yield case, state, None
         remaining = remaining[len(decoded):]
+        encoded = encoded[len(decoded):]
         if code == 0:
             if remaining:
                 raise CorpusError("Worker silently omitted cases")
@@ -82,13 +94,14 @@ def execute(worker, cases, optimized, timeout=60):
         yield remaining[0], None, {"kind": "timeout" if timed_out else "cpu_crash", "return_code": code,
                                   "diagnostic": errors.decode(errors="replace")[-1000:]}
         remaining = remaining[1:]
+        encoded = encoded[1:]
 
 
 def compare(case, actual):
     expected = case["final"]
     differences = {}
     for field in [*(f"d{i}" for i in range(8)), *(f"a{i}" for i in range(8)), "usp", "ssp", "pc", "sr"]:
-        mask = case["sr_mask"] if field == "sr" else 0xFFFFFFFF
+        mask = case.get("field_masks", {}).get(field, case["sr_mask"] if field == "sr" else 0xFFFFFFFF)
         if actual[field] & mask != expected[field] & mask:
             differences[field] = {"expected": expected[field], "actual": actual[field], "mask": mask}
     if "stop" in expected and bool(actual["stop"]) != bool(expected["stop"]):
@@ -98,6 +111,7 @@ def compare(case, actual):
     memory = case["expected_ram"]
     for address in set(memory) | set(actual["ram"]):
         expected_byte = memory.get(address, 0)
-        if address not in actual["ram"] or expected_byte != actual["ram"][address]:
-            differences[f"ram:{address:06x}"] = {"expected": expected_byte, "actual": actual["ram"].get(address)}
+        mask = case.get("memory_masks", {}).get(address, 255)
+        if mask and (address not in actual["ram"] or (expected_byte ^ actual["ram"][address]) & mask):
+            differences[f"ram:{address:06x}"] = {"expected": expected_byte, "actual": actual["ram"].get(address), "mask": mask}
     return differences

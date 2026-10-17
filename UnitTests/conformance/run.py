@@ -45,6 +45,7 @@ def operation(opcode, catalog):
 
 def case_digest(case):
     content = {key: case[key] for key in ("initial", "final", "length", "sr_mask")}
+    content.update({key: case[key] for key in ("actions", "field_masks", "memory_masks") if key in case})
     return canonical_hash(content)
 
 
