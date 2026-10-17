@@ -1,0 +1,75 @@
+Expanded CPU test coverage, 2026-10-17
+====================================
+
+CPU implementation: e013d2e6a896a817bcdc7f3aad5d5e39ecb2b4d6 (PR #2 master).
+This change adds tests and test-only state/interrupt/reset adapters; no production
+opcode handler is corrected or replaced. Linux x86-64, GCC 14.2, Debug, Python 3.13.
+Sources, scope, masks and runnable commands are documented in COMPLETE.txt.
+
+All 84 original instruction groups have real specifications. The 67 unasserted
+C++ templates are replaced, while 17 asserted original groups remain as an extra
+regression layer. The expanded suite contains 8,089 instruction cases and 40
+sequence cases. It exercises all shift counts and X states, CCR conditions,
+immediate bit numbers, effective address modes and control/exception sequences.
+
+Readability/specification layer, PER decoder:
+
+Executed                                      8,129
+Passed all checked assertions                  6,194
+Failed an assertion                            1,934
+Crashed                                            1
+
+One-pattern complete decode regression run, PER decoder (includes those cases):
+
+Executed                                     73,665
+Passed all checked assertions                 45,747
+Failed an assertion                           27,917
+Crashed                                            1
+Distinct opcode words                         65,536 / 65,536
+Catalogue legal encodings plus 0x4AFC         45,816 / 45,816
+Other opcode words tested                     19,720 / 19,720
+
+Full eight-pattern sweep, PER decoder (includes readable cases):
+
+Executed                                    532,417
+Passed all checked assertions                247,939
+Failed an assertion                          284,469
+Crashed                                            9
+
+Both decoders completed all eight input patterns: 1,064,834 evaluations in total.
+The full diagnostic report is under build/complete-cpu-full/report.json. The
+quick CI run covers every opcode word with one fixed pattern; the full eight-
+pattern audit is available with the commands in COMPLETE.txt.
+
+The differential expectations come from pinned Musashi, checked against every
+readable specification with exactly three documented independent-reference
+disagreements. Correct manual expectations are retained. The unreliable external
+TAS/TRAPV data remains quarantined in the MAME layer, but both operations now have
+active readable and complete-decode tests, including both TRAPV outcomes.
+
+Expanded readable cases with ASan/UBSan, PER decoder:
+
+Executed                                      8,129
+Passed all checked assertions                  5,670
+Failed an assertion                              915
+Crashed/stopped on undefined behavior           1,544
+
+These are failing CPU cases, not 1,544 distinct source bugs. Examples include
+signed 32-bit addition/subtraction overflow, shift exponents >=32, and signed
+division INT_MIN/-1. Crashes remain failures with diagnostics. Infrastructure and
+known-failure regression gates passing do not certify CPU correctness or safety.
+
+Z80: every downloaded case was hash checked and schema validated: 1,604 groups,
+1,604,000 cases, including base/CB/ED/DD/FD/indexed-CB forms. Execution remains
+BLOCKED for all those cases because DrivOnix has no Z80 CPU backend. The runner
+and worker contract check registers/flags/internal state, RAM, ports, cycle totals
+and optional bus-pin traces; an absent backend can never produce a strict pass.
+
+The independent MAME layer from BASELINE.txt remains available: 312,500 active
+external cases plus the original 28 examples through each decoder, with 5,000
+unreliable external TAS/TRAPV cases explicitly quarantined per decoder.
+
+Every opcode word having cases does not mean all operand values, bus pins, wait
+states, fault combinations or console behavior have been verified. Remaining
+interface boundaries are listed in COMPLETE.txt. These counts are not an emulator
+accuracy percentage; state/timing coverage and case distributions differ.

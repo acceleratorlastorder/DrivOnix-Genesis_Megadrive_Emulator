@@ -68,6 +68,8 @@ public:
 	static void LoadVectorState(const CPU_VECTOR_STATE& state);
 	static CPU_VECTOR_STATE ReadVectorState();
 	static int StepVector(bool optimized);
+	static void VectorIRQ(unsigned level);
+	static void VectorReset();
 #endif
 	//End UnitTests
 

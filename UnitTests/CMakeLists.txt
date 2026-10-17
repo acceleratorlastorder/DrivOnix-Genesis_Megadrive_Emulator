@@ -21,6 +21,39 @@ add_executable(vector_worker conformance/vectorWorker.cpp)
 target_link_libraries(vector_worker PRIVATE cpu_under_test)
 find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
 
+# Optional independent reference: downloaded sources must already match the lock.
+set(DRIVONIX_REFERENCE_DIR "" CACHE PATH "Verified Musashi source directory")
+if(DRIVONIX_REFERENCE_DIR)
+    enable_language(C)
+    get_filename_component(reference_cache "${DRIVONIX_REFERENCE_DIR}/.." ABSOLUTE)
+    execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/conformance/prepare_reference.py
+        --cache ${reference_cache} --verify-only RESULT_VARIABLE reference_verified)
+    if(NOT reference_verified EQUAL 0)
+        message(FATAL_ERROR "Independent reference sources failed verification")
+    endif()
+    add_executable(reference_make ${DRIVONIX_REFERENCE_DIR}/m68kmake.c)
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/m68kops.c ${CMAKE_CURRENT_BINARY_DIR}/m68kops.h
+        COMMAND reference_make ${CMAKE_CURRENT_BINARY_DIR} ${DRIVONIX_REFERENCE_DIR}/m68k_in.c
+        DEPENDS reference_make ${DRIVONIX_REFERENCE_DIR}/m68k_in.c VERBATIM)
+    add_library(independent_68000 STATIC ${DRIVONIX_REFERENCE_DIR}/m68kcpu.c
+        ${CMAKE_CURRENT_BINARY_DIR}/m68kops.c ${DRIVONIX_REFERENCE_DIR}/m68kdasm.c
+        ${DRIVONIX_REFERENCE_DIR}/softfloat/softfloat.c conformance/referenceBridge.c)
+    target_include_directories(independent_68000 PUBLIC ${DRIVONIX_REFERENCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+    target_compile_definitions(independent_68000 PUBLIC M68K_EMULATE_010=0 M68K_EMULATE_EC020=0
+        M68K_EMULATE_020=0 M68K_EMULATE_030=0 M68K_EMULATE_040=0 M68K_EMULATE_PMMU=0
+        M68K_EMULATE_ADDRESS_ERROR=1 M68K_EMULATE_TRACE=1 M68K_EMULATE_RESET=1 M68K_EMULATE_PREFETCH=1)
+    add_executable(reference_worker conformance/vectorWorker.cpp conformance/referenceAdapter.cpp cpuTestMemory.cpp)
+    target_compile_definitions(reference_worker PRIVATE DRIVONIX_CPU_TESTS DRIVONIX_REFERENCE)
+    target_compile_features(reference_worker PRIVATE cxx_std_11)
+    target_link_libraries(reference_worker PRIVATE independent_68000)
+    if(MSVC)
+        target_compile_options(independent_68000 PRIVATE /bigobj /utf-8)
+        target_compile_options(reference_worker PRIVATE /utf-8)
+    else()
+        target_link_libraries(independent_68000 PUBLIC m)
+    endif()
+endif()
+
 if(MSVC)
     target_compile_options(cpu_under_test PRIVATE /utf-8 /bigobj)
     target_compile_options(opcode_cases PRIVATE /utf-8)
@@ -48,3 +81,27 @@ add_test(NAME handwritten_known_failure_gate COMMAND ${Python3_EXECUTABLE}
     --handwritten-only --baseline ${CMAKE_CURRENT_SOURCE_DIR}/conformance/handwritten-baseline.json
     --report-dir ${CMAKE_CURRENT_BINARY_DIR}/handwritten-report)
 set_tests_properties(handwritten_known_failure_gate PROPERTIES TIMEOUT 60)
+
+add_test(NAME complete_suite_adapter COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conformance/test_complete.py --worker $<TARGET_FILE:vector_worker>)
+set_tests_properties(complete_suite_adapter PROPERTIES TIMEOUT 60)
+
+# Expanded cases expose existing CPU UB, so record unsafe cases as crashes in a
+# separate sanitizer regression profile. Both profiles reject any new failures;
+# all correct expected states stay identical and diagnostic reports retain faults.
+set(reference_validation_args "")
+if(TARGET reference_worker)
+    set(reference_validation_args --oracle $<TARGET_FILE:reference_worker>)
+endif()
+set(specification_profile normal)
+set(specification_baseline specifications-baseline.json.gz)
+if(DRIVONIX_SANITIZERS)
+    set(specification_profile sanitizers)
+    set(specification_baseline specifications-sanitized-baseline.json.gz)
+endif()
+add_test(NAME complete_instruction_specifications COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/conformance/complete.py --worker $<TARGET_FILE:vector_worker>
+    ${reference_validation_args} --specifications-only --profile ${specification_profile}
+    --baseline ${CMAKE_CURRENT_SOURCE_DIR}/conformance/${specification_baseline}
+    --report-dir ${CMAKE_CURRENT_BINARY_DIR}/specifications-report)
+set_tests_properties(complete_instruction_specifications PROPERTIES TIMEOUT 300)

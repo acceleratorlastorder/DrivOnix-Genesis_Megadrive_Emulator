@@ -20,8 +20,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Fetch pinned independent reference sources
+        run: python UnitTests/conformance/prepare_reference.py
       - name: Configure
-        run: cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_REFERENCE_DIR="${{ github.workspace }}/build/conformance-data/reference"
       - name: Build
         run: cmake --build build/cpu --config Debug --parallel 2
       - name: Test reference, optimized, and legacy CPU paths
@@ -34,6 +36,16 @@ jobs:
           worker=build/cpu/vector_worker
           if [ "$RUNNER_OS" = "Windows" ]; then worker=build/cpu/Debug/vector_worker.exe; fi
           python UnitTests/conformance/run.py --worker "$worker" --limit-per-group 8 --baseline UnitTests/conformance/smoke-baseline.json --report-dir build/conformance-report
+      - name: Check all 65536 opcode words against the independent reference
+        shell: bash
+        run: |
+          worker=build/cpu/vector_worker
+          oracle=build/cpu/reference_worker
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            worker=build/cpu/Debug/vector_worker.exe
+            oracle=build/cpu/Debug/reference_worker.exe
+          fi
+          python UnitTests/conformance/complete.py --worker "$worker" --oracle "$oracle" --quick --baseline UnitTests/conformance/decode-baseline.json.gz --report-dir build/complete-cpu-report
       - name: Configure sanitizers
         if: runner.os == 'Linux'
         run: cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
@@ -51,4 +63,7 @@ jobs:
           path: |
             build/conformance-report/
             build/cpu/handwritten-report/
+            build/cpu/specifications-report/
+            build/complete-cpu-report/
+            build/cpu-sanitized/specifications-report/
           if-no-files-found: error

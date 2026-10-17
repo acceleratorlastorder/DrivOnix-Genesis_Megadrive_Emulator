@@ -170,6 +170,13 @@ int M68k::StepVector(bool optimized)
 	ExecuteOpcode(opcode);
 	return get().opcodeClicks;
 }
+
+void M68k::VectorIRQ(unsigned level)
+{
+	if(level > 0 && level <= 7) RequestAutoVectorInt(INT_TYPE(level));
+}
+
+void M68k::VectorReset() { Init(); }
 #endif
 
 void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
