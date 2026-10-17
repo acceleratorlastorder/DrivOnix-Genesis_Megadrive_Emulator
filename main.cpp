@@ -1,54 +1,65 @@
 #include "Genesis/genesis.hpp"
 #include "CathodeRayTube/crt.hpp"
+#include "Platform/platform.hpp"
 
-int main(void)
+#include <exception>
+
+int main(int argc, char* argv[])
 {
-	//freopen("output.txt", "w", stdout);
+    if (argc == 2 && (std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h"))
+    {
+        std::cout << "Usage: DrivOnix [ROM.bin|ROM.md|ROM.gen|ROM.smd]\n"
+                     "Run without a ROM path to open the file picker.\n";
+        return 0;
+    }
+    if (argc > 2 && !(argc == 3 && std::string(argv[1]) == "--"))
+    {
+        std::cerr << "Usage: DrivOnix [ROM path]\n";
+        return 2;
+    }
 
-	Genesis::FileBrowser();
+    try
+    {
+        const std::string romPath = argc == 1 ? Platform::SelectRom() : argv[argc - 1];
+        if (romPath.empty())
+            return 0;
+        Genesis::SetRomName(romPath);
 
-	//Bios
-	RomLoader::Init();
+        RomLoader::Init();
+        RomLoader::LoadRomFile(Genesis::GetRomName());
+        const byte country = RomLoader::GetCountry();
+        RomLoader::LoadRomFile(Platform::DataFile("Bios/DrivOnix.bios"));
 
-	RomLoader::LoadRomFile(Genesis::GetRomName());
-	byte country = RomLoader::GetCountry();
+        Platform::CheckDisplay();
+        CRT::Init();
+        Genesis::AllocM68kMemory();
+        Genesis::ResetM68kMemory();
+        Genesis::InsertCartridge();
+        Genesis::Init();
+        GamePad::Init();
+        M68k::Init();
+        YM7101::Init();
 
-	RomLoader::LoadRomFile("Bios/DrivOnix.bios");
-
-	RomLoader::PrintRomHeader();
-
-	CRT::Init();
-
-	Genesis::AllocM68kMemory();
-	Genesis::ResetM68kMemory();
-
-	Genesis::InsertCartridge();
-
-	Genesis::Init();
-	GamePad::Init();
-	
-	M68k::Init();
-	YM7101::Init();
-
-	Genesis::Bios(country);
-	//Bios
-
-	//Rom
-	RomLoader::Init();
-	RomLoader::LoadRomFile(Genesis::GetRomName());
-	RomLoader::PrintRomHeader();
-
-	Genesis::ResetM68kMemory();
-	Genesis::InsertCartridge();
-
-	Genesis::Init();
-	GamePad::Init();
-	
-	M68k::Init();
-	YM7101::Init();
-
-	Genesis::Run();
-	//Rom
-
-	return 0;
+        if (Genesis::Bios(country))
+        {
+            RomLoader::Init();
+            RomLoader::LoadRomFile(Genesis::GetRomName());
+            RomLoader::PrintRomHeader();
+            Genesis::ResetM68kMemory();
+            Genesis::InsertCartridge();
+            Genesis::Init();
+            GamePad::Init();
+            M68k::Init();
+            YM7101::Init();
+            Genesis::Run();
+        }
+        CRT::Shutdown();
+        return 0;
+    }
+    catch (const std::exception& error)
+    {
+        CRT::Shutdown();
+        std::cerr << "DrivOnix: " << error.what() << '\n';
+        return 1;
+    }
 }

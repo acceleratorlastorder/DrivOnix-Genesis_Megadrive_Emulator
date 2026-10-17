@@ -1,5 +1,27 @@
 #include "romLoader.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <stdexcept>
+
+namespace
+{
+std::vector<byte> ReadRom(const std::string& path)
+{
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input)
+        throw std::runtime_error("Cannot open ROM: " + path);
+    const std::streamoff size = input.tellg();
+    if (size < 0x200 || size > 0x400000 + SMD_HEADER_SIZE)
+        throw std::runtime_error("ROM must contain a complete header and fit in the 4 MiB cartridge area: " + path);
+    std::vector<byte> bytes(static_cast<std::size_t>(size));
+    input.seekg(0);
+    if (!input.read(reinterpret_cast<char*>(bytes.data()), size))
+        throw std::runtime_error("Cannot read ROM: " + path);
+    return bytes;
+}
+}
+
 RomLoader::RomLoader()
 {
 
@@ -16,20 +38,21 @@ void RomLoader::Init()
 	get().cartridgeSize = 0;
 	get().sramSize = 0;
 	get().haveSram = false;
+    get().cartridgeMemory.clear();
+    get().header = {};
+    get().version = 0;
 }
 
 void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest)
 {
-	uint64_t copySize = std::min<uint64_t>(pageSize, get().cartridgeSize);
-
-	if((number * pageSize) > (uint64_t)get().cartridgeSize)
-	{
-		std::cout << "Error: PageMemory" << std::endl;
-	}
-	else
-	{
-		std::memcpy(&dest[0] + start, &get().cartridgeMemory[0] + (pageSize * number), copySize);
-	}
+    if (number < 0 || pageSize == 0 || static_cast<uint64_t>(number) > get().cartridgeMemory.size() / pageSize)
+        throw std::runtime_error("Invalid cartridge page");
+    const uint64_t offset = pageSize * static_cast<uint64_t>(number);
+    const uint64_t copySize = std::min<uint64_t>(pageSize, get().cartridgeMemory.size() - offset);
+    if (start > dest.size() || copySize > dest.size() - start)
+        throw std::runtime_error("Cartridge page exceeds destination memory");
+    if (copySize)
+        std::memcpy(dest.data() + start, get().cartridgeMemory.data() + offset, copySize);
 }
 
 byte RomLoader::GetCountry()
@@ -39,7 +62,13 @@ byte RomLoader::GetCountry()
 
 void RomLoader::LoadRomFile(std::string romName)
 {
-	std::string extension = romName.substr(romName.find_last_of("."));
+    Init();
+    const auto dot = romName.find_last_of('.');
+    if (dot == std::string::npos)
+        throw std::runtime_error("Unsupported ROM extension: " + romName);
+	std::string extension = romName.substr(dot);
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+        [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
 
 	if(extension == ".bin")
 	{
@@ -63,7 +92,7 @@ void RomLoader::LoadRomFile(std::string romName)
 	}
 	else
 	{
-		std::cout << "Error: Wrong Rom extension" << std::endl;
+		throw std::runtime_error("Unsupported ROM extension: " + romName);
 	}
 
 	get().LoadHeader();
@@ -72,38 +101,20 @@ void RomLoader::LoadRomFile(std::string romName)
 
 void RomLoader::LoadBINMDGEN(std::string romName)
 {
-	std::ifstream in(romName, std::ios::binary | std::ios::ate);
-
-	get().cartridgeSize = (long)in.tellg();
-	get().cartridgeMemory.reserve(get().cartridgeSize);
-	std::fill(get().cartridgeMemory.begin(), get().cartridgeMemory.end(), 0);
-
-	in.close();
-
-	FILE *romFile = NULL;
-	romFile = fopen(romName.c_str(), "rb");
-	fread(&get().cartridgeMemory[0], get().cartridgeSize, 1, romFile);
-	fclose(romFile);
+    get().cartridgeMemory = ReadRom(romName);
+    if (get().cartridgeMemory.size() > 0x400000)
+        throw std::runtime_error("ROM exceeds the 4 MiB cartridge area: " + romName);
+    get().cartridgeSize = static_cast<long>(get().cartridgeMemory.size());
 }
 
 void RomLoader::LoadSMD(std::string romName)
 {
-	std::ifstream in(romName, std::ios::binary | std::ios::ate);
-
-	long romSize = (long)in.tellg();
-	get().cartridgeSize = (long)((long)in.tellg() - (long)SMD_HEADER_SIZE);
-	get().cartridgeMemory.reserve(get().cartridgeSize);
-	std::fill(get().cartridgeMemory.begin(), get().cartridgeMemory.end(), 0);
-
-	std::vector<byte> romSMD;
-	romSMD.reserve(romSize);
-
-	in.close();
-
-	FILE *romFile = NULL;
-	romFile = fopen(romName.c_str(), "rb");
-	fread(&romSMD[0], romSize, 1, romFile);
-	fclose(romFile);
+    const std::vector<byte> romSMD = ReadRom(romName);
+    const std::size_t size = romSMD.size() - SMD_HEADER_SIZE;
+    if (size == 0 || size % SMD_BLOCK_SIZE != 0)
+        throw std::runtime_error("SMD ROM must contain complete 16 KiB blocks after its 512-byte header: " + romName);
+    get().cartridgeSize = static_cast<long>(size);
+    get().cartridgeMemory.resize(size);
 
 	int blocksNumber = (get().cartridgeSize) / SMD_BLOCK_SIZE;
 
@@ -139,7 +150,8 @@ void RomLoader::LoadSMD(std::string romName)
 
 void RomLoader::LoadHeader()
 {
-	get().header = *((HEADER*)&get().cartridgeMemory[0x100]);
+    static_assert(sizeof(HEADER) == 0x100, "ROM header layout must match the cartridge format");
+    std::memcpy(&get().header, get().cartridgeMemory.data() + 0x100, sizeof(HEADER));
 
 	InvertWordEndian(get().header.checksum);
 	InvertDWordEndian(get().header.romStart);
@@ -178,7 +190,8 @@ void RomLoader::Checksum()
 	for(long i = 0x200; i < get().cartridgeSize; i += 2)
 	{
 		checksum += get().cartridgeMemory[i] * 256;
-		checksum += cartridgeMemory[i + 1];
+        if (i + 1 < get().cartridgeSize)
+		    checksum += get().cartridgeMemory[i + 1];
 	}
 
 	if(checksum != get().header.checksum)

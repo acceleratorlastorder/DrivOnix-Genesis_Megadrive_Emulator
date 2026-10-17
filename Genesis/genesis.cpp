@@ -46,7 +46,7 @@ void Genesis::InsertCartridge()
 	RomLoader::PageMemory(0, 0x400000, 0, get().M68kMemory);
 }
 
-void Genesis::Bios(byte country)
+bool Genesis::Bios(byte country)
 {
 	sfClock* clock;
     clock = sfClock_create();
@@ -69,8 +69,11 @@ void Genesis::Bios(byte country)
           		sfRenderWindow_close(CRT::GetWindow());
       		}
 
-      		get().powerOff = GamePad::Update(event);
+            get().powerOff = get().powerOff || GamePad::Update(event);
     	}
+
+        if (!sfRenderWindow_isOpen(CRT::GetWindow()) || get().powerOff)
+            break;
 
     	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
 
@@ -85,9 +88,12 @@ void Genesis::Bios(byte country)
 
     	if(Genesis::M68KReadMemoryLONG(0xFF00FF) == 0xCAFE) //magic number
     	{
-    		break;
+            sfClock_destroy(clock);
+            return true;
     	}
   	}
+    sfClock_destroy(clock);
+    return false;
 }
 
 void Genesis::Run()
@@ -115,8 +121,11 @@ void Genesis::Run()
           		sfRenderWindow_close(CRT::GetWindow());
       		}
 
-      		get().powerOff = GamePad::Update(event);
+            get().powerOff = get().powerOff || GamePad::Update(event);
     	}
+
+        if (!sfRenderWindow_isOpen(CRT::GetWindow()) || get().powerOff)
+            break;
 
     	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
 
@@ -129,6 +138,7 @@ void Genesis::Run()
       		CRT::Render();
     	}
   	}
+    sfClock_destroy(clock);
 }
 
 void Genesis::Update()
@@ -163,23 +173,12 @@ Genesis& Genesis::get(void)
 	return instance;
 }
 
-void Genesis::FileBrowser()
+void Genesis::SetRomName(const std::string& path)
 {
-	OPENFILENAME ofn;
-	memset(&get().romName, 0, sizeof(get().romName));
-    memset(&ofn,      0, sizeof(ofn));
-    ofn.lStructSize  = sizeof(ofn);
-    ofn.hwndOwner    = nullptr;
-    ofn.lpstrFilter  = "Genesis/Megadrive BIN rom\0*.bin\0Megadrive MD rom\0*.md\0Genesis GEN rom\0*.gen\0Genesis/Megadrive SMD rom\0*.smd\0";
-    ofn.lpstrFile    = get().romName;
-    ofn.nMaxFile     = 2048;
-    ofn.lpstrTitle   = "Select a Rom, hell yeah !";
-    ofn.Flags        = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-
-    GetOpenFileNameA(&ofn);
+    get().romName = path;
 }
 
-char* Genesis::GetRomName()
+const std::string& Genesis::GetRomName()
 {
 	return get().romName;
 }

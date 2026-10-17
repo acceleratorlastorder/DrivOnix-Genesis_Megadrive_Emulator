@@ -10,7 +10,7 @@ Windows, CSFML, a display, or a game ROM:
 
 The CMake target compiles the actual M68k/m68k.cpp and Bits/bitsUtils.cpp.
 DRIVONIX_CPU_TESTS selects cpuTestMemory.cpp as an isolated, big-endian memory
-fixture instead of the console's Windows/display/I/O dependencies. It preserves
+fixture instead of the console's display/I/O dependencies. It preserves
 the current RAM mapping and read-only ROM writes. This is CPU unit coverage;
 it does not validate Genesis I/O, rendering, audio, ROM booting, or game behavior.
 
