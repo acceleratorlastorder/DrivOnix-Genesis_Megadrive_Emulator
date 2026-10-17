@@ -2,6 +2,15 @@
 #define CPU_TEST_MEMORY_HPP
 
 #include "../Bits/bitsUtils.hpp"
+#include <vector>
+
+namespace CpuTestMemory
+{
+    void SetFlatBus(bool enabled);
+    void SeedByte(dword address, byte value);
+    void ObserveWrites();
+    const std::vector<dword>& WrittenAddresses();
+}
 
 // CPU unit-test fixture. This target does not link the console's display or I/O.
 class Genesis

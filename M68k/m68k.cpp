@@ -137,6 +137,41 @@ CPU_STATE_DEBUG M68k::GetCpuState()
 	return state;
 }
 
+#ifdef DRIVONIX_CPU_TESTS
+void M68k::LoadVectorState(const CPU_VECTOR_STATE& state)
+{
+	SetCpuState(state.cpu);
+	get().userStackPointer = state.usp;
+	get().supervisorStackPointer = state.ssp;
+	get().registerAddress[7] = get().superVisorModeActivated ? state.ssp : state.usp;
+	get().unitTests = false;
+	get().opcodeClicks = 0;
+}
+
+CPU_VECTOR_STATE M68k::ReadVectorState()
+{
+	CPU_VECTOR_STATE state = {};
+	state.cpu = GetCpuState();
+	state.usp = get().superVisorModeActivated ? get().userStackPointer : get().registerAddress[7];
+	state.ssp = get().superVisorModeActivated ? get().registerAddress[7] : get().supervisorStackPointer;
+	return state;
+}
+
+int M68k::StepVector(bool optimized)
+{
+	if(optimized) return Update();
+	// Match Update's instruction boundary while selecting the reference decoder.
+	get().CheckInt();
+	get().CheckPrivilege();
+	if(get().stop) return 4;
+	get().opcodeClicks = 0;
+	word opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
+	get().programCounter += 2;
+	ExecuteOpcode(opcode);
+	return get().opcodeClicks;
+}
+#endif
+
 void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
 {
 	int address = Genesis::M68KReadMemoryLONG(((int)level * 4) + 0x60);

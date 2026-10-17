@@ -27,6 +27,15 @@ typedef struct
 
 }CPU_STATE_DEBUG;
 
+#ifdef DRIVONIX_CPU_TESTS
+struct CPU_VECTOR_STATE
+{
+	CPU_STATE_DEBUG cpu;
+	dword usp;
+	dword ssp;
+};
+#endif
+
 class M68k
 {
 public:
@@ -55,6 +64,11 @@ public:
 	//Start UnitTests
 	static void SetCpuState(CPU_STATE_DEBUG cpuState);
 	static CPU_STATE_DEBUG GetCpuState();
+#ifdef DRIVONIX_CPU_TESTS
+	static void LoadVectorState(const CPU_VECTOR_STATE& state);
+	static CPU_VECTOR_STATE ReadVectorState();
+	static int StepVector(bool optimized);
+#endif
 	//End UnitTests
 
 	//Start EA
