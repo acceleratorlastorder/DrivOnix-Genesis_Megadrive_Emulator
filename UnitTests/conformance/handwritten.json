@@ -1,0 +1,526 @@
+{
+  "format": 1,
+  "source": "Project test guide plus Motorola MC68000 instruction semantics; independent of DrivOnix output.",
+  "cases": [
+    {
+      "name": "NOP preserves registers and flags",
+      "family": "NOP",
+      "instruction": [
+        20081
+      ],
+      "initial": {
+        "sr": 10015
+      },
+      "expected": {
+        "pc": 14680066
+      },
+      "cycles": 4
+    },
+    {
+      "name": "MOVEQ sign extends minus one",
+      "family": "MOVEQ",
+      "instruction": [
+        28927
+      ],
+      "initial": {},
+      "expected": {
+        "d0": 4294967295,
+        "sr": 9992,
+        "pc": 14680066
+      },
+      "cycles": 4
+    },
+    {
+      "name": "SWAP exchanges both halves",
+      "family": "SWAP",
+      "instruction": [
+        18496
+      ],
+      "initial": {
+        "d0": 305419896,
+        "sr": 10015
+      },
+      "expected": {
+        "d0": 1450709556,
+        "sr": 10000,
+        "pc": 14680066
+      },
+      "cycles": 4
+    },
+    {
+      "name": "EXT.W keeps upper data word",
+      "family": "EXT",
+      "instruction": [
+        18560
+      ],
+      "initial": {
+        "d0": 305397888,
+        "sr": 10015
+      },
+      "expected": {
+        "d0": 305463168,
+        "sr": 10008,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "ABCD uses decimal correction",
+      "family": "ABCD",
+      "instruction": [
+        52484
+      ],
+      "initial": {
+        "d4": 9,
+        "d6": 9,
+        "sr": 9988
+      },
+      "expected": {
+        "d6": 24,
+        "sr": 9984,
+        "pc": 14680066
+      },
+      "sr_mask": 65525
+    },
+    {
+      "name": "ABCD extend carry and sticky zero",
+      "family": "ABCD",
+      "instruction": [
+        52484
+      ],
+      "initial": {
+        "d4": 153,
+        "d6": 0,
+        "sr": 10004
+      },
+      "expected": {
+        "d6": 0,
+        "sr": 10005,
+        "pc": 14680066
+      },
+      "sr_mask": 65525
+    },
+    {
+      "name": "ADD.W signed overflow preserves upper word",
+      "family": "ADD",
+      "instruction": [
+        53824
+      ],
+      "initial": {
+        "d0": 1,
+        "d1": 2882371583,
+        "sr": 10000
+      },
+      "expected": {
+        "d1": 2882371584,
+        "sr": 9994,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "SUB.W borrows and preserves upper word",
+      "family": "SUB",
+      "instruction": [
+        37440
+      ],
+      "initial": {
+        "d0": 1,
+        "d1": 2882338816
+      },
+      "expected": {
+        "d1": 2882404351,
+        "sr": 10009,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "CMP.W changes flags without writing operand",
+      "family": "CMP",
+      "instruction": [
+        45632
+      ],
+      "initial": {
+        "d0": 1,
+        "d1": 0,
+        "sr": 10000
+      },
+      "expected": {
+        "sr": 10009,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "MULS nonzero product with zero low word",
+      "family": "MULS",
+      "instruction": [
+        50112
+      ],
+      "initial": {
+        "d0": 256,
+        "d1": 256
+      },
+      "expected": {
+        "d1": 65536,
+        "sr": 9984,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "MULU checks all 32 product bits",
+      "family": "MULU",
+      "instruction": [
+        49856
+      ],
+      "initial": {
+        "d0": 256,
+        "d1": 256
+      },
+      "expected": {
+        "d1": 65536,
+        "sr": 9984,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "DIVS negative quotient has zero remainder",
+      "family": "DIVS",
+      "instruction": [
+        33728
+      ],
+      "initial": {
+        "d0": 4,
+        "d1": 4294967288
+      },
+      "expected": {
+        "d1": 65534,
+        "sr": 9992,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "DIVU accepts full unsigned word quotient",
+      "family": "DIVU",
+      "instruction": [
+        33472
+      ],
+      "initial": {
+        "d0": 1,
+        "d1": 65535
+      },
+      "expected": {
+        "d1": 65535,
+        "sr": 9992,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "ORI to CCR ignores reserved immediate bits",
+      "family": "ORItoCCR",
+      "instruction": [
+        60,
+        255
+      ],
+      "initial": {},
+      "expected": {
+        "sr": 10015,
+        "pc": 14680068
+      }
+    },
+    {
+      "name": "ORI to SR only sets implemented bits",
+      "family": "ORItoSR",
+      "instruction": [
+        124,
+        65535
+      ],
+      "initial": {},
+      "expected": {
+        "sr": 42783,
+        "pc": 14680068
+      }
+    },
+    {
+      "name": "MOVE to CCR cannot set reserved bits",
+      "family": "MOVEtoCCR",
+      "instruction": [
+        17600
+      ],
+      "initial": {
+        "d0": 65535
+      },
+      "expected": {
+        "sr": 10015,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "MOVE to SR masks reserved bits",
+      "family": "MOVEtoSR",
+      "instruction": [
+        18112
+      ],
+      "initial": {
+        "d0": 65535
+      },
+      "expected": {
+        "sr": 42783,
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "BRA.W displacement starts at extension word",
+      "family": "BRA",
+      "instruction": [
+        24576,
+        6
+      ],
+      "initial": {},
+      "expected": {
+        "pc": 14680072
+      }
+    },
+    {
+      "name": "BSR.W pushes return after extension word",
+      "family": "BSR",
+      "instruction": [
+        24832,
+        6
+      ],
+      "initial": {},
+      "expected": {
+        "pc": 14680072,
+        "ssp": 14745340
+      },
+      "expected_ram": [
+        [
+          14745340,
+          0
+        ],
+        [
+          14745341,
+          224
+        ],
+        [
+          14745342,
+          0
+        ],
+        [
+          14745343,
+          4
+        ]
+      ]
+    },
+    {
+      "name": "RTS pops a big endian return address",
+      "family": "RTS",
+      "instruction": [
+        20085
+      ],
+      "initial": {
+        "ssp": 14745340
+      },
+      "expected": {
+        "pc": 14680072,
+        "ssp": 14745344
+      },
+      "ram": [
+        [
+          14745340,
+          0
+        ],
+        [
+          14745341,
+          224
+        ],
+        [
+          14745342,
+          0
+        ],
+        [
+          14745343,
+          8
+        ]
+      ]
+    },
+    {
+      "name": "LEA absolute long preserves flags",
+      "family": "LEA",
+      "instruction": [
+        16889,
+        18,
+        13398
+      ],
+      "initial": {
+        "sr": 10015
+      },
+      "expected": {
+        "a0": 1193046,
+        "pc": 14680070
+      }
+    },
+    {
+      "name": "MOVE.W data register to indirect memory",
+      "family": "MOVE",
+      "instruction": [
+        12416
+      ],
+      "initial": {
+        "a0": 14680320,
+        "d0": 305441741
+      },
+      "expected": {
+        "sr": 9992,
+        "pc": 14680066
+      },
+      "expected_ram": [
+        [
+          14680320,
+          171
+        ],
+        [
+          14680321,
+          205
+        ]
+      ]
+    },
+    {
+      "name": "MOVE.W postincrements the source address",
+      "family": "MOVE",
+      "instruction": [
+        12824
+      ],
+      "initial": {
+        "a0": 14680320
+      },
+      "expected": {
+        "d1": 32769,
+        "a0": 14680322,
+        "sr": 9992,
+        "pc": 14680066
+      },
+      "ram": [
+        [
+          14680320,
+          128
+        ],
+        [
+          14680321,
+          1
+        ]
+      ]
+    },
+    {
+      "name": "MOVE.B predecrements A7 by two bytes",
+      "family": "MOVE",
+      "instruction": [
+        4135
+      ],
+      "initial": {},
+      "expected": {
+        "d0": 127,
+        "ssp": 14745342,
+        "pc": 14680066
+      },
+      "ram": [
+        [
+          14745342,
+          127
+        ]
+      ]
+    },
+    {
+      "name": "STOP loads SR and stops execution",
+      "family": "STOP",
+      "instruction": [
+        20082,
+        9984
+      ],
+      "initial": {},
+      "expected": {
+        "pc": 14680068,
+        "stop": true
+      }
+    },
+    {
+      "name": "TRAP pushes SR and next PC then fetches vector",
+      "family": "TRAP",
+      "instruction": [
+        20032
+      ],
+      "initial": {},
+      "expected": {
+        "pc": 14684160,
+        "ssp": 14745338
+      },
+      "ram": [
+        [
+          128,
+          0
+        ],
+        [
+          129,
+          224
+        ],
+        [
+          130,
+          16
+        ],
+        [
+          131,
+          0
+        ]
+      ],
+      "expected_ram": [
+        [
+          14745338,
+          39
+        ],
+        [
+          14745339,
+          0
+        ],
+        [
+          14745340,
+          0
+        ],
+        [
+          14745341,
+          224
+        ],
+        [
+          14745342,
+          0
+        ],
+        [
+          14745343,
+          2
+        ]
+      ]
+    },
+    {
+      "name": "TRAPV with clear V does not trap",
+      "family": "TRAPV",
+      "instruction": [
+        20086
+      ],
+      "initial": {},
+      "expected": {
+        "pc": 14680066
+      }
+    },
+    {
+      "name": "TAS register tests original byte then sets bit 7",
+      "family": "TAS",
+      "instruction": [
+        19136
+      ],
+      "initial": {
+        "d0": 0
+      },
+      "expected": {
+        "d0": 128,
+        "sr": 9988,
+        "pc": 14680066
+      }
+    }
+  ]
+}

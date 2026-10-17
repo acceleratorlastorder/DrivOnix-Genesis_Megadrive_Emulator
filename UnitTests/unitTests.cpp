@@ -1,4 +1,5 @@
 #include "unitTests.hpp"
+#include <set>
  ////////////////////////////////////////
 //UTILS
 ////////////////////////////////////////
@@ -1758,118 +1759,131 @@ bool Test_NBCD() {
 //MAIN
 ////////////////////////////////////////
 int main() {
-    std::map < std::string, bool > TestResults;
-
-    M68k::SetUnitTestsMode();
-
+    // Unfinished templates are catalogued, never counted as successful tests.
+    const std::set<std::string> implemented = {
+        "Test_ABCD",
+        "Test_ADD",
+        "Test_ADDA",
+        "Test_ASL_ASR_TO_MEMORY",
+        "Test_ASL_ASR_TO_REGISTER",
+        "Test_SBCD",
+        "Test_NBCD",
+        "Test_ANDI_TO_CCR",
+        "Test_ANDI_TO_SR",
+        "Test_DIVU",
+        "Test_EORI_TO_CCR",
+        "Test_EORI_TO_SR",
+        "Test_MOVE_TO_CCR",
+        "Test_MOVE_FROM_SR",
+        "Test_MOVE_TO_SR",
+        "Test_MOVE_USP",
+        "Test_MULU",
+    };
+    const std::map<std::string, bool (*)()> tests = {
+        {"Test_ABCD", Test_ABCD},
+        {"Test_ADD", Test_ADD},
+        {"Test_ADDA", Test_ADDA},
+        {"Test_ADDI", Test_ADDI},
+        {"Test_ADDQ", Test_ADDQ},
+        {"Test_ADDX", Test_ADDX},
+        {"Test_AND", Test_AND},
+        {"Test_ANDI", Test_ANDI},
+        {"Test_ANDI_TO_CCR", Test_ANDI_TO_CCR},
+        {"Test_ANDI_TO_SR", Test_ANDI_TO_SR},
+        {"Test_ASL_ASR_TO_MEMORY", Test_ASL_ASR_TO_MEMORY},
+        {"Test_ASL_ASR_TO_REGISTER", Test_ASL_ASR_TO_REGISTER},
+        {"Test_Bcc", Test_Bcc},
+        {"Test_BCHG", Test_BCHG},
+        {"Test_BCLR", Test_BCLR},
+        {"Test_BRA", Test_BRA},
+        {"Test_BSET", Test_BSET},
+        {"Test_BSR", Test_BSR},
+        {"Test_BTST", Test_BTST},
+        {"Test_CHK", Test_CHK},
+        {"Test_CLR", Test_CLR},
+        {"Test_CMP", Test_CMP},
+        {"Test_CMPA", Test_CMPA},
+        {"Test_CMPI", Test_CMPI},
+        {"Test_CMPM", Test_CMPM},
+        {"Test_DBcc", Test_DBcc},
+        {"Test_DIVS", Test_DIVS},
+        {"Test_DIVU", Test_DIVU},
+        {"Test_EOR", Test_EOR},
+        {"Test_EORI", Test_EORI},
+        {"Test_EORI_TO_CCR", Test_EORI_TO_CCR},
+        {"Test_EORI_TO_SR", Test_EORI_TO_SR},
+        {"Test_EXG", Test_EXG},
+        {"Test_EXT", Test_EXT},
+        {"Test_ILLEGAL", Test_ILLEGAL},
+        {"Test_JMP", Test_JMP},
+        {"Test_JSR", Test_JSR},
+        {"Test_LEA", Test_LEA},
+        {"Test_LINK", Test_LINK},
+        {"Test_LSL_LSR_TO_MEMORY", Test_LSL_LSR_TO_MEMORY},
+        {"Test_LSL_LSR_TO_REGISTER", Test_LSL_LSR_TO_REGISTER},
+        {"Test_MOVE", Test_MOVE},
+        {"Test_MOVE_TO_CCR", Test_MOVE_TO_CCR},
+        {"Test_MOVE_FROM_SR", Test_MOVE_FROM_SR},
+        {"Test_MOVE_TO_SR", Test_MOVE_TO_SR},
+        {"Test_MOVE_USP", Test_MOVE_USP},
+        {"Test_MOVEA", Test_MOVEA},
+        {"Test_MOVEM", Test_MOVEM},
+        {"Test_MOVEP", Test_MOVEP},
+        {"Test_MOVEQ", Test_MOVEQ},
+        {"Test_MULS", Test_MULS},
+        {"Test_MULU", Test_MULU},
+        {"Test_NEG", Test_NEG},
+        {"Test_NEGX", Test_NEGX},
+        {"Test_NOP", Test_NOP},
+        {"Test_NOT", Test_NOT},
+        {"Test_OR", Test_OR},
+        {"Test_ORI", Test_ORI},
+        {"Test_ORI_TO_CCR", Test_ORI_TO_CCR},
+        {"Test_ORI_TO_SR", Test_ORI_TO_SR},
+        {"Test_PEA", Test_PEA},
+        {"Test_RESET", Test_RESET},
+        {"Test_ROL_ROR_TO_REGISTER", Test_ROL_ROR_TO_REGISTER},
+        {"Test_ROL_ROR_TO_MEMORY", Test_ROL_ROR_TO_MEMORY},
+        {"Test_ROXL_ROXR_TO_MEMORY", Test_ROXL_ROXR_TO_MEMORY},
+        {"Test_ROXL_ROXR_TO_REGISTER", Test_ROXL_ROXR_TO_REGISTER},
+        {"Test_RTE", Test_RTE},
+        {"Test_RTR", Test_RTR},
+        {"Test_RTS", Test_RTS},
+        {"Test_Scc", Test_Scc},
+        {"Test_STOP", Test_STOP},
+        {"Test_SUB", Test_SUB},
+        {"Test_SUBA", Test_SUBA},
+        {"Test_SUBI", Test_SUBI},
+        {"Test_SUBQ", Test_SUBQ},
+        {"Test_SUBX", Test_SUBX},
+        {"Test_SWAP", Test_SWAP},
+        {"Test_TAS", Test_TAS},
+        {"Test_TRAP", Test_TRAP},
+        {"Test_TRAPV", Test_TRAPV},
+        {"Test_TST", Test_TST},
+        {"Test_SBCD", Test_SBCD},
+        {"Test_NBCD", Test_NBCD},
+        {"Test_UNLK", Test_UNLK},
+    };
     Genesis::AllocM68kMemory();
-    M68k::Init();
-    M68k::SetUnitTestsMode();
-    Genesis::M68KWriteMemoryLONG(0xE00000, 0xCAFE);
-
-    TestResults.insert(std::pair < std::string, bool > ("Test_ABCD", Test_ABCD()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ADD", Test_ADD()));
-
-    TestResults.insert(std::pair < std::string, bool > ("Test_ADDA", Test_ADDA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ADDI", Test_ADDI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ADDQ", Test_ADDQ()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ADDX", Test_ADDX()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_AND", Test_AND()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI", Test_ANDI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_CCR", Test_ANDI_TO_CCR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ANDI_TO_SR", Test_ANDI_TO_SR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_MEMORY", Test_ASL_ASR_TO_MEMORY()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ASL_ASR_TO_REGISTER", Test_ASL_ASR_TO_REGISTER()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_Bcc", Test_Bcc()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BCHG", Test_BCHG()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BCLR", Test_BCLR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BRA", Test_BRA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BSET", Test_BSET()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BSR", Test_BSR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_BTST", Test_BTST()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CHK", Test_CHK()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CLR", Test_CLR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CMP", Test_CMP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CMPA", Test_CMPA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CMPI", Test_CMPI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_CMPM", Test_CMPM()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_DBcc", Test_DBcc()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_DIVS", Test_DIVS()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_DIVU", Test_DIVU()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EOR", Test_EOR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EORI", Test_EORI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_CCR", Test_EORI_TO_CCR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EORI_TO_SR", Test_EORI_TO_SR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EXG", Test_EXG()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_EXT", Test_EXT()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ILLEGAL", Test_ILLEGAL()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_JMP", Test_JMP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_JSR", Test_JSR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_LEA", Test_LEA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_LINK", Test_LINK()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_MEMORY", Test_LSL_LSR_TO_MEMORY()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_LSL_LSR_TO_REGISTER", Test_LSL_LSR_TO_REGISTER()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE", Test_MOVE()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_CCR", Test_MOVE_TO_CCR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_FROM_SR", Test_MOVE_FROM_SR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_TO_SR", Test_MOVE_TO_SR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVE_USP", Test_MOVE_USP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVEA", Test_MOVEA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVEM", Test_MOVEM()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVEP", Test_MOVEP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MOVEQ", Test_MOVEQ()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MULS", Test_MULS()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_MULU", Test_MULU()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_NEG", Test_NEG()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_NEGX", Test_NEGX()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_NOP", Test_NOP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_NOT", Test_NOT()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_OR", Test_OR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ORI", Test_ORI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ORI_TO_CCR", Test_ORI_TO_CCR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ORI_TO_SR", Test_ORI_TO_SR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_PEA", Test_PEA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_RESET", Test_RESET()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ROL_ROR_TO_REGISTER", Test_ROL_ROR_TO_REGISTER()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ROL_ROR_TO_MEMORY", Test_ROL_ROR_TO_MEMORY()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ROXL_ROXR_TO_MEMORY", Test_ROXL_ROXR_TO_MEMORY()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_ROXL_ROXR_TO_REGISTER", Test_ROXL_ROXR_TO_REGISTER()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_RTE", Test_RTE()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_RTR", Test_RTR()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_RTS", Test_RTS()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_Scc", Test_Scc()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_STOP", Test_STOP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SUB", Test_SUB()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SUBA", Test_SUBA()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SUBI", Test_SUBI()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SUBQ", Test_SUBQ()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SUBX", Test_SUBX()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_SWAP", Test_SWAP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_TAS", Test_TAS()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_TRAP", Test_TRAP()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_TRAPV", Test_TRAPV()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_TST", Test_TST()));
-
-    TestResults.insert(std::pair < std::string, bool > ("Test_SBCD", Test_SBCD()));
-    TestResults.insert(std::pair < std::string, bool > ("Test_NBCD", Test_NBCD()));
-
-    /**
-     * END
-     **/
-    std::cout << "!!!!!!All Test Completed!!!!!!" << std::endl;
-    int testErrorCount = 0;
-    for (auto iterator = TestResults.begin(); iterator != TestResults.end(); iterator++) {
-        if (!iterator -> second) {
-            testErrorCount++;
-            std::cout << iterator -> first << " did not pass the test" << std::endl;
+    int failures = 0;
+    int executed = 0;
+    int skipped = 0;
+    for (const auto& test : tests) {
+        if (!implemented.count(test.first)) {
+            std::cout << "SKIP " << test.first << ": unfinished legacy template" << std::endl;
+            ++skipped;
+            continue;
         }
+        Genesis::ResetM68kMemory();
+        M68k::Init();
+        M68k::SetUnitTestsMode();
+        ++executed;
+        bool pass = test.second();
+        failures += !pass;
+        std::cout << (pass ? "PASS " : "FAIL ") << test.first << std::endl;
     }
-
-    if (testErrorCount == 0) {
-        std::cout << "There is no known error GOOD JOB !" << std::endl;
-    } else {
-        std::cout << "There is " << testErrorCount << " known errors !" << std::endl;
-    }
-
-    return testErrorCount == 0 ? 0 : 1;
+    std::cout << std::dec << "Legacy suite: " << executed << " checked groups, "
+              << failures << " failures, " << skipped << " unfinished groups skipped" << std::endl;
+    return failures == 0 ? 0 : 1;
 }

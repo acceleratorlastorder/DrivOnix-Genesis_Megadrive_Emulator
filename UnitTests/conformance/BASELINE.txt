@@ -1,0 +1,38 @@
+Initial full CPU audit, 2026-10-17
+================================
+
+CPU opcode implementation: master 7e13a656a469cf672d312e9396e73573c9df6d52.
+This baseline adds test-only loading/stepping and changes no opcode handlers.
+Environment: Linux x86-64, GCC 14.2, Debug, Python 3.13.
+Sources and scope are documented in README.txt and pinned in upstream.lock.json.
+
+312,500 external cases plus 28 readable project cases ran through EACH decoder.
+5,000 external TAS/TRAPV cases were quarantined for EACH decoder.
+
+                                     Per decoder       Both decoders
+Executed                                 312,528             625,056
+All observed assertions passed           144,755             289,510
+At least one observed assertion failed   167,773             335,546
+Observed CPU state passed                170,904             341,808
+Observed CPU state failed                141,624             283,248
+Cycle total failed                       101,730             203,460
+Readable cases with timing unchecked          25                  50
+Quarantined external cases                 5,000              10,000
+Crashes/unsupported cases                      0                   0
+Reference/optimized dispatch disagreements                         0
+
+State and timing failures overlap; do not add their counts. The data's operand
+distribution and the adapter's explicitly unobserved behaviors make these
+counts unsuitable as an emulator accuracy percentage.
+
+Readable cases: 21 pass and 7 fail per decoder. The failures expose MULS zero
+flags, DIVS quotient/remainder packing, ORI reserved status bits (CCR and SR),
+STOP PC advance, TRAP exception handling, and TAS register preservation.
+The legacy suite has 17 checked groups and 67 unfinished templates reported SKIP.
+
+The fixed CI sample executes 1,028 cases per decoder: 500 pass, 528 fail, and
+16 additional upstream cases are quarantined. Its checked-in per-bit baseline
+allows the reviewed current failures while rejecting new ones. Full audit
+reports are generated locally under build/conformance-full/; CI publishes the
+sample and readable-case reports as artifacts. Neither gate success nor these
+counts mean the CPU is complete.

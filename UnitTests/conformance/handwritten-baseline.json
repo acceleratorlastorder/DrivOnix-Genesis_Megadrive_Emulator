@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "plan": {
+    "adapter_version": 1,
+    "assertion_granularity": "bits",
+    "lock_sha256": "e6865c879f339c8e0d138e4cbcc432a42b4261bc21ca7f3f393a86c634884f8a",
+    "handwritten_sha256": "8bcae3016f1fab71d2b8bdd5c5c2090ed6d86007d5b928e4bb2a5024c6837d79",
+    "dispatch": [
+      "reference",
+      "optimized"
+    ],
+    "limit_per_group": 0,
+    "groups": [],
+    "handwritten_only": true,
+    "selected_cases": 28,
+    "expectations_sha256": "f3c710d8accba16ac0c74484bafce8d2a03eafe1689c0477c744755d22be30c9"
+  },
+  "known_failures": {
+    "handwritten/9/reference": {
+      "sr": 4
+    },
+    "handwritten/11/reference": {
+      "d1": 4294901760
+    },
+    "handwritten/13/reference": {
+      "sr": 224
+    },
+    "handwritten/14/reference": {
+      "sr": 22752
+    },
+    "handwritten/24/reference": {
+      "pc": 2
+    },
+    "handwritten/25/reference": {
+      "a7": 506,
+      "ssp": 506,
+      "pc": 4098,
+      "ram:e0fefa": 39,
+      "ram:e0fefd": 224,
+      "ram:e0feff": 2
+    },
+    "handwritten/27/reference": {
+      "d0": 128
+    },
+    "handwritten/9/optimized": {
+      "sr": 4
+    },
+    "handwritten/11/optimized": {
+      "d1": 4294901760
+    },
+    "handwritten/13/optimized": {
+      "sr": 224
+    },
+    "handwritten/14/optimized": {
+      "sr": 22752
+    },
+    "handwritten/24/optimized": {
+      "pc": 2
+    },
+    "handwritten/25/optimized": {
+      "a7": 506,
+      "ssp": 506,
+      "pc": 4098,
+      "ram:e0fefa": 39,
+      "ram:e0fefd": 224,
+      "ram:e0feff": 2
+    },
+    "handwritten/27/optimized": {
+      "d0": 128
+    }
+  }
+}

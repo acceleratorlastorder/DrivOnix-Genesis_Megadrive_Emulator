@@ -1,7 +1,8 @@
 CPU opcode tests
 ================
 
-Build and run without Windows, CSFML, a display, or a game ROM:
+Requires CMake, a C++11 compiler, and Python 3.9 or newer. Build and run without
+Windows, CSFML, a display, or a game ROM:
 
     cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug
     cmake --build build/cpu --config Debug --parallel 2
@@ -24,14 +25,28 @@ a zero low word, and products setting bit 31. Undefined DIVU overflow N/Z flags
 are deliberately not asserted. Divide-by-zero exception delivery and full
 exception stack frames are not covered by these groups.
 
-legacy_cpu_tests runs the existing suite plus the new groups. Many existing
-legacy functions remain placeholders that return true without assertions; a
-successful legacy run must not be interpreted as complete opcode coverage.
+legacy_cpu_tests runs 17 checked groups from the existing suite and new groups.
+The 67 unfinished legacy templates are preserved but explicitly reported as
+SKIP; they are never counted as passing tests. This is not complete opcode coverage.
 All legacy debug states are zero initialized, and a failed test returns a
 nonzero process exit code. The runner no longer waits for an interactive pause.
 The ADDA checks use address registers and verify flag preservation; the old
 test wrote beyond the data-register array. ASL/ASR memory and zero-count
 register cases now have assertions, including operand and X-flag preservation.
+
+conformance_adapter checks the external-vector decoder, protocol, comparison
+logic, failure recovery, and regression gate using independent fixtures and
+deliberately corrupted results. handwritten_known_failure_gate runs 28 readable
+specifications through both dispatch paths. Seven currently fail per path; this
+gate permits only the recorded wrong bits while keeping the correct expected
+outputs. A passing regression gate does not mean those CPU cases pass.
+
+The broader pinned SingleStepTests/m68000 corpus and instruction matrix are
+documented in conformance/README.txt. Fetching and running that corpus is explicit;
+ordinary CTest needs no network. CI also runs a fixed external sample and saves
+the diagnostic reports as artifacts. DocUnitTestM68K.pdf remains the original
+test-design guide; use its source/destination/flags/addressing approach when
+adding focused cases alongside the external vectors.
 
 For address/undefined-behavior sanitizer checks with GCC or Clang:
 

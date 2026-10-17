@@ -26,6 +26,14 @@ jobs:
         run: cmake --build build/cpu --config Debug --parallel 2
       - name: Test reference, optimized, and legacy CPU paths
         run: ctest --test-dir build/cpu -C Debug --output-on-failure
+      - name: Fetch pinned external CPU specifications
+        run: python UnitTests/conformance/fetch.py --cache build/conformance-data
+      - name: Check external regression baseline (known CPU failures remain reported)
+        shell: bash
+        run: |
+          worker=build/cpu/vector_worker
+          if [ "$RUNNER_OS" = "Windows" ]; then worker=build/cpu/Debug/vector_worker.exe; fi
+          python UnitTests/conformance/run.py --worker "$worker" --limit-per-group 8 --baseline UnitTests/conformance/smoke-baseline.json --report-dir build/conformance-report
       - name: Configure sanitizers
         if: runner.os == 'Linux'
         run: cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
@@ -35,3 +43,12 @@ jobs:
       - name: Test with sanitizers
         if: runner.os == 'Linux'
         run: ctest --test-dir build/cpu-sanitized --output-on-failure
+      - name: Save baseline reports and instruction matrix
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cpu-conformance-${{ runner.os }}
+          path: |
+            build/conformance-report/
+            build/cpu/handwritten-report/
+          if-no-files-found: error
