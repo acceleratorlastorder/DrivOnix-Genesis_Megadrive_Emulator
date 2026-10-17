@@ -32,6 +32,7 @@ jobs:
         run: |
           cmake --install build/emulator --prefix build/package
           python3 UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix
+          tar -czf build/drivonix-linux.tar.gz -C build/package .
       - name: Check loader and startup paths with sanitizers
         run: |
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
@@ -43,7 +44,7 @@ jobs:
         with:
           name: drivonix-linux
           path: |
-            build/package/
+            build/drivonix-linux.tar.gz
             build/linux-gui-report/
           if-no-files-found: error
 

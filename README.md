@@ -23,8 +23,9 @@ The emulator can boot the majority of Genesis games but most games have in-game 
 ## Installation
 
 Build from source using the instructions below. GitHub Actions also produces
-Linux and Windows build artifacts; Linux binaries need the native CSFML 2 and
-GTK 3 runtime libraries installed.
+Linux and Windows build artifacts. Extract the Linux tar.gz archive to preserve
+its executable permissions; it needs the native CSFML 2 and GTK 3 runtime
+libraries installed.
 
 ### Building from source
 
