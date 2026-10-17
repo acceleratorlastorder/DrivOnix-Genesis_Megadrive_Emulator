@@ -1,0 +1,77 @@
+name: Emulator builds
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux emulator and display test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libcsfml-dev libgtk-3-dev xvfb xdotool libgl1-mesa-dri
+      - name: Configure and build the full emulator
+        run: |
+          cmake -S . -B build/emulator -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/emulator --parallel 2
+      - name: Test ROM loading and frontend errors
+        run: ctest --test-dir build/emulator --output-on-failure
+      - name: Exercise native picker, BIOS, rendering and joypad input
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator build/emulator/DrivOnix
+      - name: Test the installed layout from another working directory
+        run: |
+          cmake --install build/emulator --prefix build/package
+          python3 UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix
+          tar -czf build/drivonix-linux.tar.gz -C build/package .
+      - name: Check loader and startup paths with sanitizers
+        run: |
+          cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
+          cmake --build build/frontend-sanitized --parallel 2
+          ctest --test-dir build/frontend-sanitized --output-on-failure
+      - name: Save Linux executable, assets and display evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: drivonix-linux
+          path: |
+            build/drivonix-linux.tar.gz
+            build/linux-gui-report/
+          if-no-files-found: error
+
+  windows:
+    name: Windows emulator (MSVC x64)
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build pinned native CSFML dependencies
+        run: python .github/scripts/build_windows_csfml.py --prefix build/deps
+      - name: Configure and build the full emulator
+        run: |
+          cmake -S . -B build/emulator -A x64 -DCSFML_ROOT="${{ github.workspace }}/build/deps"
+          cmake --build build/emulator --config Release --parallel 2
+          Copy-Item build/deps/bin/*.dll build/emulator/Release/
+      - name: Test ROM loading and frontend errors
+        run: ctest --test-dir build/emulator -C Release --output-on-failure
+      - name: Assemble and test the installed layout
+        run: |
+          cmake --install build/emulator --prefix build/package --config Release
+          Copy-Item build/deps/bin/*.dll build/package/bin/
+          Copy-Item -Recurse build/deps/licenses build/package/
+          python UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix.exe
+      - name: Save Windows executable and assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: drivonix-windows-x64
+          path: build/package/
+          if-no-files-found: error

@@ -18,6 +18,7 @@ class CRT
 public:
 	CRT();
 	static void Init();
+	static void Shutdown();
 	static void Render();
 	static void ResetScreen();
 	static void Write(int x, int y, byte red, byte green, byte blue);

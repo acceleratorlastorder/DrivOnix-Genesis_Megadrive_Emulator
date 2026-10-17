@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <vector>
-#include <windows.h>
+#include <string>
 #include <chrono>
 
 #define TIMING
@@ -39,9 +39,9 @@ public:
 	static void AllocM68kMemory();
 	static void InsertCartridge();
 	static void Run();
-	static void Bios(byte country);
-	static void FileBrowser();
-	static char* GetRomName();
+	static bool Bios(byte country);
+	static void SetRomName(const std::string& path);
+	static const std::string& GetRomName();
 	static byte M68KReadMemoryBYTE(dword address);
 	static void M68KWriteMemoryBYTE(dword address, byte data);
 	static word M68KReadMemoryWORD(dword address);
@@ -52,7 +52,7 @@ public:
 private:
 	static Genesis& get(void);
 
-	char romName[2048];
+	std::string romName;
 
 	unsigned int FPS;
 	int cycleThisFrame;
