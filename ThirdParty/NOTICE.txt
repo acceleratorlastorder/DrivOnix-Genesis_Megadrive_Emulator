@@ -29,3 +29,9 @@ json/
 The Sega-compatible PSG and console master-clock/mixing integration in Audio/
 are original DrivOnix code. Other vendor files above retain their own notices.
 Binary distributions must include this notice and the accompanying licenses.
+
+Windows packages also include the native SFML/CSFML libraries and their external
+dependency notices. windows-notices/manifest.json records the exact source
+versions, upstream notice URLs and SHA-256 hashes used by the Windows build
+helper. That helper checks these files before copying them into the package's
+share/drivonix/licenses/SFML-dependencies directory.

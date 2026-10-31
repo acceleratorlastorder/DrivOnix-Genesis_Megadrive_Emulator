@@ -1,9 +1,7 @@
 name: CPU opcode tests
 
 on:
-  pull_request:
-  push:
-    branches: [master]
+  workflow_call:
   workflow_dispatch:
 
 permissions:

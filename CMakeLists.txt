@@ -68,6 +68,7 @@ install(TARGETS DrivOnix RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES Bios/DrivOnix.bios DESTINATION ${CMAKE_INSTALL_DATADIR}/drivonix/Bios)
 install(FILES Config/config.txt DESTINATION ${CMAKE_INSTALL_DATADIR}/drivonix/Config)
 install(DIRECTORY ThirdParty/ DESTINATION ${CMAKE_INSTALL_DATADIR}/drivonix/third-party)
+include(cmake/Packaging.cmake)
 
 include(CTest)
 if(BUILD_TESTING)

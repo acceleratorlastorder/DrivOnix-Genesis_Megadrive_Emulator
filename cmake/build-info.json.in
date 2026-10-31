@@ -1,0 +1,6 @@
+{
+  "version": "@DRIVONIX_PACKAGE_VERSION@",
+  "commit": "@DRIVONIX_PACKAGE_COMMIT@",
+  "platform": "@DRIVONIX_PACKAGE_PLATFORM@",
+  "build_os": "@DRIVONIX_PACKAGE_BUILD_OS@"
+}

@@ -1,6 +1,7 @@
 """Build pinned native 64-bit Windows dependencies with the same MSVC toolchain."""
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,6 +13,25 @@ SOURCES = (
     ("SFML", "2.6.2", "15ff4d608a018f287c6a885db0a2da86ea389e516d2323629e4d4407a7ce047f"),
     ("CSFML", "2.6.1", "f3f3980f6b5cad85b40e3130c10a2ffaaa9e36de5f756afd4aacaed98a7a9b7b"),
 )
+
+
+def copy_dependency_licenses(source, licenses):
+    # SFML 2.6.2 does not contain extlibs/licenses. Preserve the full upstream
+    # terms and the original header notices from the pinned source instead.
+    bundle = Path(__file__).resolve().parents[2] / "ThirdParty/windows-notices"
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    digest = next(digest for name, _, digest in SOURCES if name == "SFML")
+    if manifest["sfml_archive_sha256"] != digest:
+        raise RuntimeError("Windows dependency notices do not match the pinned SFML archive")
+    for entry in manifest["files"]:
+        data = (bundle / entry["path"]).read_bytes()
+        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise RuntimeError("Windows dependency notice changed: " + entry["path"])
+        if "sfml_path" in entry:
+            original = (source / entry["sfml_path"]).read_bytes()
+            if hashlib.sha256(original).hexdigest() != entry["sfml_sha256"]:
+                raise RuntimeError("SFML header differs from its retained notice: " + entry["sfml_path"])
+    shutil.copytree(bundle, licenses / "SFML-dependencies", dirs_exist_ok=True)
 
 
 def main():
@@ -46,9 +66,7 @@ def main():
         if name == "SFML":
             for dll in (source / "extlibs/bin/x64").glob("*.dll"):
                 shutil.copyfile(dll, prefix / "bin" / dll.name)
-            dependency_licenses = source / "extlibs/licenses"
-            if dependency_licenses.is_dir():
-                shutil.copytree(dependency_licenses, licenses / "SFML-dependencies", dirs_exist_ok=True)
+            copy_dependency_licenses(source, licenses)
         for license_file in source.glob("license.*"):
             shutil.copyfile(license_file, licenses / f"{name}-{license_file.name}")
 
