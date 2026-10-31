@@ -73,6 +73,17 @@ class Publication(unittest.TestCase):
                 self.publish()
         self.assertFalse(any(c.args[:2] == ("release", "edit") for c in gh.call_args_list))
 
+    def test_prerelease_is_never_marked_latest(self):
+        self.version = "1.2.3-rc.1"
+        for path in list(self.directory.iterdir()):
+            path.rename(path.with_name(path.name.replace("1.2.3", self.version)))
+        with patch.object(publish_release, "release", side_effect=lambda *args: None if not gh.called else self.upload_record()), \
+             patch.object(publish_release, "gh") as gh:
+            self.publish()
+        self.assertIn("--prerelease", gh.call_args_list[0].args)
+        self.assertIn("--prerelease=true", gh.call_args.args)
+        self.assertIn("--latest=false", gh.call_args.args)
+
     def test_existing_public_release_is_never_overwritten(self):
         with patch.object(publish_release, "release", return_value={"draft": False}), patch.object(publish_release, "gh") as gh:
             with self.assertRaises(ValueError):

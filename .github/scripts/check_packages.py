@@ -71,6 +71,17 @@ def same_file(installed, source):
             f"Packaged file differs from source: {installed}")
 
 
+def check_dependency_notices(installed_notices):
+    notice_source = REPOSITORY / "ThirdParty/windows-notices"
+    same_file(installed_notices / "manifest.json", notice_source / "manifest.json")
+    manifest = json.loads((notice_source / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        installed = installed_notices / entry["path"]
+        require(installed.is_file(), "Missing Windows dependency notice: " + entry["path"])
+        require(hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"],
+                "Windows dependency notice changed: " + entry["path"])
+
+
 def check_layout(root, platform, version, commit):
     binary = root / "bin" / ("DrivOnix.exe" if platform == "windows" else "DrivOnix")
     require(binary.is_file() and binary.stat().st_size > 0, f"Missing packaged executable: {binary}")
@@ -80,6 +91,7 @@ def check_layout(root, platform, version, commit):
     for relative, original in (("Bios/DrivOnix.bios", "Bios/DrivOnix.bios"),
                                ("Config/config.txt", "Config/config.txt"),
                                ("README.md", "README.md"),
+                               ("RELEASING.txt", "RELEASING.txt"),
                                ("third-party/NOTICE.txt", "ThirdParty/NOTICE.txt"),
                                ("third-party/sound-z80.lock.json", "ThirdParty/sound-z80.lock.json")):
         same_file(data / relative, REPOSITORY / original)
@@ -107,9 +119,7 @@ def check_layout(root, platform, version, commit):
         for dependency in ("SFML", "CSFML"):
             require(any(path.is_file() and path.stat().st_size for path in licenses.glob(dependency + "-license.*")),
                     f"Missing {dependency} distribution license")
-        require((licenses / "SFML-dependencies").is_dir()
-                and any(path.is_file() for path in (licenses / "SFML-dependencies").rglob("*")),
-                "Missing SFML third-party dependency licenses")
+        check_dependency_notices(licenses / "SFML-dependencies")
     subprocess.run([sys.executable, str(REPOSITORY / "UnitTests/frontend/test_cli.py"),
                     "--emulator", str(binary)], check=True, timeout=180)
 

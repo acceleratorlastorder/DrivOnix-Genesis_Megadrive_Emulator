@@ -28,7 +28,7 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(package_arch "x86")
 endif()
 configure_file("${CMAKE_SOURCE_DIR}/cmake/build-info.json.in" "${CMAKE_BINARY_DIR}/build-info.json" @ONLY)
-install(FILES "${CMAKE_SOURCE_DIR}/README.md" "${CMAKE_BINARY_DIR}/build-info.json"
+install(FILES "${CMAKE_SOURCE_DIR}/README.md" "${CMAKE_SOURCE_DIR}/RELEASING.txt" "${CMAKE_BINARY_DIR}/build-info.json"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/drivonix")
 
 if(WIN32)

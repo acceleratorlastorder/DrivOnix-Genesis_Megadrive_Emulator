@@ -37,14 +37,6 @@ jobs:
           cmake --build build/emulator --parallel 2
       - name: Test console, sound, saves, frontend and pinned dependencies
         run: ctest --test-dir build/emulator --output-on-failure
-      - name: Require all 1604000 Z80 cases to pass
-        run: python3 UnitTests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
-      - name: Exercise native picker, BIOS, rendering and joypad input
-        env:
-          ALSOFT_DRIVERS: "null"
-        run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator build/emulator/DrivOnix
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_regions.py --emulator build/emulator/DrivOnix
       - name: Test the installed layout from another working directory
         run: |
           cmake --install build/emulator --prefix build/package
@@ -55,6 +47,18 @@ jobs:
         run: |
           cpack --config build/emulator/CPackConfig.cmake -B build/packages
           python3 .github/scripts/check_packages.py --directory build/packages --platform linux --version "$PACKAGE_VERSION" --commit "$GITHUB_SHA"
+      - name: Install and test the generated Debian package
+        run: |
+          sudo apt-get install -y ./build/packages/*.deb
+          python3 UnitTests/frontend/test_cli.py --emulator /usr/bin/DrivOnix
+      - name: Require all 1604000 Z80 cases to pass
+        run: python3 UnitTests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
+      - name: Exercise native picker, BIOS, rendering and joypad input
+        env:
+          ALSOFT_DRIVERS: "null"
+        run: |
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator /usr/bin/DrivOnix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_regions.py --emulator /usr/bin/DrivOnix
       - name: Check console hardware, saves and startup paths with sanitizers
         run: |
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
