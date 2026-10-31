@@ -22,10 +22,21 @@ The current implementation includes the 68000, Z80, VDP, FM/PSG audio, cartridge
 
 ## Installation
 
-Build from source using the instructions below. GitHub Actions also produces
-Linux and Windows build artifacts. Extract the Linux tar.gz archive to preserve
-its executable permissions; it needs the native CSFML 2 and GTK 3 runtime
-libraries installed.
+The [release workflow](.github/workflows/releases.yml) generates Windows x64
+ZIP, Linux x86_64 tar.gz and Ubuntu 24.04 amd64 `.deb` packages. Version tags
+publish these to [GitHub Releases](https://github.com/acceleratorlastorder/DrivOnix-Genesis_Megadrive_Emulator/releases)
+with SHA-256 checksums after both platforms and CPU tests pass. Ordinary CI and
+manual preview runs keep downloadable packages as Actions artifacts for 14 days.
+
+Extract the Windows ZIP and run `bin/DrivOnix.exe`; its dependency DLLs and MSVC
+runtimes are included. On Ubuntu 24.04 or a compatible newer system, install a
+downloaded `.deb` with `sudo apt install ./DrivOnix-*.deb` and run `DrivOnix`.
+The Linux tarball preserves executable permissions and the `bin/` + `share/`
+layout; it requires CSFML 2 and GTK 3 runtime libraries and a compatible Ubuntu
+24.04/glibc baseline. It is not a distribution-independent static bundle.
+
+See [RELEASING.txt](RELEASING.txt) for tag releases, prereleases and manual
+previews, or build from source below.
 
 ### Building from source
 
