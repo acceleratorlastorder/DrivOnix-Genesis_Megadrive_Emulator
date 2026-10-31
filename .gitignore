@@ -3,6 +3,10 @@
 *.bin
 *.smd
 *.gen
+*.srm
+*.eep
+*.srm.tmp.*
+*.eep.tmp.*
 output.txt
 /build/
 /UnitTests/conformance/__pycache__/

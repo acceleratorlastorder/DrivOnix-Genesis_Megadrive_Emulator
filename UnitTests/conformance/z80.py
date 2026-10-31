@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned Z80 specifications and a worker contract; DrivOnix has no Z80 core yet."""
+"""Pinned Z80 specifications and strict execution through the DrivOnix Z80 worker."""
 import argparse
 from collections import Counter
 import concurrent.futures

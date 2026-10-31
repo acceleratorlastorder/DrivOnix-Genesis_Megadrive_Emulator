@@ -130,7 +130,7 @@ def indices(count, limit):
 
 
 def normalize(test, group, mame=True):
-    case = {**test, "group": group}
+    case = {**test, "group": group, "execution_profile": "instruction" if mame else "boundary"}
     for side in ("initial", "final"):
         state = dict(test[side])
         if mame:
@@ -159,6 +159,32 @@ def normalize(test, group, mame=True):
             if address in initial["ram"] and initial["ram"][address] != value:
                 case["unsupported"] = "initial prefetch differs from RAM; core has no loadable prefetch queue"
             initial["ram"].setdefault(address, value)
+    if mame:
+        final = case["final"]
+        vector_reads = {transaction[3] for transaction in test["transactions"] if transaction[0] == "r"}
+        frame = final["ssp"] & 0xFFFFFF
+        stack_writes = {transaction[3] for transaction in test["transactions"] if transaction[0] == "w"}
+        group_zero_frame = all(((frame + offset) & 0xFFFFFF) in stack_writes for offset in range(0, 14, 2))
+        if vector_reads & {8, 10, 12, 14} and group_zero_frame:
+            # MC68000 group-0 SSW defines only R/W, I/N and FC (bits 4..0).
+            # MAME preserves internal instruction bits above bit4; Musashi writes
+            # zeros. Assert every defined bit and every other frame byte.
+            case["memory_masks"] = {frame: 0, (frame + 1) & 0xFFFFFF: 0x1F}
+        short_frame = all(((frame + offset) & 0xFFFFFF) in stack_writes for offset in range(0, 6, 2))
+        if short_frame:
+            if group == "CHK" and vector_reads & {24, 26}:
+                # CHK defines N on either taken bounds trap; only C/V/Z are
+                # undefined in the live SR and its identical stacked copy.
+                case["sr_mask"] = test.get("sr_mask", 0xFFFF) & ~0x07
+                case.setdefault("memory_masks", {})[(frame + 1) & 0xFFFFFF] = 0xF8
+            if group in ("DIVS", "DIVU") and vector_reads & {20, 22}:
+                # Divide-by-zero leaves N/Z/V undefined; X and C stay checked.
+                case.setdefault("memory_masks", {})[(frame + 1) & 0xFFFFFF] = 0xF1
+        if group == "STOP" and initial["sr"] & 0x2000 and final["pc"] == initial["pc"]:
+            # A stopped MAME m_au retains the entry prefetch address instead of
+            # a replenished queue. Architectural PC has consumed opcode + SR.
+            final["pc"] = (initial["pc"] + 4) & 0xFFFFFFFF
+            final["stop"] = True
     case["expected_ram"] = {**initial["ram"], **case["final"]["ram"]}
     return case
 

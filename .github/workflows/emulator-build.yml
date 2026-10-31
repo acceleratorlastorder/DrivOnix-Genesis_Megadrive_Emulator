@@ -13,7 +13,7 @@ jobs:
   linux:
     name: Linux emulator and display test
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install native dependencies
@@ -24,16 +24,20 @@ jobs:
         run: |
           cmake -S . -B build/emulator -DCMAKE_BUILD_TYPE=Release
           cmake --build build/emulator --parallel 2
-      - name: Test ROM loading and frontend errors
+      - name: Test console, sound, saves, frontend and pinned dependencies
         run: ctest --test-dir build/emulator --output-on-failure
+      - name: Require all 1604000 Z80 cases to pass
+        run: python3 UnitTests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
       - name: Exercise native picker, BIOS, rendering and joypad input
+        env:
+          ALSOFT_DRIVERS: "null"
         run: xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator build/emulator/DrivOnix
       - name: Test the installed layout from another working directory
         run: |
           cmake --install build/emulator --prefix build/package
           python3 UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix
           tar -czf build/drivonix-linux.tar.gz -C build/package .
-      - name: Check loader and startup paths with sanitizers
+      - name: Check console hardware, saves and startup paths with sanitizers
         run: |
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
           cmake --build build/frontend-sanitized --parallel 2
@@ -46,12 +50,13 @@ jobs:
           path: |
             build/drivonix-linux.tar.gz
             build/linux-gui-report/
+            build/z80-report/
           if-no-files-found: error
 
   windows:
     name: Windows emulator (MSVC x64)
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build pinned native CSFML dependencies
@@ -61,7 +66,7 @@ jobs:
           cmake -S . -B build/emulator -A x64 -DCSFML_ROOT="${{ github.workspace }}/build/deps"
           cmake --build build/emulator --config Release --parallel 2
           Copy-Item build/deps/bin/*.dll build/emulator/Release/
-      - name: Test ROM loading and frontend errors
+      - name: Test console, sound, saves, frontend and pinned dependencies
         run: ctest --test-dir build/emulator -C Release --output-on-failure
       - name: Assemble and test the installed layout
         run: |

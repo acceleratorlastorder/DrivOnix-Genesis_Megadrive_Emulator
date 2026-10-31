@@ -13,7 +13,7 @@ jobs:
   cpu-tests:
     name: CPU tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -30,12 +30,12 @@ jobs:
         run: ctest --test-dir build/cpu -C Debug --output-on-failure
       - name: Fetch pinned external CPU specifications
         run: python UnitTests/conformance/fetch.py --cache build/conformance-data
-      - name: Check external regression baseline (known CPU failures remain reported)
+      - name: Require strict external CPU conformance
         shell: bash
         run: |
           worker=build/cpu/vector_worker
           if [ "$RUNNER_OS" = "Windows" ]; then worker=build/cpu/Debug/vector_worker.exe; fi
-          python UnitTests/conformance/run.py --worker "$worker" --limit-per-group 8 --baseline UnitTests/conformance/smoke-baseline.json --report-dir build/conformance-report
+          python UnitTests/conformance/run.py --worker "$worker" --limit-per-group 8 --active-only --report-dir build/conformance-report
       - name: Check all 65536 opcode words against the independent reference
         shell: bash
         run: |
@@ -45,7 +45,7 @@ jobs:
             worker=build/cpu/Debug/vector_worker.exe
             oracle=build/cpu/Debug/reference_worker.exe
           fi
-          python UnitTests/conformance/complete.py --worker "$worker" --oracle "$oracle" --quick --baseline UnitTests/conformance/decode-baseline.json.gz --report-dir build/complete-cpu-report
+          python UnitTests/conformance/complete.py --worker "$worker" --oracle "$oracle" --quick --report-dir build/complete-cpu-report
       - name: Configure sanitizers
         if: runner.os == 'Linux'
         run: cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON

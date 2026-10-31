@@ -79,7 +79,12 @@ def expected_from_reference(test, actual, catalog):
     if family in ("ABCD", "SBCD", "NBCD"):
         result["sr_mask"] &= ~0x0A
     if family == "CHK":
-        result["sr_mask"] &= ~0x0F
+        trapped = actual["pc"] == HANDLER + 6 * 16
+        result["sr_mask"] &= ~(0x07 if trapped else 0x0F)
+        if trapped:
+            # Motorola defines N on a CHK exception; C/V/Z are undefined in
+            # the live SR and in the identical stacked SR, as in corpus.py.
+            result["memory_masks"] = {(actual["ssp"] + 1) & 0xFFFFFF: 0xF8}
     if family in ("DIVS", "DIVU"):
         # Motorola PRM 4-92/4-96: C is always cleared, including overflow.
         # Pinned Musashi leaves C set on some overflow paths. Do not copy it.

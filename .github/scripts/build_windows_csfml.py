@@ -35,7 +35,7 @@ def main():
             archive.extractall(workspace)
         source = workspace / f"{name}-{version}"
         build = workspace / f"{name}-build"
-        options = [f"-D{name}_BUILD_AUDIO=OFF", f"-D{name}_BUILD_NETWORK=OFF",
+        options = [f"-D{name}_BUILD_AUDIO=ON", f"-D{name}_BUILD_NETWORK=OFF",
                    f"-D{name}_BUILD_EXAMPLES=OFF", f"-D{name}_BUILD_DOC=OFF"]
         if name == "CSFML":
             options += ["-DCSFML_LINK_SFML_STATICALLY=OFF", f"-DSFML_ROOT={prefix}"]
@@ -43,6 +43,12 @@ def main():
                         f"-DCMAKE_INSTALL_PREFIX={prefix}", *options], check=True)
         subprocess.run(["cmake", "--build", str(build), "--config", "Release", "--parallel", "2"], check=True)
         subprocess.run(["cmake", "--install", str(build), "--config", "Release"], check=True)
+        if name == "SFML":
+            for dll in (source / "extlibs/bin/x64").glob("*.dll"):
+                shutil.copyfile(dll, prefix / "bin" / dll.name)
+            dependency_licenses = source / "extlibs/licenses"
+            if dependency_licenses.is_dir():
+                shutil.copytree(dependency_licenses, licenses / "SFML-dependencies", dirs_exist_ok=True)
         for license_file in source.glob("license.*"):
             shutil.copyfile(license_file, licenses / f"{name}-{license_file.name}")
 

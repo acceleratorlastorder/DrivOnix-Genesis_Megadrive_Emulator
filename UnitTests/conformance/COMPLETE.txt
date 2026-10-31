@@ -1,173 +1,168 @@
-Expanded CPU specifications and complete opcode-word coverage
-============================================================
+MC68000 specifications and complete opcode-word coverage
+=======================================================
 
-This completes the original 84 instruction-test groups and exercises every
-possible 16-bit opcode word. It is not an exhaustive proof over all register,
-memory, pin, and timing states, and does not make the current CPU implementation
-correct. Completing the portable sweep also required a narrow CPU fix: reject
-illegal MOVE/MOVEA forms before timing-table access and make ILLEGAL raise
-synchronous vector 4 with the correct stack frame, fault PC and 34-cycle total.
-Other instruction implementations remain outside this test-completion work.
+The original CPU implementation is repaired in place, with independent checks
+for both decoders. All 84 original instruction-test groups have real executable
+specifications. The 67 unasserted templates are not placeholder passes. Existing
+C++ assertions, the original PDF design guide, 28 JSON examples, pinned MAME
+vectors and an optional pinned differential oracle remain complementary layers.
 
-The existing C++ assertions, original PDF test-design guide, 28 JSON examples,
-and pinned MAME vectors remain useful independent layers. The 67 old unasserted
-C++ templates are replaced by the new real specifications; no placeholder test
-is executed or counted as a pass.
+Every opcode word having a test does not prove all operand values, timing states
+or console behavior. Readable specifications and independently supplied expected
+results determine correctness; a baseline of existing failures does not.
 
-Offline specifications
-----------------------
+Offline strict checks
+---------------------
 
     cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug
     cmake --build build/cpu --config Debug --parallel 2
     ctest --test-dir build/cpu -C Debug --output-on-failure
+    python UnitTests/conformance/complete.py --worker build/cpu/vector_worker --specifications-only --report-dir build/specifications-report
 
-    python UnitTests/conformance/complete.py --worker build/cpu/vector_worker --specifications-only
+The suite currently contains 8,151 instruction cases plus 42 sequences: 8,193 per
+decoder, 16,386 evaluations across both paths. Expectations use width-limited
+Python arithmetic and documented hardware behavior, never captured CPU outputs.
+They cover:
 
-The last command is strict and exits 1 on the current failures/crashes. Add
---mode audit to finish a diagnostic report with exit 0. Adapter/input errors
-exit 2. CTest uses the reviewed per-case, per-decoder, per-field, per-bit failure
-baseline, so gate success means no new observed faults, not CPU conformance.
+* Byte/word/long arithmetic, carry/borrow/overflow, upper-register preservation,
+  address-register sign extension, extend/sticky-Z and signed/unsigned multiply
+  and quotient/remainder boundaries, including INT_MIN/-1.
+* Shift/rotate counts 0..63, both incoming X states, all widths and directions,
+  memory word forms, dynamic bit numbers 0..63 and immediate bit numbers 0..255.
+* All 32 CCR combinations for Bcc/Scc/DBcc, terminal counters, BRA/BSR, JSR/RTS,
+  LINK/UNLK and MOVEM ordering, including the base register and A7 edge cases.
+* Legal MC68000 addressing modes, signed displacement/index values, Dn/An indexes,
+  PC-relative and absolute addresses, ignored later-CPU scale bits, immediate
+  operands and A7 byte alignment.
+* SR/CCR masks, privilege exceptions, immediate USP/SSP switching, MOVEP, BCD,
+  TAS, both TRAPV outcomes, TRAP vectors, illegal encodings and line-A/F traps.
+* Interrupt masking/priority, STOP wakeup, trace boundaries, reset vectors and
+  external RESET callback delivery. Sequences test stack frames and prefetch
+  effects, including modifying the next instruction through extension-word EAs.
+* Odd word/long accesses and odd control targets, seven-word address-error
+  frames, staged An/flag updates, partial long transfers and exact fault-stage
+  timing. Focused guards cover CLR and MOVE SR destination dummy reads, CHK trap
+  paths, LINK A7 and odd JMP/JSR displacement targets.
 
-specifications.py contains 8,089 readable instruction cases for all 84 original
-groups plus 40 sequence cases. Expectations use explicit-width Python arithmetic
-and documented hardware behavior, never captured DrivOnix results. They cover:
+Only hardware-undefined bits are omitted. The address-error special status word
+has 11 undefined high bits; its five defined direction/function-code bits remain
+checked. Some broad readable address-error cases allow the manual's variable
+saved-PC pipeline position; targeted guards and independent MAME vectors assert
+exact saved PC, fault address, IR and cycles. Reset masks undefined Dn/An/USP.
 
-* Byte/word/long arithmetic: carry, borrow, sign, zero, overflow, upper-register
-  preservation, address-register sign extension and flag preservation, extend,
-  sticky Z, signed/unsigned product and quotient/remainder boundaries.
-* Every register shift/rotate count 0..63, both initial X values, both directions,
-  all widths and all eight AS/LS/ROX/RO operations, plus memory word forms.
-* All 32 CCR combinations for conditional branches, Scc, and terminal/nonterminal
-  DBcc counters. BRA/BSR and return PC bases have separate explicit expectations.
-* Dynamic bit indices 0..63 and all immediate bit values 0..255, checking register
-  modulo-32 and memory modulo-8 behavior for BTST/BCHG/BCLR/BSET.
-* Every MC68000 data-addressing mode and legal memory destination mode, signed
-  displacements, Dn/An word and long indexes, PC-relative addressing, absolute
-  word sign extension, immediate data, and A7 byte alignment updates.
-* Status masking, user privilege exceptions, USP/SSP switching, MOVEP, MOVEM,
-  packed decimal flags, TAS, both TRAPV paths, all TRAP vectors and illegal lines.
-* JSR/RTS, LINK/UNLK, MOVEM push/pop, ADDX chains, TRAP/RTE from both CPU modes,
-  interrupt levels 1..7, masked interrupts, STOP wake/resume, trace exceptions,
-  reset vectors, and an observable self-modifying-code prefetch consequence.
-* User/supervisor odd word/long reads and writes: address-error vector and
-  seven-word stack-frame fields. Undefined upper SSW bits are masked. Saved PC
-  depends on prefetch stage (MC68000 UM allows an advance of 2..10 bytes), so these
-  partial frame cases do not assert its exact bytes. All defined tested fields
-  and the frame size remain checked. Reset tests mask undefined Dn/An/USP values.
+Seven CTest targets execute the original regressions, adapter checks, handwritten
+cases and complete specifications. The normal and sanitizer profiles both run
+strictly, without --baseline arguments. Historical .json/.json.gz snapshots are
+retained for audit history and do not define acceptance criteria. Wrong results
+and crashes remain failures. --mode audit only changes the diagnostic command's
+exit policy; it never marks a failing case as passing. Adapter/input errors exit 2.
 
 Independent complete decode sweep
 --------------------------------
 
     python UnitTests/conformance/prepare_reference.py
+    python UnitTests/conformance/fetch.py
     cmake -S UnitTests -B build/cpu-reference -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_REFERENCE_DIR="ABSOLUTE_REPO_PATH/build/conformance-data/reference"
     cmake --build build/cpu-reference --config Debug --parallel 2
-    python UnitTests/conformance/fetch.py
-    python UnitTests/conformance/complete.py --worker build/cpu-reference/vector_worker --oracle build/cpu-reference/reference_worker --mode audit
+    python UnitTests/conformance/complete.py --worker build/cpu-reference/vector_worker --oracle build/cpu-reference/reference_worker --report-dir build/complete-cpu-report
 
-Use a real absolute repository path in the configure command. On Windows with a
-multi-configuration generator, worker paths end in Debug/vector_worker.exe and
-Debug/reference_worker.exe. The optional reference needs a C compiler as well as
-C++; the default offline build only requires C++ and Python 3.9+.
+Substitute the actual absolute checkout path in the configure command. A Windows
+multi-configuration Debug build uses Debug/vector_worker.exe and
+Debug/reference_worker.exe. The optional oracle also requires a C compiler.
 
-The default sweep uses eight deterministic operand/extension/status patterns
-for all 65,536 opcode words: 524,288 differential cases, plus the 8,129 readable
-cases, through EACH DrivOnix decoder. --quick uses one pattern per opcode and
-still runs every readable case. This checks 45,815 catalogue encodings plus
-explicit 0x4AFC ILLEGAL (45,816 combined), and the remaining 19,720 words including
-line-A/F and reserved forms. Illegal-word tests expect exception behavior.
-Coverage counts concern opcode words, not every operand or hardware state.
+The default command uses eight deterministic operand/extension/status patterns
+for all 65,536 words: 524,288 differential inputs plus the 8,193 readable cases
+per decoder, or 1,064,962 total evaluations. --quick uses one pattern and retains
+all readable cases: 147,458 total evaluations across both decoders. This includes
+45,815 catalogue encodings plus explicit ILLEGAL 0x4AFC (45,816 combined), and
+19,720 other words including reserved forms and line-A/F. Illegal encodings must
+raise the expected exception; they are not skipped.
 
-The core used as the oracle is Musashi:
-https://github.com/kstenerud/Musashi
+The independent core is Musashi, https://github.com/kstenerud/Musashi
 Pinned commit: 313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd
-reference.lock.json verifies every downloaded source's bytes and Git blob SHA.
-CMake verifies them before compiling the optional target. The core is MIT;
-bundled SoftFloat files retain their original notices. Nothing is vendored or
-linked into the emulator. Only MC68000 execution is selected; address errors,
-trace, RESET and prefetch behavior are enabled for the oracle.
+reference.lock.json checks source bytes and Git blob SHA before compilation.
+The MIT core and bundled SoftFloat retain their licenses. They are downloaded to
+ignored build data and linked only into reference_worker, never production.
 
-The oracle must agree with every readable specification except the three exact
-reviewed discrepancies in reference-limitations.json. They expose its preserved
-C flag on two divide overflow cases and INT_MIN/-1 signed divide behavior.
-Changing the oracle or producing a new disagreement fails closed for review.
-The differential adapter explicitly enforces the manual's cleared divide C and
-signed-divide overflow rules instead of adopting those known incorrect results.
-MUL/DIV timing from Musashi is not operand-accurate, so differential cycle totals
-for those instructions are unchecked; the independent MAME corpus still asserts
-their cycle counts. Undefined BCD N/V and divide flags are masked as documented
-in README.txt. The correct readable expectations remain unchanged.
+The oracle is checked against every readable case. Exactly three pre-existing
+divide-state discrepancies remain enumerated in reference-limitations.json;
+any different disagreement fails the oracle validation. Correct readable
+expectations are retained. Specific known oracle bugs are corrected in the
+independent wrapper using documented hardware behavior and unchanged MAME
+vectors: timing tables, invalid BCD digits, address-fault staging, LINK A7,
+CHK trap timing, dummy reads and later-CPU MOVE16 dispatch. See
+ORACLE-CORRECTIONS.txt for the exact corrections and evidence. No production
+CPU outputs are given to the reference worker.
 
-Reports include report.json and instructions.csv. Crashes are attached to their
-case and later cases continue in fresh workers. Batch sizes are bounded to avoid
-quadratic recovery traffic on an unfinished CPU. The reviewed quick baseline is:
+Musashi does not supply operand-accurate MUL/DIV timing, so those differential
+cycle totals are unchecked. The independent MAME vectors still assert them.
+Undefined BCD/divide/CHK flags are masked according to the manuals. All three
+layers assert CHK's defined N on a taken bounds trap, including its saved SR.
+Only C/V/Z are omitted on that trap; successful CHK leaves NZVC undefined.
+Other defined frame fields remain checked. Corpus instruction
+semantics are stepped before a subsequent trace boundary, while production and
+readable sequence tests execute the real trace boundary.
 
-    python UnitTests/conformance/complete.py --worker build/cpu-reference/vector_worker --oracle build/cpu-reference/reference_worker --quick --baseline UnitTests/conformance/decode-baseline.json.gz
+Reports contain report.json and instructions.csv with source/expectation hashes,
+counts, state/timing differences, failure examples and crash diagnostics. A
+crashed case does not hide later inputs: workers restart with bounded batches.
+CI runs the strict one-pattern complete-word command on Linux and Windows;
+the eight-pattern command is available for deeper local validation.
 
-Baseline plans hash the sources, comparator, reference pin, selected inputs and
-expected outputs. Compressed snapshots contain wrong-bit masks, never alternate
-"correct" values taken from DrivOnix. Changes to expectations/selection/comparison
-require deliberate review and --record-baseline PATH; CI never regenerates them.
-The files are deterministic gzip-compressed JSON, to keep complete coverage
-practical to store. Review generated reports alongside a baseline update.
-
-Sanitizer scope
----------------
+Sanitizer checks
+----------------
 
     cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
     cmake --build build/cpu-sanitized --parallel 2
     ctest --test-dir build/cpu-sanitized --output-on-failure
-    python UnitTests/conformance/complete.py --worker build/cpu-sanitized/vector_worker --specifications-only --profile sanitizers --mode audit --report-dir build/specifications-sanitized
+    python UnitTests/conformance/complete.py --worker build/cpu-sanitized/vector_worker --specifications-only --profile sanitizers --report-dir build/specifications-sanitized
 
-Seven sanitizer CTest targets exercise infrastructure, original regressions and
-all expanded CPU specifications. Current undefined shifts/rotates, arithmetic
-overflow and signed division cause CPU failures/crashes and are retained as such.
-specifications-sanitized-baseline.json.gz records the reviewed unsafe cases;
-any newly crashing case or new wrong bit fails CI. The profile is part of the
-immutable plan. Gate success is not a sanitizer-clean CPU pass. The ordinary
-seven-target CTest run uses the separate normal specification regression profile.
-CI additionally runs every opcode word with one operand pattern on Ubuntu and
-Windows and uploads readable, MAME-sample and complete-word reports.
+All seven CTest targets and all expanded specifications require zero failures
+and zero sanitizer crashes. The final 16,386 readable evaluations passed strictly
+under ASan/UBSan on 2026-10-31. The old sanitizer snapshot is historical evidence of
+previous unsafe behavior, not permission to retain it. Passing these checks does
+not prove that every possible input or production console path is sanitizer-safe.
 
-Z80 specifications
-------------------
+Production Z80 specifications
+----------------------------
 
-The repository has no Z80 CPU implementation. z80.py nevertheless supplies a
-validated, pinned specification corpus and executable worker contract:
+The production backend uses the cycle-stepped floooh/chips Z80 through Z80/core.c,
+shared by the console and z80_worker. Its wrapper handles the NMOS state/latches
+and documented quirks exercised by the pinned corpus. Build the root project
+with the Linux/Windows dependencies described in the main README:
 
-    python UnitTests/conformance/z80.py --fetch --mode audit
-    python UnitTests/conformance/z80.py --inventory-only
+    cmake -S . -B build/emulator -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/emulator --config Release --target z80_worker --parallel 2
+    python UnitTests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
 
-The first downloads about 1.3 GB into ignored build/conformance-data/z80 and
-validates all 1,604,000 cases across 1,604 instruction/prefix groups. The second
-inventories pinned groups without downloading and exits 1 because no core ran.
-Neither counts absent-core tests as passing. The data includes base, CB, ED,
-DD/FD and indexed CB forms, documented/undocumented flags, alternate registers,
-refresh/IFF/IM/WZ/Q/P state, final RAM, port transactions and bus-pin traces.
-Q is a saved flag byte, not a boolean. Null bus address/data are don't-care pins.
+On Windows use build/emulator/Release/z80_worker.exe. The dataset download is
+about 1.3 GB. --group selects exact stems, for example --group "dd cb __ 46".
+The full strict run on 2026-10-31 executed and passed 1,604,000 cases across 1,604
+instruction/prefix groups, with no failures. This is execution of the real shared
+backend, not schema validation of a corpus without a CPU.
 
 Source: https://github.com/SingleStepTests/z80
 Pinned commit: ebe1875d48f374bcfd4b505d8eb8ee751568b5f7
-MIT license in z80-license.txt. z80.lock.json pins each downloaded file.
+z80.lock.json pins bytes/blob hashes and z80-license.txt retains the MIT notice.
 
-When a Z80 backend exists, pass --worker PATH (optionally --pins) to z80.py.
-The executable reads one JSON request per line: format drivonix-z80-v1, case
-index, initial state/RAM, read-port inputs, and observed RAM addresses. Expected
-final state and cycle counts are never sent to the worker. Execute one complete
-instruction boundary and return one JSON line with index, final state plus
-observed RAM/changed writes, integer cycle count, actual ports, and optional
-per-cycle trace. Missing results, corrupt protocol and source mismatches fail;
-CPU crashes are reported without hiding later cases. test_complete.py validates
-the adapter with an independent NOP worker and deliberate corruptions. It does
-not substitute that fixture for DrivOnix's missing Z80.
+The worker receives initial state/RAM, read-port inputs and observed addresses,
+never expected final state or timing. Comparison includes the architectural and
+undocumented register/latch state, changed RAM, I/O transactions and total
+instruction T-states for base, CB, ED, DD/FD and indexed-CB forms. The production
+worker does not emit per-pin traces, so --pins is not a passing coverage mode.
+Interrupt/bus integration is tested separately by the root sound_z80_hardware
+checks; the single-step corpus is not an exhaustive interrupt-sequence proof.
+See ../../Z80/README.txt for implementation and sound integration details.
 
 Remaining hardware boundaries
 -----------------------------
 
-Final internal queue contents, pin-level wait states/arbitration, external RESET
-device effects, externally injected bus errors/double-fault halt, vectored or
-spurious interrupt acknowledge, and Z80 execution cannot be certified through
-the current DrivOnix interfaces. The suite checks observable prefetch effects,
-address errors and autovectored interrupts, but these remaining interfaces need
-implementation before corresponding hardware-level execution can be verified.
-Full console/VDP/audio/game compatibility remains separate. See COVERAGE.txt for
-measured counts and remaining CPU errors from this checkout.
+The CPU fixtures do not certify electrical pins, byte strobes, wait states,
+bus arbitration, externally injected bus errors/double-fault halt, or vectored/
+spurious interrupt acknowledge. They observe address errors, autovectored IRQs,
+RESET callback delivery and selected prefetch consequences; the final internal
+prefetch queue is not compared. Z80 pin waveforms are not emitted by its worker.
+Console tests separately exercise device mapping, clocks, DMA, rendering, sound,
+saves and input. Booting a diagnostic ROM and passing CPU vectors do not establish
+full game compatibility, perfect raster timing or measured commercial-game
+performance. See COVERAGE.txt for current measured results.

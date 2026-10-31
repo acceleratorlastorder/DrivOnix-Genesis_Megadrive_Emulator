@@ -1,4 +1,5 @@
 #include "gamePad.hpp"
+#include <algorithm>
 
 GamePad::GamePad()
 {
@@ -24,8 +25,10 @@ void GamePad::Init()
 
 	get().gamepadState[0] = 0x0;
 	get().gamepadState[1] = 0x0;
+    for (unsigned i=0; i<2; ++i) { get().sixButton[i]=true; get().phase[i]=0; get().idle[i]=0; }
 }
 
+#ifndef DRIVONIX_HEADLESS
 bool GamePad::Update(sfEvent event)
 {
 	if(event.type == sfEvtKeyPressed)
@@ -33,6 +36,10 @@ bool GamePad::Update(sfEvent event)
   		switch(event.key.code)
   		{
   			//Manette 1
+                case sfKeyI: get().ButtonPressed(0, MD_X); break;
+                case sfKeyO: get().ButtonPressed(0, MD_Y); break;
+                case sfKeyP: get().ButtonPressed(0, MD_Z); break;
+                case sfKeyReturn: get().ButtonPressed(0, MD_MODE); break;
   			case sfKeyZ:
   			get().ButtonPressed(0, MD_UP);
   			break;
@@ -66,6 +73,10 @@ bool GamePad::Update(sfEvent event)
   			break;
 
   			//Manette 2
+                case sfKeyNumpad7: get().ButtonPressed(1, MD_X); break;
+                case sfKeyNumpad8: get().ButtonPressed(1, MD_Y); break;
+                case sfKeyNumpad9: get().ButtonPressed(1, MD_Z); break;
+                case sfKeyNumpad0: get().ButtonPressed(1, MD_MODE); break;
   			case sfKeyUp:
   			get().ButtonPressed(1, MD_UP);
   			break;
@@ -108,6 +119,10 @@ bool GamePad::Update(sfEvent event)
 	    switch(event.key.code)
   		{
   			//Manette 1
+                case sfKeyI: get().ButtonReleased(0, MD_X); break;
+                case sfKeyO: get().ButtonReleased(0, MD_Y); break;
+                case sfKeyP: get().ButtonReleased(0, MD_Z); break;
+                case sfKeyReturn: get().ButtonReleased(0, MD_MODE); break;
   			case sfKeyZ:
   			get().ButtonReleased(0, MD_UP);
   			break;
@@ -141,6 +156,10 @@ bool GamePad::Update(sfEvent event)
   			break;
 
   			//Manette 2
+                case sfKeyNumpad7: get().ButtonReleased(1, MD_X); break;
+                case sfKeyNumpad8: get().ButtonReleased(1, MD_Y); break;
+                case sfKeyNumpad9: get().ButtonReleased(1, MD_Z); break;
+                case sfKeyNumpad0: get().ButtonReleased(1, MD_MODE); break;
   			case sfKeyUp:
   			get().ButtonReleased(1, MD_UP);
   			break;
@@ -182,6 +201,8 @@ bool GamePad::Update(sfEvent event)
   	return false;
 }
 
+#endif
+
 void GamePad::ButtonPressed(int gamepad, int button)
 {
 	BitSet(get().buttonState[gamepad], button);
@@ -192,47 +213,44 @@ void GamePad::ButtonReleased(int gamepad, int button)
 	BitReset(get().buttonState[gamepad], button);
 }
 
-void GamePad::Write(int gamepad, int data, bool control)
-{
-	if(!control)
-	{
-		get().dataReg[gamepad] = data;
-	}
-	else
-	{
-		get().controlReg[gamepad] = data;
-	}
-
-	byte mask = get().controlReg[gamepad];
-
-	get().gamepadState[gamepad] &= ~mask;
-
-	get().gamepadState[gamepad] |= data & mask;
+void GamePad::SetButton(int pad, int button, bool pressed) {
+    if (pad < 0 || pad > 1 || button < 0 || button > MD_MODE) return;
+    if (pressed) get().ButtonPressed(pad, button); else get().ButtonReleased(pad, button);
 }
-
-byte GamePad::ReadData(int gamepad)
-{
-
-	byte data = get().gamepadState[gamepad] & 0x40;
-	data |= 0x3F;
-
-	if(data & 0x40)
-	{
-		data &= ~(get().buttonState[gamepad] & 0x3F);
-	}
-	else
-	{
-		data &= ~(0xC | (get().buttonState[gamepad] & 0x3) | ((get().buttonState[gamepad] >> 2) & 0x30));
-	}
-
-	byte mask = 0x80 | get().controlReg[gamepad];
-	byte value = get().dataReg[gamepad] & mask;
-	value |= data & ~mask;
-
-	return value;
+void GamePad::SetSixButton(int pad, bool enabled) {
+    if (pad >= 0 && pad < 2) { get().sixButton[pad]=enabled; get().phase[pad]=0; }
 }
-
-byte GamePad::ReadControl(int gamepad)
-{
-	return get().controlReg[gamepad];
+void GamePad::Advance(unsigned ticks) {
+    for (unsigned pad=0; pad<2; ++pad) {
+        get().idle[pad]=std::min<unsigned>(get().idle[pad]+ticks, 100000);
+        if (get().idle[pad]>=82000) get().phase[pad]=0; // Approximately 1.5 ms.
+    }
 }
+void GamePad::Write(int pad, int data, bool control) {
+    if (pad < 0 || pad > 1) return;
+    auto& s=get();
+    const bool oldTH=(s.controlReg[pad]&0x40) ? (s.dataReg[pad]&0x40)!=0 : true;
+    if (control) s.controlReg[pad]=byte(data); else s.dataReg[pad]=byte(data);
+    const bool newTH=(s.controlReg[pad]&0x40) ? (s.dataReg[pad]&0x40)!=0 : true;
+    if (!oldTH && newTH) { s.phase[pad]=(s.phase[pad]+1)&3; s.idle[pad]=0; }
+}
+byte GamePad::ReadData(int pad) {
+    if (pad < 0 || pad > 1) return 0x7f;
+    auto& s=get();
+    const bool th=(s.controlReg[pad]&0x40) ? (s.dataReg[pad]&0x40)!=0 : true;
+    const unsigned buttons=s.buttonState[pad];
+    byte data=0x3f;
+    if (th) {
+        if (s.sixButton[pad] && s.phase[pad]==3) {
+            data &= byte(~((buttons&0x30) | ((buttons>>8)&1)<<2 | ((buttons>>9)&1)<<1 | ((buttons>>10)&1) | ((buttons>>11)&1)<<3));
+        } else data &= byte(~(buttons&0x3f));
+    } else {
+        data &= byte(~(0x0c | (buttons&3) | ((buttons>>2)&0x30)));
+        if (s.sixButton[pad] && s.phase[pad]==2) data &= 0x30;
+        else if (s.sixButton[pad] && s.phase[pad]==3) data |= 0x0f;
+    }
+    if (th) data |= 0x40;
+    const byte outputs=s.controlReg[pad];
+    return byte((s.dataReg[pad]&outputs) | (data&~outputs));
+}
+byte GamePad::ReadControl(int pad) { return pad >= 0 && pad < 2 ? get().controlReg[pad] : 0; }

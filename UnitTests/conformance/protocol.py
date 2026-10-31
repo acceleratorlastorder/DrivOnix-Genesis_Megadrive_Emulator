@@ -17,7 +17,14 @@ def request(case, optimized):
     values = [0x31515644, case["index"], int(optimized), initial["pc"], initial["sr"],
               *(initial[f"d{i}"] for i in range(8)), *(initial[f"a{i}"] for i in range(7)),
               initial["usp"], initial["ssp"], len(ram)]
-    if "actions" in case:
+    profile = case.get("execution_profile", "boundary")
+    if profile not in ("boundary", "instruction"):
+        raise CorpusError("Unknown instruction execution profile")
+    if profile == "instruction":
+        actions = case.get("actions", [0])
+        values[0] = 0x33515644
+        values[3:3] = [0, len(actions), *actions]
+    elif "actions" in case:
         actions = case["actions"]
         values[0] = 0x32515644
         values[3:3] = [len(actions), *actions]

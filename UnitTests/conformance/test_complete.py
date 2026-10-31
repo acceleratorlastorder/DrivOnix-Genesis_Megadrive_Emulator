@@ -10,10 +10,10 @@ import tempfile
 import unittest
 
 from complete import load_baseline, save_baseline
-from corpus import CorpusError
+from corpus import CorpusError, normalize
 from protocol import compare, execute, request
 from run import case_digest
-from specifications import PC, SSP, DATA, arithmetic, case, condition, instruction_cases, sequence_cases
+from specifications import PC, SSP, DATA, arithmetic, bytes_at, case, condition, instruction_cases, sequence_cases
 from sweep import expected_from_reference, inputs
 import z80
 
@@ -77,6 +77,55 @@ class Specifications(unittest.TestCase):
         self.assertEqual(c, before_case)
         self.assertEqual(actual, before_actual)
 
+    def test_address_error_ssw_masks_only_documented_undefined_bits(self):
+        source = case("adapter", "group-zero frame", [0x4E75])
+        initial = dict(source["initial"])
+        initial["pc"] += 4
+        initial["ram"] = list(initial["ram"].items())
+        frame = SSP - 14
+        final = dict(initial, pc=0x2004, ssp=frame)
+        final["ram"] = bytes_at(frame, 0x4E76000040014E75270000001002, 14)
+        transactions = [["w", 0, 0, frame + offset] for offset in range(0, 14, 2)]
+        transactions.append(["r", 0, 0, 12])
+        c = normalize({"index": 0, "name": "group-zero frame", "initial": initial,
+                       "final": final, "transactions": transactions, "length": 50}, "RTS")
+        self.assertEqual(c["memory_masks"], {frame: 0, frame + 1: 31})
+        actual = {**c["final"], "ram": dict(c["expected_ram"]), "cycles": 50}
+        actual["ram"][frame] ^= 0xFF
+        self.assertEqual(compare(c, actual), {})
+        for address, bit in ((frame + 1, 1), (frame + 6, 1), (frame + 8, 1), (frame + 13, 1)):
+            changed = copy.deepcopy(actual)
+            changed["ram"][address] ^= bit
+            self.assertIn(f"ram:{address:06x}", compare(c, changed))
+
+    def test_chk_trap_asserts_live_and_saved_N_but_preserves_undefined_masks(self):
+        source = case("adapter", "CHK bounds trap", [0x4190])
+        initial = dict(source["initial"])
+        initial["pc"] += 4
+        initial["ram"] = list(initial["ram"].items())
+        frame = SSP - 6
+        final = dict(initial, pc=0x2004, ssp=frame, sr=0x2708)
+        final["ram"] = bytes_at(frame, 0x270800001002, 6)
+        transactions = [["w", 0, 0, frame + offset] for offset in range(0, 6, 2)]
+        transactions.append(["r", 0, 0, 24])
+        raw = {"index": 0, "name": "CHK bounds trap", "initial": initial,
+               "final": final, "transactions": transactions, "length": 40}
+        trapped = normalize(raw, "CHK")
+        self.assertEqual(trapped["sr_mask"], 0xFFF8)
+        self.assertEqual(trapped["memory_masks"], {frame + 1: 0xF8})
+        actual = {**trapped["final"], "ram": dict(trapped["expected_ram"]), "cycles": 40}
+        actual["sr"] ^= 7
+        actual["ram"][frame + 1] ^= 7
+        self.assertEqual(compare(trapped, actual), {})
+        live = copy.deepcopy(actual)
+        live["sr"] ^= 8
+        self.assertIn("sr", compare(trapped, live))
+        saved = copy.deepcopy(actual)
+        saved["ram"][frame + 1] ^= 8
+        self.assertIn(f"ram:{frame + 1:06x}", compare(trapped, saved))
+        success = normalize({**raw, "transactions": []}, "CHK")
+        self.assertEqual(success["sr_mask"] & 15, 0)
+
     def test_compressed_baselines_round_trip_deterministically(self):
         with tempfile.TemporaryDirectory() as where:
             path = Path(where) / "baseline.json.gz"
@@ -101,6 +150,18 @@ class WorkerSequences(unittest.TestCase):
                     self.assertEqual(state["cycles"], 34)
                     for register in [*(f"d{i}" for i in range(8)), *(f"a{i}" for i in range(7))]:
                         self.assertEqual(state[register], item["initial"][register])
+
+    def test_instruction_profile_stops_before_trace_boundary_but_preserves_T(self):
+        c = case("adapter", "MAME instruction-step profile", [0x4E71],
+                 {"sr": 0xA700}, {"pc": PC + 2, "sr": 0xA700}, cycles=4)
+        c["execution_profile"] = "instruction"
+        for optimized in (False, True):
+            result = list(execute(WORKER, [c], optimized))
+            self.assertIsNone(result[0][2])
+            self.assertEqual(compare(c, result[0][1]), {})
+        changed = copy.deepcopy(c)
+        changed["execution_profile"] = "boundary"
+        self.assertNotEqual(case_digest(c), case_digest(changed))
 
     def test_multi_instruction_wire_protocol_runs_both_real_decoders(self):
         c = case("adapter", "two MOVEQ instructions", [0x7001, 0x7202],

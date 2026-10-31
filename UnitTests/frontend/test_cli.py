@@ -28,6 +28,9 @@ def main():
         check(["--help"], 0, "Usage:")
         check(["-h"], 0, "file picker")
         check(["one.bin", "two.bin"], 2, "Usage:")
+        check(["--unknown"], 2, "Usage:")
+        check(["--no-audio", "missing.bin"], 1, "Cannot open ROM")
+        check([""], 1, "ROM path is empty")
         check(["missing.bin"], 1, "Cannot open ROM")
         check(["no-extension"], 1, "Unsupported ROM extension")
         check(["unsupported.zip"], 1, "Unsupported ROM extension")
@@ -35,8 +38,8 @@ def main():
         check(["truncated.bin"], 1, "complete header")
         (directory / "partial.smd").write_bytes(bytes(513))
         check(["partial.smd"], 1, "complete 16 KiB blocks")
-        (directory / "oversized.bin").write_bytes(bytes(0x400001))
-        check(["oversized.bin"], 1, "4 MiB")
+        (directory / "oversized.bin").write_bytes(bytes(0x800001))
+        check(["oversized.bin"], 1, "8 MiB")
         if os.name != "nt":
             # A valid, uppercase filename in an unrelated working directory gets
             # through the real loader and asset lookup before rejecting no display.

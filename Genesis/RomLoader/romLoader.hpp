@@ -40,6 +40,8 @@ public:
 	static void LoadRomFile(std::string romName);
 	static void PrintRomHeader();
 	static byte GetCountry();
+    static bool ChecksumMatches();
+    static const std::vector<byte>& Bytes();
 	static byte GetVersion();
 	static void PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest);
 
@@ -71,6 +73,7 @@ private:
 	bool haveSram;
 	dword sramSize;
 	byte version;
+    word computedChecksum;
 
 	static RomLoader& get(void);
 

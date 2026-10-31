@@ -2,6 +2,8 @@
 #define YM7101_HPP
 
 #include <utility>
+#include <array>
+#include <cstdint>
 #include <cstring>
 
 #include "../Bits/bitsUtils.hpp"
@@ -31,6 +33,11 @@ public:
 	YM7101();
 	static void Init();
 	static void Update(int clicks);
+    static void Advance(unsigned masterCycles);
+    static unsigned TakeStallCycles();
+    static bool Z80Interrupt();
+    static unsigned Scanline();
+    static unsigned LineCycles();
 	static bool GetRequestInt();
 	static bool GetIs256Screen();
 	static int GetIntType();
@@ -49,31 +56,37 @@ private:
 
 	std::pair<int, int> vdpResolution;
 
-	bool hCounterFirst;
-	bool vCounterFirst;
 	word vCounter;
-	word hCounter;
 	word status;
-	bool refresh;
+    word hvLatch;
+    bool hvFrozen;
 
 	bool is256Screen;
 
 	bool requestInt;
 	byte lineInt;
-	int maxInt;
 
 	word cram[0x40];
 	word vsram[0x40];
-	byte vram[0x10000];
+	struct MirroredVRAM {
+        byte bytes[0x10000];
+        byte& operator[](unsigned address) { return bytes[address & 0xffff]; }
+    } vram;
+    unsigned lineCycles, scanline, stallCycles;
+    bool horizontalPending, verticalPending, dmaFillPending;
+    struct FifoEntry { word address, value; unsigned code; uint64_t ready; };
+    std::array<FifoEntry,4> fifo;
+    unsigned fifoCount;
+    uint64_t totalCycles, dmaReady;
+    unsigned dmaType, dmaRemaining, dmaCode;
+    dword dmaSource;
+    word dmaValue;
+    uint64_t NextAccess(uint64_t after, unsigned slots);
+    void CommitWrite(word address, unsigned code, word value);
+    void DmaStep();
 	byte vdpRegister[24];
 	bool controlPortPending;
 	dword controlPortData;
-	int maxSprites;
-	int spritePixelCount;
-	int lineIntensity[320];
-	byte spriteLineData[320];
-	std::pair<int, std::pair<int, int>> spriteMask;
-	int spriteMask2;
 
 	word GetAddressRegister();
 	void IncrementAddress();
@@ -99,11 +112,6 @@ private:
 	std::pair<int, int> GetLayerSize();
 	word GetVScroll(int layer, int doubleColumnNum);
 	void GetHScroll(int line, word& aScroll, word& bScroll);
-	bool SetIntensity(bool priority, int xPos, bool isSprite, int color, int palette);
-	void RenderBackdrop();
-	void RenderLayer(word baseAddress, bool priority, int width, int height, word horizontalScroll, int layer);
-	void RenderWindow(word baseAddress, bool priority);
-	void RenderSprite(bool priority);
 	void Render();
 
 };

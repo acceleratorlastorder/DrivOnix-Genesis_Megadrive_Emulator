@@ -41,7 +41,7 @@ if(DRIVONIX_REFERENCE_DIR)
     target_include_directories(independent_68000 PUBLIC ${DRIVONIX_REFERENCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(independent_68000 PUBLIC M68K_EMULATE_010=0 M68K_EMULATE_EC020=0
         M68K_EMULATE_020=0 M68K_EMULATE_030=0 M68K_EMULATE_040=0 M68K_EMULATE_PMMU=0
-        M68K_EMULATE_ADDRESS_ERROR=1 M68K_EMULATE_TRACE=1 M68K_EMULATE_RESET=1 M68K_EMULATE_PREFETCH=1)
+        M68K_EMULATE_ADDRESS_ERROR=1 M68K_INSTRUCTION_HOOK=1 M68K_EMULATE_TRACE=1 M68K_EMULATE_RESET=1 M68K_EMULATE_PREFETCH=1)
     add_executable(reference_worker conformance/vectorWorker.cpp conformance/referenceAdapter.cpp cpuTestMemory.cpp)
     target_compile_definitions(reference_worker PRIVATE DRIVONIX_CPU_TESTS DRIVONIX_REFERENCE)
     target_compile_features(reference_worker PRIVATE cxx_std_11)
@@ -76,32 +76,28 @@ add_test(NAME conformance_adapter COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/conformance/test_adapter.py --worker $<TARGET_FILE:vector_worker>)
 set_tests_properties(conformance_adapter PROPERTIES TIMEOUT 60)
 
-add_test(NAME handwritten_known_failure_gate COMMAND ${Python3_EXECUTABLE}
+add_test(NAME handwritten_conformance COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/conformance/run.py --worker $<TARGET_FILE:vector_worker>
-    --handwritten-only --baseline ${CMAKE_CURRENT_SOURCE_DIR}/conformance/handwritten-baseline.json
+    --handwritten-only
     --report-dir ${CMAKE_CURRENT_BINARY_DIR}/handwritten-report)
-set_tests_properties(handwritten_known_failure_gate PROPERTIES TIMEOUT 60)
+set_tests_properties(handwritten_conformance PROPERTIES TIMEOUT 60)
 
 add_test(NAME complete_suite_adapter COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/conformance/test_complete.py --worker $<TARGET_FILE:vector_worker>)
 set_tests_properties(complete_suite_adapter PROPERTIES TIMEOUT 60)
 
-# Expanded cases expose existing CPU UB, so record unsafe cases as crashes in a
-# separate sanitizer regression profile. Both profiles reject any new failures;
-# all correct expected states stay identical and diagnostic reports retain faults.
+# Both normal and sanitizer runs require correct state and timing; historical
+# known-failure snapshots are retained only as audit history, not pass criteria.
 set(reference_validation_args "")
 if(TARGET reference_worker)
     set(reference_validation_args --oracle $<TARGET_FILE:reference_worker>)
 endif()
 set(specification_profile normal)
-set(specification_baseline specifications-baseline.json.gz)
 if(DRIVONIX_SANITIZERS)
     set(specification_profile sanitizers)
-    set(specification_baseline specifications-sanitized-baseline.json.gz)
 endif()
 add_test(NAME complete_instruction_specifications COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/conformance/complete.py --worker $<TARGET_FILE:vector_worker>
     ${reference_validation_args} --specifications-only --profile ${specification_profile}
-    --baseline ${CMAKE_CURRENT_SOURCE_DIR}/conformance/${specification_baseline}
     --report-dir ${CMAKE_CURRENT_BINARY_DIR}/specifications-report)
 set_tests_properties(complete_instruction_specifications PROPERTIES TIMEOUT 300)

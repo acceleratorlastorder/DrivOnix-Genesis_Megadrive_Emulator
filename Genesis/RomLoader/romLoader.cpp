@@ -12,8 +12,8 @@ std::vector<byte> ReadRom(const std::string& path)
     if (!input)
         throw std::runtime_error("Cannot open ROM: " + path);
     const std::streamoff size = input.tellg();
-    if (size < 0x200 || size > 0x400000 + SMD_HEADER_SIZE)
-        throw std::runtime_error("ROM must contain a complete header and fit in the 4 MiB cartridge area: " + path);
+    if (size < 0x200 || size > 0x800000 + SMD_HEADER_SIZE)
+        throw std::runtime_error("ROM must contain a complete header and fit in the 8 MiB cartridge image limit: " + path);
     std::vector<byte> bytes(static_cast<std::size_t>(size));
     input.seekg(0);
     if (!input.read(reinterpret_cast<char*>(bytes.data()), size))
@@ -41,6 +41,7 @@ void RomLoader::Init()
     get().cartridgeMemory.clear();
     get().header = {};
     get().version = 0;
+    get().computedChecksum = 0;
 }
 
 void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest)
@@ -54,6 +55,8 @@ void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::v
     if (copySize)
         std::memcpy(dest.data() + start, get().cartridgeMemory.data() + offset, copySize);
 }
+
+const std::vector<byte>& RomLoader::Bytes() { return get().cartridgeMemory; }
 
 byte RomLoader::GetCountry()
 {
@@ -102,8 +105,8 @@ void RomLoader::LoadRomFile(std::string romName)
 void RomLoader::LoadBINMDGEN(std::string romName)
 {
     get().cartridgeMemory = ReadRom(romName);
-    if (get().cartridgeMemory.size() > 0x400000)
-        throw std::runtime_error("ROM exceeds the 4 MiB cartridge area: " + romName);
+    if (get().cartridgeMemory.size() > 0x800000)
+        throw std::runtime_error("ROM exceeds the 8 MiB cartridge image limit: " + romName);
     get().cartridgeSize = static_cast<long>(get().cartridgeMemory.size());
 }
 
@@ -194,13 +197,12 @@ void RomLoader::Checksum()
 		    checksum += get().cartridgeMemory[i + 1];
 	}
 
-	if(checksum != get().header.checksum)
-	{
-		get().cartridgeMemory[0x18E] = (checksum >> 8) & 0xFF;
-		get().cartridgeMemory[0x18F] = (checksum & 0xFF);
-		get().header.checksum = checksum;
-	}
+    get().computedChecksum=checksum;
+    if(checksum!=get().header.checksum)
+        std::cerr<<"DrivOnix: ROM header checksum differs from the image; original bytes preserved\n";
 }
+
+bool RomLoader::ChecksumMatches() { return get().computedChecksum==get().header.checksum; }
 
 void RomLoader::PrintRomHeader()
 {

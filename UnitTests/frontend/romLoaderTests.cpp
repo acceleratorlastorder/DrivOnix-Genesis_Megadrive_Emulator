@@ -68,6 +68,10 @@ int main(int argc, char* argv[])
             Write(path, bytes);
             Check(path, bytes, bytes[0x1f0]);
         }
+        auto modified=Cartridge(0x400,'U');modified[0x250]^=0x40;
+        Write(prefix+"modified.bin",modified);
+        Check(prefix+"modified.bin",modified,'U');
+        Require(!RomLoader::ChecksumMatches(),"Checksum mismatch must remain observable without ROM mutation");
         const auto bytes = Cartridge(0x8000, 'E');
         std::vector<byte> smd(SMD_HEADER_SIZE + bytes.size());
         for (std::size_t block = 0; block < bytes.size(); block += SMD_BLOCK_SIZE)

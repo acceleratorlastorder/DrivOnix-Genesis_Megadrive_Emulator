@@ -1,48 +1,34 @@
 #ifndef CRT_HPP
 #define CRT_HPP
-
-#include <algorithm>
-#include <string>
-
-#include <SFML/Config.h>
-#include <SFML/System.h>
-#include <SFML/Window.h>
-#include <SFML/Graphics.h>
-#include <SFML/Audio.h>
-
+#include <array>
 #include "../Bits/bitsUtils.hpp"
-#include "../YM7101/ym7101.hpp"
-
-class CRT
-{
+#ifndef DRIVONIX_HEADLESS
+#include <SFML/Graphics.h>
+#else
+struct sfRenderWindow;
+#endif
+class CRT {
 public:
-	CRT();
-	static void Init();
-	static void Shutdown();
-	static void Render();
-	static void ResetScreen();
-	static void Write(int x, int y, byte red, byte green, byte blue);
-	static void ApplyIntensity(int x, int y, int intensity);
-	static sfRenderWindow* GetWindow();
-
+    CRT();
+    static void Init();
+    static void Shutdown();
+    static void Render();
+    static void ResetScreen();
+    static void SetResolution(unsigned width, unsigned height);
+    static const byte* Pixels();
+    static unsigned Height();
+    static void Write(int x, int y, byte red, byte green, byte blue);
+    static void ApplyIntensity(int x, int y, int intensity);
+    static sfRenderWindow* GetWindow();
 private:
-	static CRT& get(void);
-
-	void GetConfig();
-
-	sfRenderWindow* window;
-	sfVideoMode mode;
-
-	sfImage* screenImg;
-	sfTexture* screenTex;
-	sfSprite* screenSpr;
-
-	unsigned int pixelSize;
-
-	float sprPosX;
-	float sprPosY;
-
-	byte screenData[320][224][3];
+    static CRT& get();
+    std::array<byte, 320 * 480 * 4> pixels;
+    unsigned width, height, pixelSize;
+#ifndef DRIVONIX_HEADLESS
+    sfRenderWindow* window;
+    sfTexture* texture;
+    sfSprite* sprite;
+    bool fullscreen;
+#endif
 };
-
 #endif

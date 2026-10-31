@@ -1,2 +1,7 @@
-g++ -std=c++11 -g -Wall unitTests.cpp opcodeCoverage.cpp ../Platform/platform.cpp ../Genesis/genesis.cpp ../Bits/bitsUtils.cpp ../Genesis/RomLoader/romLoader.cpp ../Genesis/GamePad/gamePad.cpp ../M68k/m68k.cpp ../YM7101/ym7101.cpp ../CathodeRayTube/crt.cpp ..\sfml\*.a ..\*.dll -o UnitTests.exe -lmingw32 -lcomdlg32 -static-libgcc -static-libstdc++ -Wno-switch
-pause
+@echo off
+setlocal
+cmake -S "%~dp0" -B "%~dp0..\build\cpu-mingw" -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug
+if errorlevel 1 exit /b 1
+cmake --build "%~dp0..\build\cpu-mingw" --parallel 2
+if errorlevel 1 exit /b 1
+ctest --test-dir "%~dp0..\build\cpu-mingw" --output-on-failure

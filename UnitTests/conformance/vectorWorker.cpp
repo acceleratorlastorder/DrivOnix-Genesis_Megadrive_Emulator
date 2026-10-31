@@ -82,12 +82,14 @@ int main(int argc, char** argv)
         dword magic;
         while (Read32(magic, true))
         {
-            if (magic != 0x31515644 && magic != 0x32515644) throw std::runtime_error("invalid request magic/version");
+            if (magic != 0x31515644 && magic != 0x32515644 && magic != 0x33515644) throw std::runtime_error("invalid request magic/version");
             const dword id = Read32();
             const dword dispatch = Read32();
             if (dispatch > 1) throw std::runtime_error("invalid dispatch");
             std::vector<dword> actions;
-            if (magic == 0x32515644)
+            const dword traceBoundary = magic == 0x33515644 ? Read32() : 1;
+            if (traceBoundary > 1) throw std::runtime_error("invalid execution flags");
+            if (magic == 0x32515644 || magic == 0x33515644)
             {
                 const dword count = Read32();
                 if (count == 0 || count > 100) throw std::runtime_error("invalid action count");
@@ -131,7 +133,7 @@ int main(int argc, char** argv)
             int cycles = 0;
             for (dword action : actions)
             {
-                if (action == 0) cycles += M68k::StepVector(dispatch == 1);
+                if (action == 0) cycles += M68k::StepVector(dispatch == 1, traceBoundary != 0);
                 else if (action == 9) M68k::VectorReset();
                 else M68k::VectorIRQ(action - 1);
             }

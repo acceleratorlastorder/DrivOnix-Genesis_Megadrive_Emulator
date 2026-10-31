@@ -57,6 +57,7 @@ public:
 	M68k();
 	static void SetUnitTestsMode();
 	static void Init();
+    static void SetResetHandler(void (*handler)());
 	static int Update();
 	static void ExecuteOpcode(word opcode);
 	static void RequestAutoVectorInt(INT_TYPE level);
@@ -67,7 +68,7 @@ public:
 #ifdef DRIVONIX_CPU_TESTS
 	static void LoadVectorState(const CPU_VECTOR_STATE& state);
 	static CPU_VECTOR_STATE ReadVectorState();
-	static int StepVector(bool optimized);
+	static int StepVector(bool optimized, bool traceBoundary = true);
 	static void VectorIRQ(unsigned level);
 	static void VectorReset();
 #endif
@@ -130,11 +131,17 @@ private:
 
 	void RequestInt(INT_TYPE level, dword address);
 	void CheckInt();
+    int StepInstruction(bool optimized, bool traceBoundary = true);
+    word ReadInstructionWord(dword address);
+    dword ReadInstructionLong(dword address);
+    void RaiseException(unsigned vector, dword savedPC, unsigned cycles);
+    void CheckProgramAddress(dword address, unsigned cycles, dword savedPC);
 	void CheckPrivilege();
 	void SetDataRegister(int id, dword result, DATASIZE size);
 	void SetAddressRegister(int id, dword result, DATASIZE size);
 	word SignExtendWord(byte data);
 	dword SignExtendDWord(word data);
+	EA_DATA GetControlAddress(EA_TYPES mode, byte reg);
 	EA_DATA GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset);
 	EA_DATA SetEAOperand(EA_TYPES mode, byte reg, dword data, DATASIZE size, dword offset);	
 
@@ -252,6 +259,20 @@ private:
 
 	std::multimap<INT_TYPE, int> interrupts;
 	bool servicingInt;
+    bool exceptionRaised;
+    unsigned faultCycles;
+    dword faultSavedPC;
+    bool faultProgram;
+    dword instructionPC;
+    word currentOpcode;
+    word faultInstructionWord;
+    bool prefetchValid;
+    dword prefetchAddress;
+    word prefetchWord;
+    bool extensionValid;
+    dword extensionAddress;
+    word extensionWord;
+    void (*resetHandler)();
 	//End CPU Reg, Flags, Var
 	//--------------------------
 	//Start CPU Unit Test

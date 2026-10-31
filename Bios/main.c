@@ -76,7 +76,7 @@ int main( )
 
 			waitTick(800);
 
-			u32* memRef = (u32*)0xFF00FF;
+			u32* memRef = (u32*)0xFF0100;
 			*memRef = 0xCAFE; //magic number ;)
 
 			while(1);

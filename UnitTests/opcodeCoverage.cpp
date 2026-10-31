@@ -4,6 +4,9 @@ namespace
 {
     bool optimizedDispatch = false;
     const dword operandAddress = 0xE00002;
+    const dword supervisorStack = 0xE08000;
+    const dword privilegeHandler = 0xE01000;
+    const dword traceHandler = 0xE01200;
 
     bool Expect(const char* test, const char* field, dword actual, dword expected)
     {
@@ -15,9 +18,20 @@ namespace
 
     void Prepare(CPU_STATE_DEBUG state, word immediate = 0)
     {
+#ifdef DRIVONIX_CPU_TESTS
+        // Seed real vector/stack memory. Privileged instructions must enter an
+        // exception, including saving the old user SR and faulting instruction PC.
+        const auto seedLong=[](dword address,dword value) {
+            for(unsigned i=0;i<4;++i) CpuTestMemory::SeedByte(address+i,byte(value>>(24-8*i)));
+        };
+        seedLong(0,supervisorStack);
+        seedLong(8*4,privilegeHandler);
+        seedLong(9*4,traceHandler);
+#endif
         M68k::Init();
         M68k::SetUnitTestsMode();
         state.programCounter = operandAddress;
+        if(!state.registerAddress[7]) state.registerAddress[7]=(state.CCR&0x2000)?supervisorStack:0xE07000;
         Genesis::M68KWriteMemoryWORD(operandAddress, immediate);
         M68k::SetCpuState(state);
     }
@@ -47,8 +61,17 @@ namespace
         state.registerData[0] = 0x12345678;
         Prepare(state, immediate);
         state = Execute(opcode);
-        bool ok = Expect(name, "SR", state.CCR, expected);
-        ok = Expect(name, "PC", state.programCounter, operandAddress + (privilegeViolation ? 0 : 2)) && ok;
+        const bool trace=optimizedDispatch && (initial&0x8000) && !privilegeViolation;
+        const word savedStatus=privilegeViolation ? initial:expected;
+        const word finalStatus=(privilegeViolation || trace) ? word((savedStatus|0x2000)&~0x8000):expected;
+        bool ok = Expect(name, "SR", state.CCR, finalStatus);
+        const dword finalPC=privilegeViolation ? privilegeHandler:(trace ? traceHandler:operandAddress+2);
+        ok = Expect(name, "PC", state.programCounter, finalPC) && ok;
+        if(privilegeViolation || trace) {
+            ok=Expect(name,"supervisor stack",state.registerAddress[7],supervisorStack-6)&&ok;
+            ok=Expect(name,"saved SR",Genesis::M68KReadMemoryWORD(supervisorStack-6),savedStatus)&&ok;
+            ok=Expect(name,"saved PC",Genesis::M68KReadMemoryLONG(supervisorStack-4),privilegeViolation?operandAddress-2:operandAddress+2)&&ok;
+        }
         return Expect(name, "D0 preserved", state.registerData[0], 0x12345678) && ok;
     }
 }
@@ -138,8 +161,11 @@ bool Test_MOVE_TO_SR()
     state.registerData[0] = 0x2700;
     Prepare(state);
     state = Execute(0x46C0);
-    ok = Expect("MOVE to SR user mode", "SR preserved", state.CCR, 0x0005) && ok;
-    ok = Expect("MOVE to SR user mode", "PC", state.programCounter, operandAddress) && ok;
+    ok = Expect("MOVE to SR user mode", "exception SR", state.CCR, 0x2005) && ok;
+    ok = Expect("MOVE to SR user mode", "handler PC", state.programCounter, privilegeHandler) && ok;
+    ok = Expect("MOVE to SR user mode", "SSP", state.registerAddress[7], supervisorStack-6) && ok;
+    ok = Expect("MOVE to SR user mode", "saved user SR", Genesis::M68KReadMemoryWORD(supervisorStack-6), 0x0005) && ok;
+    ok = Expect("MOVE to SR user mode", "faulting PC", Genesis::M68KReadMemoryLONG(supervisorStack-4), operandAddress-2) && ok;
     return ok;
 }
 
