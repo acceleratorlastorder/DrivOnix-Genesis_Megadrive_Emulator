@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cerrno>
 #include <cstdio>
-#include <fstream>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -22,43 +24,54 @@ dword ramStart=0, ramEnd=0;
 bool singleLane=false, enabled=false, writeProtected=false, dirty=false;
 std::string savePath;
 EEPROM::Profile serialProfile=EEPROM::Profile::None;
-dword BE32(unsigned at) { return (dword(image[at])<<24)|(dword(image[at+1])<<16)|(dword(image[at+2])<<8)|image[at+3]; }
+dword BE32(const std::vector<byte>& bytes,unsigned at) { return (dword(bytes[at])<<24)|(dword(bytes[at+1])<<16)|(dword(bytes[at+2])<<8)|bytes[at+3]; }
 bool Contains(dword address) {
     return enabled && !ram.empty() && address>=ramStart && address<=ramEnd && (!singleLane || ((address^ramStart)&1)==0);
+}
+std::vector<byte> ReadSave(const std::string& path,unsigned size)
+{
+    errno=0;
+    std::unique_ptr<std::FILE,int(*)(std::FILE*)> input(std::fopen(path.c_str(),"rb"),std::fclose);
+    if(!input)
+    {
+        if(errno==ENOENT) return {};
+        throw std::runtime_error("Cannot open cartridge save: "+path);
+    }
+    if(std::fseek(input.get(),0,SEEK_END)!=0||std::ftell(input.get())!=long(size))
+        throw std::runtime_error("Incorrect cartridge save size: "+path);
+    std::vector<byte> persisted(size);
+    if(std::fseek(input.get(),0,SEEK_SET)!=0||std::fread(persisted.data(),1,size,input.get())!=size)
+        throw std::runtime_error("Cannot read cartridge save: "+path);
+    return persisted;
 }
 }
 void Cartridge::Load(const std::vector<byte>& rom, const std::string& path) {
     Save();
-    image=rom; ram.clear(); dirty=false; enabled=false; writeProtected=false;
-    for (unsigned i=0;i<8;++i) banks[i]=i;
-    serialProfile=EEPROM::Detect(rom);
-    EEPROM::Init(serialProfile);
-    savePath=path+(serialProfile==EEPROM::Profile::None ? ".srm":".eep");
-    if(serialProfile!=EEPROM::Profile::None) {
-        std::ifstream input(savePath,std::ios::binary|std::ios::ate);
-        if(input) {
-            const auto length=input.tellg();
-            if(length!=std::streamoff(EEPROM::Bytes().size())) throw std::runtime_error("Incorrect EEPROM save size: "+savePath);
-            std::vector<byte> persisted(static_cast<std::size_t>(length));input.seekg(0);
-            if(!input.read(reinterpret_cast<char*>(persisted.data()),persisted.size())) throw std::runtime_error("Cannot read EEPROM save: "+savePath);
-            EEPROM::Init(serialProfile,persisted);
-        }
-        return;
+    auto nextImage=rom;
+    std::vector<byte> nextRam,serialBytes;
+    const auto nextProfile=EEPROM::Detect(nextImage);
+    std::string nextPath=path+(nextProfile==EEPROM::Profile::None ? ".srm":".eep");
+    dword nextStart=0,nextEnd=0;
+    bool nextSingleLane=false,nextEnabled=false;
+    if(nextProfile!=EEPROM::Profile::None) {
+        serialBytes=ReadSave(nextPath,EEPROM::Capacity(nextProfile));
+    } else if(nextImage.size()>=0x200&&nextImage[0x1b0]=='R'&&nextImage[0x1b1]=='A') {
+        nextStart=BE32(nextImage,0x1b4)&0xffffff;nextEnd=BE32(nextImage,0x1b8)&0xffffff;
+        if(nextEnd<nextStart||nextEnd>=0x400000) throw std::runtime_error("Invalid cartridge save-RAM range");
+        nextSingleLane=((nextStart^nextEnd)&1)==0;
+        const dword size=(nextEnd-nextStart)/(nextSingleLane ? 2:1)+1;
+        if(size>0x20000) throw std::runtime_error("Unsupported cartridge save-RAM size");
+        nextRam=ReadSave(nextPath,size);
+        if(nextRam.empty()) nextRam.assign(size,0xff);
+        nextEnabled=nextImage.size()<=0x200000;
     }
-    if (image.size()<0x200 || image[0x1b0]!='R' || image[0x1b1]!='A') return;
-    ramStart=BE32(0x1b4)&0xffffff; ramEnd=BE32(0x1b8)&0xffffff;
-    if (ramEnd<ramStart || ramEnd>=0x400000) throw std::runtime_error("Invalid cartridge save-RAM range");
-    singleLane=((ramStart^ramEnd)&1)==0;
-    const dword size=(ramEnd-ramStart)/(singleLane ? 2:1)+1;
-    if (size>0x20000) throw std::runtime_error("Unsupported cartridge save-RAM size");
-    ram.assign(size,0xff);
-    enabled=image.size()<=0x200000;
-    std::ifstream input(savePath,std::ios::binary|std::ios::ate);
-    if (input) {
-        if (input.tellg()!=std::streamoff(ram.size())) throw std::runtime_error("Incorrect save-RAM file size: "+savePath);
-        input.seekg(0);
-        if (!input.read(reinterpret_cast<char*>(ram.data()),ram.size())) throw std::runtime_error("Cannot read save-RAM: "+savePath);
-    }
+    // Missing saves are new devices. Every other read/validation failure leaves
+    // the previous cartridge, mapper, RAM and in-flight serial device intact.
+    EEPROM::Init(nextProfile,serialBytes);
+    image=std::move(nextImage);ram=std::move(nextRam);savePath=std::move(nextPath);
+    serialProfile=nextProfile;ramStart=nextStart;ramEnd=nextEnd;
+    singleLane=nextSingleLane;enabled=nextEnabled;writeProtected=false;dirty=false;
+    for(unsigned i=0;i<8;++i) banks[i]=i;
 }
 byte Cartridge::Read(dword address) {
     address&=0xffffff;

@@ -85,6 +85,15 @@ are retained at the observed fault boundary. These cases are separately checked
 by the independent, unchanged MAME corpus; all 10,000 MUL/DIV vectors pass both
 production decoders including these faults and operand-dependent cycle totals.
 
+For MOVE.L write faults, direct data/address-register and immediate sources
+retain the complete previous flags when writing (An)/(An)+, and retain previous
+C/V with displacement/index destinations. Immediate EA is a direct source for
+this rule. Memory sources have their separate low-word-N staging. Independent
+MAME examples include MOVE.l #058 (D7 to indexed, SR211A to SR2112 preserving V),
+#176 (A1 to displacement preserving C/V), and #063 (immediate to (A3)+ retaining
+the complete previous flags). Four exact readable guards cover these paths;
+all 3,050 MOVE.L encodings also match across eight deterministic input patterns.
+
 An odd taken Bcc/DBcc target faults during that instruction (60 cycles); BSR
 uses 68, RTS 66, and RTE/RTR 70. For JMP/JSR the precise target-fetch totals are
 58 for (An), 60 for displacement/absolute-word/PC-displacement, 64 for indexed,

@@ -31,7 +31,9 @@ jobs:
       - name: Exercise native picker, BIOS, rendering and joypad input
         env:
           ALSOFT_DRIVERS: "null"
-        run: xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator build/emulator/DrivOnix
+        run: |
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator build/emulator/DrivOnix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_regions.py --emulator build/emulator/DrivOnix
       - name: Test the installed layout from another working directory
         run: |
           cmake --install build/emulator --prefix build/package
@@ -50,6 +52,7 @@ jobs:
           path: |
             build/drivonix-linux.tar.gz
             build/linux-gui-report/
+            build/linux-region-report/
             build/z80-report/
           if-no-files-found: error
 

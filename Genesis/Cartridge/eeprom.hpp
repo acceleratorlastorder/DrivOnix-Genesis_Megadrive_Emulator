@@ -13,6 +13,7 @@ enum class Profile
     Codemasters24C08, Codemasters24C16, Codemasters24C65
 };
 Profile Detect(const std::vector<byte>& rom);
+unsigned Capacity(Profile profile);
 void Init(Profile profile, const std::vector<byte>& persisted = {});
 bool IsMappedRead(dword address);
 bool IsMappedWrite(dword address);

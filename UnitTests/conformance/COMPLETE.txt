@@ -19,8 +19,8 @@ Offline strict checks
     ctest --test-dir build/cpu -C Debug --output-on-failure
     python UnitTests/conformance/complete.py --worker build/cpu/vector_worker --specifications-only --report-dir build/specifications-report
 
-The suite currently contains 8,151 instruction cases plus 42 sequences: 8,193 per
-decoder, 16,386 evaluations across both paths. Expectations use width-limited
+The suite currently contains 8,155 instruction cases plus 42 sequences: 8,197 per
+decoder, 16,394 evaluations across both paths. Expectations use width-limited
 Python arithmetic and documented hardware behavior, never captured CPU outputs.
 They cover:
 
@@ -71,12 +71,14 @@ multi-configuration Debug build uses Debug/vector_worker.exe and
 Debug/reference_worker.exe. The optional oracle also requires a C compiler.
 
 The default command uses eight deterministic operand/extension/status patterns
-for all 65,536 words: 524,288 differential inputs plus the 8,193 readable cases
-per decoder, or 1,064,962 total evaluations. --quick uses one pattern and retains
-all readable cases: 147,458 total evaluations across both decoders. This includes
+for all 65,536 words: 524,288 differential inputs plus the 8,197 readable cases
+per decoder, or 1,064,970 total evaluations. --quick uses one pattern and retains
+all readable cases: 147,466 total evaluations across both decoders. This includes
 45,815 catalogue encodings plus explicit ILLEGAL 0x4AFC (45,816 combined), and
 19,720 other words including reserved forms and line-A/F. Illegal encodings must
-raise the expected exception; they are not skipped.
+raise the expected exception; they are not skipped. The complete strict run on
+2026-10-31 passed all 1,064,970 evaluations through both decoders, with zero
+failures or crashes. See COVERAGE.txt for the measured validation layers.
 
 The independent core is Musashi, https://github.com/kstenerud/Musashi
 Pinned commit: 313ebf1bd9f4d0d93341eb5ce21fd8a119e9dbdd
@@ -118,7 +120,7 @@ Sanitizer checks
     python UnitTests/conformance/complete.py --worker build/cpu-sanitized/vector_worker --specifications-only --profile sanitizers --report-dir build/specifications-sanitized
 
 All seven CTest targets and all expanded specifications require zero failures
-and zero sanitizer crashes. The final 16,386 readable evaluations passed strictly
+and zero sanitizer crashes. The final 16,394 readable evaluations passed strictly
 under ASan/UBSan on 2026-10-31. The old sanitizer snapshot is historical evidence of
 previous unsafe behavior, not permission to retain it. Passing these checks does
 not prove that every possible input or production console path is sanitizer-safe.

@@ -16,7 +16,7 @@ byte ZRead(dword address, void*) { return Genesis::M68KReadMemoryBYTE(address); 
 void ZWrite(dword address, byte data, void*) { Genesis::M68KWriteMemoryBYTE(address,data); }
 bool VDPAddress(dword a) { return (a&0xe700e0)==0xc00000; }
 }
-Genesis::Genesis() : powerOff(false),isPAL(false),masterCycles(0),frameDeadline(0),frames(0),openBus(0xffff),observer(nullptr),ram(65536,0) { std::memset(io,0,sizeof(io)); }
+Genesis::Genesis() : powerOff(false),hardwareRegion('U'),masterCycles(0),frameDeadline(0),frames(0),openBus(0xffff),observer(nullptr),ram(65536,0) { std::memset(io,0,sizeof(io)); }
 Genesis& Genesis::get() { static Genesis instance; return instance; }
 void Genesis::Init() {
     auto& s=get();
@@ -37,8 +37,10 @@ void Genesis::ResetDevices() {
     GamePad::Init();
     YM7101::Init();
 }
-void Genesis::SetRegionToPAL(bool pal) { get().isPAL=pal; }
-bool Genesis::IsPAL() { return get().isPAL; }
+void Genesis::SetRegionToPAL(bool pal) { SetHardwareRegion(pal ? 'E':'U'); }
+void Genesis::SetHardwareRegion(byte region) { get().hardwareRegion=region=='J' || region=='E' ? region:'U'; }
+byte Genesis::GetHardwareRegion() { return get().hardwareRegion; }
+bool Genesis::IsPAL() { return GetHardwareRegion()=='E'; }
 uint32_t Genesis::MasterClock() { return IsPAL() ? 53203424:53693175; }
 uint64_t Genesis::MasterCycles() { return get().masterCycles; }
 uint64_t Genesis::FrameCount() { return get().frames; }
@@ -119,7 +121,7 @@ byte Genesis::M68KReadMemoryBYTE(dword a) {
     if (a==0xa11100) return Z80::BusGranted()?0:1;
     if (a>=0xa10000 && a<0xa10020) {
         switch (a|1) {
-        case 0xa10001: return byte((IsPAL()?0xc0:0x80)|0x20);
+        case 0xa10001: return byte((GetHardwareRegion()=='J' ? 0:0x80)|(IsPAL()?0x40:0)|0x20);
         case 0xa10003: return GamePad::ReadData(0);
         case 0xa10005: return GamePad::ReadData(1);
         case 0xa10007: return 0x7f;
@@ -168,7 +170,7 @@ word Genesis::M68KReadMemoryWORD(dword a) {
     if (VDPAddress(a)) {
         switch(a&0x1e) {
         case 0:case 2: value=YM7101::ReadDataPortWORD();break;
-        case 4:case 6: value=YM7101::ReadControlPortWORD();break;
+        case 4:case 6: value=word((YM7101::ReadControlPortWORD()&0x03ff)|(s.openBus&0xfc00));break;
         case 8:case 10:case 12:case 14: value=YM7101::GetHVCounter();break;
         default: value=s.openBus;break;
         }

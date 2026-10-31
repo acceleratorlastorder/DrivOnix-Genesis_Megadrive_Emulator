@@ -115,6 +115,8 @@ The main build's CTest targets cover the real console bus, timed VDP FIFO/DMA,
 planes/sprites/window/interlace/interrupts, controller handshakes, save memories,
 audio synthesis/timers, native startup and dependency integrity. Linux CI also
 checks the actual window, BIOS handoff and controller-driven rendered output.
+See [console validation](UnitTests/frontend/VALIDATION.txt) for the exercised
+hardware, save-failure checks and measured headless performance.
 
 The video renderer operates on scanlines. Arbitrary mid-line fetch effects,
 internal sprite-attribute caching, interlace half-line edge cases and Z80 pin
@@ -142,7 +144,12 @@ synthetic results do not establish every game's frame-time behavior.
 Launch `DrivOnix` (Linux) or `DrivOnix.exe` (Windows) and select a ROM, or pass a
 ROM path as the first argument. Use `--no-audio` to disable the host sound device while retaining deterministic sound-chip execution. Cancelling the picker exits normally; invalid
 or unreadable files report an error. BIN, MD, GEN and SMD extensions are accepted
-without case sensitivity. PAL or NTSC mode is automatically set by the BIOS.
+without case sensitivity. The ROM header selects USA, Japan or Europe hardware,
+in that preference order when several regions are supported. The loader accepts
+J/U/E combinations, USA/JAPAN/EUROPE names and hexadecimal masks; invalid fields
+default to USA. Japan uses domestic NTSC hardware, USA uses overseas NTSC, and
+Europe uses overseas PAL. The selected hardware is preserved through the BIOS
+and cartridge handoff. See [region handling](Genesis/RomLoader/README.txt).
 
 <img src="Images/bios.PNG" width="320">
 
@@ -185,8 +192,11 @@ Other options:
 Cartridge SRAM and supported I2C EEPROM boards load/save beside the ROM as
 `game.bin.srm` and `game.bin.eep`. Save files are validated against the configured
 capacity. Changes are flushed to a new file and atomically replace the old save
-on cartridge changes and normal exit; errors are reported without deleting the
-previous save. The ROM directory must be writable. Save states are not implemented.
+on cartridge changes and normal exit. Failures before replacement preserve the
+previous save; a directory-sync failure can be reported after replacement.
+Failed writes retain the changed memory for retry. Existing unreadable saves
+are reported instead of being treated as empty memory. The ROM directory must
+be writable. Save states are not implemented.
 
 SRAM supports byte lanes, enable/write-protect controls, and persistent storage.
 Known Sega, EA, Acclaim and Codemasters serial boards select their documented

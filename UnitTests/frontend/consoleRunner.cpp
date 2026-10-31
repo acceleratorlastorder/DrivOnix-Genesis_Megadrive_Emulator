@@ -55,7 +55,7 @@ int main(int argc,char** argv) {
         }
         const auto c=M68k::GetCpuState();const auto p=CRT::Pixels()+112*320*4+160*4;
         const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-        std::cout<<"frames="<<std::dec<<Genesis::FrameCount()<<" wall_seconds="<<seconds<<" cycles="<<Genesis::MasterCycles()<<" audio_samples="<<samples<<" pc="<<std::hex<<c.programCounter<<" center="<<unsigned(p[0])<<","<<unsigned(p[1])<<","<<unsigned(p[2])<<"\n";
+        std::cout<<"frames="<<std::dec<<Genesis::FrameCount()<<" wall_seconds="<<seconds<<" cycles="<<Genesis::MasterCycles()<<" z80_cycles="<<Z80::ExecutedCycles()<<" audio_samples="<<samples<<" pc="<<std::hex<<c.programCounter<<" center="<<unsigned(p[0])<<","<<unsigned(p[1])<<","<<unsigned(p[2])<<"\n";
         if(!dumpPath.empty()) {
             std::ofstream file(dumpPath,std::ios::binary);file<<"P6\n320 "<<CRT::Height()<<"\n255\n";
             const auto bytes=CRT::Pixels();

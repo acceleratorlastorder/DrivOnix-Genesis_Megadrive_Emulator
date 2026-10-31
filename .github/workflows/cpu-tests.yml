@@ -55,7 +55,7 @@ jobs:
       - name: Test with sanitizers
         if: runner.os == 'Linux'
         run: ctest --test-dir build/cpu-sanitized --output-on-failure
-      - name: Save baseline reports and instruction matrix
+      - name: Save conformance reports and instruction matrix
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

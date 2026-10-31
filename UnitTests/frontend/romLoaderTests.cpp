@@ -20,8 +20,10 @@ void Write(const std::string& path, const std::vector<byte>& bytes)
 
 std::vector<byte> Cartridge(std::size_t size, byte country)
 {
+    if(size<0x200) throw std::invalid_argument("Cartridge fixture needs a complete header");
     std::vector<byte> bytes(size);
     for (std::size_t i = 0; i < size; ++i) bytes[i] = static_cast<byte>(i * 37);
+    std::fill(bytes.begin()+0x1f0,bytes.begin()+0x200,' ');
     bytes[0x1f0] = country;
     word checksum = 0;
     for (std::size_t i = 0x200; i < size; i += 2)
@@ -51,6 +53,50 @@ void Check(const std::string& path, const std::vector<byte>& expected, byte coun
     try { RomLoader::PageMemory(0, 0x400000, 1, page); }
     catch (const std::exception&) { rejected = true; }
     Require(rejected, "An out-of-bounds destination was accepted");
+}
+void Regions(const std::string& prefix)
+{
+    struct Case {std::string field;byte selected;};
+    const Case cases[]={
+        {"J",'J'},{"U",'U'},{"E",'E'},{"JE",'J'},{"EU",'U'},{"JUE",'U'},
+        {" j e ",'J'},{"USA",'U'},{"Japan",'J'},{"europe",'E'},
+        {"1",'J'},{"4",'U'},{"8",'E'},{"9",'J'},{"A",'E'},{"B",'J'},
+        {"C",'U'},{"D",'U'},{"F",'U'},{"0x1",'J'},{"0X8",'E'},{"0xE",'U'},{"0008",'E'},
+        {"",'U'},{"0",'U'},{"2",'U'},{"?",'U'},{"UNKNOWN",'U'},{"16",'U'},{"0x",'U'},
+        {"JAPAN?",'U'},{std::string("J\1",2),'U'},{std::string(16,char(0xff)),'U'},
+        {std::string(16,'J'),'J'},{std::string("J\0\0",3),'J'}
+    };
+    for(const auto& item:cases)
+    {
+        auto rom=Cartridge(0x400,'U');
+        std::fill(rom.begin()+0x1f0,rom.begin()+0x200,' ');
+        std::copy(item.field.begin(),item.field.end(),rom.begin()+0x1f0);
+        const auto path=prefix+"region.bin";
+        Write(path,rom);RomLoader::LoadRomFile(path);
+        const byte raw=item.field.empty() ? ' ':byte(item.field[0]);
+        Require(RomLoader::GetCountry()==raw,"Region selection changed the raw country field");
+        Require(RomLoader::GetHardwareRegion()==item.selected,"Incorrect canonical hardware region");
+        Require(RomLoader::Bytes()==rom,"Region selection modified cartridge bytes");
+        const byte version=item.selected=='J' ? 0:item.selected=='E' ? 0xc0:0x80;
+        Require(RomLoader::GetVersion()==version,"Domestic/overseas or PAL/NTSC header version bits");
+        Require(Genesis::GetHardwareRegion()==item.selected,"ROM region did not select console hardware");
+        Require((Genesis::M68KReadMemoryBYTE(0xa10001)&0xc0)==version,"ASIC hardware region differs from header selection");
+    }
+    // Preserve the selected cartridge hardware while a differently tagged BIOS loads.
+    for(byte region : {'J','E'})
+    {
+        auto rom=Cartridge(0x400,region);Write(prefix+"region.bin",rom);
+        RomLoader::LoadRomFile(prefix+"region.bin");
+        const byte selected=RomLoader::GetHardwareRegion();
+        const auto bios=Cartridge(0x400,'U');Write(prefix+"region.bios",bios);
+        RomLoader::LoadRomFile(prefix+"region.bios");
+        Genesis::SetHardwareRegion(selected);Genesis::Init();
+        const byte version=region=='J' ? 0:0xc0;
+        Require((Genesis::M68KReadMemoryBYTE(0xa10001)&0xc0)==version,"BIOS load lost the selected cartridge hardware");
+        RomLoader::LoadRomFile(prefix+"region.bin");Genesis::Init();
+        Require(Genesis::GetHardwareRegion()==region,"Cartridge handoff lost its selected hardware region");
+    }
+    RomLoader::Init();Require(RomLoader::GetHardwareRegion()=='U',"Empty loader must default to USA hardware");
 }
 }
 
@@ -82,7 +128,8 @@ int main(int argc, char* argv[])
             }
         Write(prefix + "cartridge.SMD", smd);
         Check(prefix + "cartridge.SMD", bytes, 'E');
-        std::cout << "ROM buffer resizing, bounds, checksum, PAL/NTSC and SMD decoding passed\n";
+        Regions(prefix);
+        std::cout << "ROM resizing/bounds/checksum/SMD and canonical domestic/overseas region selection passed\n";
         return 0;
     }
     catch (const std::exception& error)

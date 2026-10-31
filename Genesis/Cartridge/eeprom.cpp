@@ -197,24 +197,32 @@ EEPROM::Profile EEPROM::Detect(const std::vector<byte>& rom)
     if(ramHeader&&rom[0x1b2]==0xe8) return Profile::SegaX24C01;
     return Profile::None;
 }
-void EEPROM::Init(Profile profile,const std::vector<byte>& persisted)
+unsigned EEPROM::Capacity(Profile profile)
 {
-    device=Device{};
-    device.profile=profile;
-    unsigned size=0;
     switch(profile)
     {
-    case Profile::None:return;
-    case Profile::SegaX24C01:case Profile::EaX24C01:size=128;device.pageSize=4;break;
-    case Profile::AcclaimX24C02:size=256;device.pageSize=4;break;
-    case Profile::Acclaim24C02:size=256;device.pageSize=8;break;
-    case Profile::Acclaim24C04:size=512;device.pageSize=16;break;
-    case Profile::Codemasters24C08:size=1024;device.pageSize=16;break;
-    case Profile::Acclaim24C16:case Profile::Codemasters24C16:size=2048;device.pageSize=16;break;
-    case Profile::Acclaim24C65:case Profile::Codemasters24C65:size=8192;device.pageSize=64;device.addressBytes=2;break;
+    case Profile::None:return 0;
+    case Profile::SegaX24C01:case Profile::EaX24C01:return 128;
+    case Profile::AcclaimX24C02:case Profile::Acclaim24C02:return 256;
+    case Profile::Acclaim24C04:return 512;
+    case Profile::Codemasters24C08:return 1024;
+    case Profile::Acclaim24C16:case Profile::Codemasters24C16:return 2048;
+    case Profile::Acclaim24C65:case Profile::Codemasters24C65:return 8192;
     }
+    throw std::invalid_argument("Unknown EEPROM profile");
+}
+void EEPROM::Init(Profile profile,const std::vector<byte>& persisted)
+{
+    const unsigned size=Capacity(profile);
     if(!persisted.empty()&&persisted.size()!=size) throw std::runtime_error("Incorrect EEPROM save size");
-    device.bytes=persisted.empty()?std::vector<byte>(size,0xff):persisted;
+    Device next;
+    next.profile=profile;
+    next.pageSize=size==128||profile==Profile::AcclaimX24C02 ? 4:
+        size==256 ? 8:size==8192 ? 64:16;
+    if(size==8192) next.addressBytes=2;
+    next.bytes=persisted.empty()?std::vector<byte>(size,0xff):persisted;
+    // Build the complete replacement before altering the active serial device.
+    device=std::move(next);
 }
 void EEPROM::WriteLines(bool scl,bool sda)
 {

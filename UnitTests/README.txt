@@ -19,7 +19,7 @@ conformance_adapter and complete_suite_adapter validate the input decoder,
 comparison masks, worker protocol and crash recovery with independent fixtures
 and deliberately corrupted results. handwritten_conformance strictly executes
 all 28 JSON cases on both decoders. complete_instruction_specifications strictly
-executes 8,151 readable instruction cases and 42 multi-instruction sequences per
+executes 8,155 readable instruction cases and 42 multi-instruction sequences per
 decoder, covering all 84 original groups. The 67 old empty C++ templates are not
 executed or counted as passes.
 

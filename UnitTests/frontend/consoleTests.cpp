@@ -19,6 +19,27 @@ int main(int argc,char* argv[]) {
     try {
         Need(argc==2,"Expected fixture directory");
         Genesis::SetRegionToPAL(false);Genesis::AllocM68kMemory();Genesis::ResetM68kMemory();Genesis::Init();YM7101::Init();
+        for(byte region : {'J','U','E'}) {
+            Genesis::SetHardwareRegion(region);Genesis::Init();YM7101::Init();
+            const byte expected=region=='J' ? 0x20:region=='U' ? 0xa0:0xe0;
+            Need(Genesis::M68KReadMemoryBYTE(0xa10001)==expected,"ASIC domestic/overseas and PAL/NTSC version byte");
+            Need(Genesis::M68KReadMemoryWORD(0xa10000)==word(expected*0x101),"ASIC hardware region word lanes");
+            Need(Genesis::MasterClock()==(region=='E' ? 53203424u:53693175u),"Hardware region master clock");
+        }
+        Genesis::SetHardwareRegion(0xff);Need(Genesis::GetHardwareRegion()=='U',"Invalid hardware region must default to USA");
+        Genesis::SetRegionToPAL(false);Genesis::Init();YM7101::Init();
+        // A preceding RAM read supplies bits10..15; VDP status only drives bits0..9.
+        Genesis::M68KWriteMemoryWORD(0xff0200,0xa5c3);
+        Genesis::M68KReadMemoryWORD(0xff0200);
+        Need(Genesis::M68KReadMemoryWORD(0xc00004)==0xa600,"VDP status did not merge upper bits from the 68000 bus");
+        Genesis::M68KWriteMemoryWORD(0xff0200,0x59ff);
+        Genesis::M68KReadMemoryWORD(0xff0200);
+        Need(Genesis::M68KReadMemoryWORD(0xc00006)==0x5a00,"VDP status mirror retained a fixed upper-bit value");
+        Genesis::M68KWriteMemoryWORD(0xff0200,0);
+        Genesis::M68KReadMemoryWORD(0xff0200);
+        Need(Genesis::M68KReadMemoryBYTE(0xc00004)==2,"VDP high-byte read must select merged status bits");
+        Need(Genesis::M68KReadMemoryBYTE(0xc00005)==0,"VDP low-byte status read mismatch");
+        Genesis::Init();YM7101::Init();
         // The I/O ASIC and Z80 expose an 8-bit value on both 68000 read lanes.
         // SGDK cold-start tests these controls with TST.L; opcode/open-bus bits
         // must not make it mistake a cold power-on for a warm reset.

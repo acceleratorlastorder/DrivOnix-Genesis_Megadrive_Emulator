@@ -432,6 +432,18 @@ def timing_cases():
                     ram=bytes_at(12, HANDLER, 4), writes=frame, cycles=60)
         item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
         cases.append(item)
+    for words, source, target, saved, clocks, status, label in (
+            ([0x2140, 1], {"a0": DATA, "d0": 0x12345678}, DATA + 1, PC + 4, 62, 0x2703, "register to displacement"),
+            ([0x2180, 0x1001], {"a0": DATA, "d0": 0x12345678}, DATA + 1, PC + 4, 64, 0x2703, "register to index"),
+            ([0x20BC, 0x1234, 0x5678], {"a0": DATA + 1}, DATA + 1, PC + 8, 66, 0x270F, "immediate to indirect"),
+            ([0x20FC, 0x1234, 0x5678], {"a0": DATA + 1}, DATA + 1, PC + 8, 66, 0x270F, "immediate to postincrement")):
+        frame = bytes_at(SSP - 14, 5, 2) + bytes_at(SSP - 12, target, 4)
+        frame += bytes_at(SSP - 8, words[0], 2) + bytes_at(SSP - 6, status, 2) + bytes_at(SSP - 4, saved, 4)
+        item = case("Test_MOVE", "MOVE.L " + label + " fault preserves staged condition flags", words,
+                    {"sr": 0x270F, **source}, {"pc": HANDLER, "ssp": SSP - 14, "sr": status},
+                    ram=bytes_at(12, HANDLER, 4), writes=frame, cycles=clocks)
+        item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
+        cases.append(item)
     return cases
 
 

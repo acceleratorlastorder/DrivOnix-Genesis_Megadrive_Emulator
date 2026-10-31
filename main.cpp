@@ -34,9 +34,9 @@ int main(int argc, char* argv[])
 
         RomLoader::Init();
         RomLoader::LoadRomFile(Genesis::GetRomName());
-        const byte country = RomLoader::GetCountry();
+        const byte hardwareRegion = RomLoader::GetHardwareRegion();
         RomLoader::LoadRomFile(Platform::DataFile("Bios/DrivOnix.bios"));
-        Genesis::SetRegionToPAL(country=='E' || country=='F');
+        Genesis::SetHardwareRegion(hardwareRegion);
 
         Platform::CheckDisplay();
         CRT::Init();
@@ -49,10 +49,11 @@ int main(int argc, char* argv[])
         M68k::Init();
         YM7101::Init();
 
-        if (Genesis::Bios(country))
+        if (Genesis::Bios(hardwareRegion))
         {
             RomLoader::Init();
             RomLoader::LoadRomFile(Genesis::GetRomName());
+            Genesis::SetHardwareRegion(hardwareRegion);
             RomLoader::PrintRomHeader();
             Genesis::ResetM68kMemory();
             Genesis::InsertCartridge();

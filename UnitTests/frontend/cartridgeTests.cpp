@@ -442,6 +442,56 @@ void FailureAndRetry(const Sandbox& fixture)
     Genesis::InsertCartridge(serialROM,serialPath);
     Need(serial.Read(serial.address)==0xa6,"EEPROM retry/reload discarded dirty serial bytes");
 }
+void RejectedSaveLoads(const Sandbox& fixture)
+{
+    const auto activeROM=RamImage(0x400,0x40f);
+    const auto activePath=fixture.Path("active.bin");
+    Genesis::InsertCartridge(activeROM,activePath);
+    Genesis::M68KWriteMemoryBYTE(0x400,0x47);Genesis::SaveCartridge();
+    Genesis::M68KWriteMemoryBYTE(0xa130f1,3);
+    const SerialBoard serial={"GM T-12046-00",128,0x25,0x200001,0x200001,1,SerialBoard::Sega,false};
+    for(unsigned kind=0;kind<2;++kind)
+    {
+        auto candidate=kind ? SerialImage(serial):activeROM;candidate[0x300]=0xd1;
+        const auto path=fixture.Path(kind ? "unreadable-serial.bin":"unreadable-sram.bin");
+        const auto save=path+(kind ? ".eep":".srm");
+        const std::vector<byte> original(kind ? 128:16,0x69);WriteFile(save,original);
+#ifdef _WIN32
+        HANDLE denied=CreateFileA(save.c_str(),GENERIC_READ,0,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+        Need(denied!=INVALID_HANDLE_VALUE,"Cannot lock owned save fixture against reads");
+#else
+        if(geteuid()==0) continue; // Root bypasses ordinary file mode restrictions.
+        Need(chmod(save.c_str(),0000)==0,"Cannot deny read permission on owned save fixture");
+#endif
+        bool rejected=false;
+        try { Genesis::InsertCartridge(candidate,path); }
+        catch(const std::runtime_error&) { rejected=true; }
+#ifdef _WIN32
+        Need(CloseHandle(denied)!=0,"Cannot unlock owned save fixture");
+#else
+        Need(chmod(save.c_str(),0600)==0,"Cannot restore read permission on owned save fixture");
+#endif
+        Need(rejected,"Unreadable existing save was treated as a missing save");
+        Need(ReadFile(save)==original,"Rejected insertion changed the unreadable save");
+        Need(Genesis::M68KReadMemoryBYTE(0x300)==activeROM[0x300]&&Genesis::M68KReadMemoryBYTE(0x400)==0x47,"Rejected insertion replaced the active ROM or SRAM");
+        Genesis::M68KWriteMemoryBYTE(0x400,0x99);
+        Need(Genesis::M68KReadMemoryBYTE(0x400)==0x47,"Rejected insertion discarded active SRAM protection");
+    }
+    const auto serialPath=fixture.Path("active-serial.bin");
+    Genesis::InsertCartridge(SerialImage(serial),serialPath);
+    serial.Write(serial.address,0x88);Genesis::SaveCartridge();
+    Genesis::StallMasterCycles((Genesis::MasterClock()+199)/200);
+    serial.Start();serial.Address(serial.address);Need(serial.Send(0x99),"Cannot stage an in-flight serial write");
+    const auto invalid=fixture.Path("bad-size.bin");WriteFile(invalid+".srm",{1,2,3});
+    bool rejected=false;
+    try { Genesis::InsertCartridge(activeROM,invalid); }
+    catch(const std::runtime_error&) { rejected=true; }
+    Need(rejected&&EEPROM::Bytes().size()==128,"Malformed candidate save replaced the active serial profile");
+    serial.Stop();Genesis::StallMasterCycles((Genesis::MasterClock()+199)/200);
+    Need(serial.Read(serial.address)==0x99,"Rejected insertion discarded the active EEPROM transaction");
+    Genesis::SaveCartridge();
+    Need(ReadFile(serialPath+".eep")[serial.address]==0x99,"Rejected insertion changed the active EEPROM save path");
+}
 }
 
 int main(int argc,char* argv[])
@@ -450,7 +500,7 @@ int main(int argc,char* argv[])
     {
         Need(argc==2,"Expected an owned writable fixture directory");const Sandbox fixture(argv[1]);
         Genesis::AllocM68kMemory();Genesis::ResetM68kMemory();Genesis::Init();YM7101::Init();
-        LoaderAndROM(fixture);SRAM(fixture);Banking(fixture);SerialPersistence(fixture);FailureAndRetry(fixture);
+        LoaderAndROM(fixture);SRAM(fixture);Banking(fixture);SerialPersistence(fixture);FailureAndRetry(fixture);RejectedSaveLoads(fixture);
         std::cout<<"Cartridge ROM preservation, SRAM lanes/protection, banks, EEPROM bus/reload clocks and atomic save retry passed\n";
         return 0;
     }

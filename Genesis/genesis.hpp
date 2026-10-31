@@ -14,6 +14,8 @@ public:
     Genesis();
     static void Init();
     static void SetRegionToPAL(bool pal);
+    static void SetHardwareRegion(byte region);
+    static byte GetHardwareRegion();
     static bool IsPAL();
     static uint32_t MasterClock();
     static uint64_t MasterCycles();
@@ -42,7 +44,8 @@ private:
     bool Loop(bool bios, byte country);
     void Advance(unsigned masterCycles);
     std::string romName;
-    bool powerOff, isPAL;
+    bool powerOff;
+    byte hardwareRegion;
     uint64_t masterCycles, frameDeadline, frames;
     word openBus;
     void (*observer)(const CPU_STATE_DEBUG&);

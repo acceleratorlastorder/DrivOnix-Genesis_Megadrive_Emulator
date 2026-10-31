@@ -12,10 +12,10 @@ Current independently measured layers
 
 Readable MC68000 specifications:
   Original instruction groups covered                     84/84
-  Instruction cases per decoder                          8,151
+  Instruction cases per decoder                          8,155
   Multi-instruction sequences per decoder                    42
-  Total evaluations across both decoders                 16,386
-  Passed all supplied state/timing assertions            16,386
+  Total evaluations across both decoders                 16,394
+  Passed all supplied state/timing assertions            16,394
   Failed or crashed                                          0
 
 Independent pinned MAME corpus, strict full active run:
@@ -38,23 +38,27 @@ that change, with other groups unchanged. Successful CHK retains undefined NZVC.
 Adapter corruption guards detect wrong live/saved trap N while permitting only
 undefined C/V/Z changes. See README.txt for masks and execution profiles.
 
-Complete decode plan:
+Independent complete decode sweep, strict eight-pattern run:
   Distinct opcode words                                65,536
   Catalogue legal encodings plus explicit ILLEGAL        45,816
   Other words checked for correct exception behavior     19,720
   Operand/extension/status patterns in full command           8
   Differential inputs per decoder                      524,288
-  Total evaluations including readables               1,064,962
+  Executed including readables                        1,064,970
+  Passed                                             1,064,970
+  Failed or crashed                                          0
 
-The fresh full eight-pattern result is being validated; these plan counts are
-not a claim of a completed full sweep. The strict --quick command executes all
-words with one pattern plus readables: 147,458 evaluations across both decoders.
-See COMPLETE.txt for reproducible build-directory commands.
+The full strict run completed all eight patterns on both decoders, including
+all reserved/illegal words and all readable specifications. It used independent
+expected outputs, with the bounded reference corrections documented in
+ORACLE-CORRECTIONS.txt. The strict --quick command uses one pattern plus all
+readables: 147,466 evaluations across both decoders. See COMPLETE.txt for commands.
 
 The latest readable cases add precise guards for dummy-read address faults in
 CLR and MOVE SR, LINK A7 capture order, CHK trap timing and odd JMP/JSR targets.
-Sequences observe next-instruction prefetch after writes through absolute-word
-and absolute-long destination extensions. They complement the original
+Four additional MOVE.L fault guards distinguish retained C/V and immediate-source
+flags at the failed write boundary. Sequences observe next-instruction prefetch
+after writes through absolute-word and absolute-long destination extensions. They complement the original
 source/destination/flags/addressing tests and broad independent random vectors.
 
 The optional oracle is itself validated against the readable cases. Three exact
@@ -72,8 +76,8 @@ See ../../Z80/README.txt and COMPLETE.txt for commands and integration scope.
 Sanitizer policy and hardware limits
 -----------------------------------
 
-The final readable suite also passed strictly with ASan/UBSan: 16,386 executed,
-16,386 passed and zero failures/crashes. The three original opcode/legacy CTest
+The final readable suite also passed strictly with ASan/UBSan: 16,394 executed,
+16,394 passed and zero failures/crashes. The three original opcode/legacy CTest
 targets passed in that sanitizer build as well. All seven CPU CTest targets use
 strict acceptance; old unsafe-case baselines do not exempt failures. These
 observations cover the executed cases, not every possible production input.

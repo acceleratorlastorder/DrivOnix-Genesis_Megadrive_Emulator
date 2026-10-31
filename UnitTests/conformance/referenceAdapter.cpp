@@ -322,8 +322,13 @@ int CorrectFault(const CPU_VECTOR_STATE& before, unsigned opcode, int cycles, co
         const unsigned mask = size == 2 ? 0xffffffffu : 0xffffu;
         const unsigned value = moveSource & mask;
         status = (status & ~15u) | ((value & (size == 2 ? 0x80000000u : 0x8000u)) ? 8 : 0) | (value == 0 ? 4 : 0);
-        if (size == 2 && (mode == 2 || mode == 3 || (mode == 7 && reg == 1 && sourceMode > 1)))
-            status = sourceMode <= 1 ? before.cpu.CCR : ((status & ~8u) | ((moveSource & 0x8000) ? 8 : 0));
+        const bool directSource = sourceMode <= 1 || (sourceMode == 7 && sourceReg == 4);
+        if (size == 2 && (mode == 2 || mode == 3))
+            status = directSource ? before.cpu.CCR : ((status & ~8u) | ((moveSource & 0x8000) ? 8 : 0));
+        else if (size == 2 && mode == 7 && reg == 1 && !directSource)
+            status = (status & ~8u) | ((moveSource & 0x8000) ? 8 : 0);
+        else if (size == 2 && directSource && (mode == 5 || mode == 6))
+            status = (status & ~3u) | (before.cpu.CCR & 3);
         m68k_write_memory_16(stack + 8, status);
         m68k_set_reg(M68K_REG_SR, (m68k_get_reg(0, M68K_REG_SR) & ~31u) | (status & 31));
     }
