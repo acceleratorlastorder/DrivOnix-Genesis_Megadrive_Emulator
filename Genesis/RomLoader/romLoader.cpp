@@ -6,14 +6,62 @@
 
 namespace
 {
+byte SelectRegion(const byte* field)
+{
+    std::string text;
+    for(unsigned i=0;i<16;++i)
+    {
+        const byte value=field[i];
+        // Region fields are ASCII, commonly padded with spaces or NULs.
+        // Reject malformed control/non-ASCII bytes instead of guessing from them.
+        if(value && (value<0x20 || value>0x7e)) return 'U';
+        text.push_back(value ? char(value>='a' && value<='z' ? value-'a'+'A':value):' ');
+    }
+    const auto first=text.find_first_not_of(' ');
+    if(first==std::string::npos) return 'U';
+    text=text.substr(first,text.find_last_not_of(' ')-first+1);
+    unsigned mask=0;
+    if(text=="USA") mask=4;
+    else if(text=="JAPAN") mask=1;
+    else if(text=="EUROPE") mask=8;
+    else
+    {
+        bool letters=true;
+        for(char value:text)
+        {
+            if(value=='J') mask|=1;
+            else if(value=='U') mask|=4;
+            else if(value=='E') mask|=8;
+            else if(value!=' ') { letters=false;break; }
+        }
+        if(!letters)
+        {
+            mask=0;
+            unsigned at=text.compare(0,2,"0X")==0 ? 2:0;
+            if(at==text.size()) return 'U';
+            for(;at<text.size();++at)
+            {
+                const char value=text[at];
+                const unsigned digit=value>='0' && value<='9' ? unsigned(value-'0'):
+                    value>='A' && value<='F' ? unsigned(value-'A'+10):16;
+                if(digit>15 || mask*16+digit>15) return 'U'; // Only the low region nibble is defined.
+                mask=mask*16+digit;
+            }
+        }
+    }
+    // USA NTSC, domestic Japan NTSC, then overseas Europe PAL.
+    // Bit1 denotes a domestic PAL system, which this base-console selector omits.
+    return mask&4 ? 'U':mask&1 ? 'J':mask&8 ? 'E':'U';
+}
+
 std::vector<byte> ReadRom(const std::string& path)
 {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input)
         throw std::runtime_error("Cannot open ROM: " + path);
     const std::streamoff size = input.tellg();
-    if (size < 0x200 || size > 0x400000 + SMD_HEADER_SIZE)
-        throw std::runtime_error("ROM must contain a complete header and fit in the 4 MiB cartridge area: " + path);
+    if (size < 0x200 || size > 0x800000 + SMD_HEADER_SIZE)
+        throw std::runtime_error("ROM must contain a complete header and fit in the 8 MiB cartridge image limit: " + path);
     std::vector<byte> bytes(static_cast<std::size_t>(size));
     input.seekg(0);
     if (!input.read(reinterpret_cast<char*>(bytes.data()), size))
@@ -40,7 +88,9 @@ void RomLoader::Init()
 	get().haveSram = false;
     get().cartridgeMemory.clear();
     get().header = {};
-    get().version = 0;
+    get().version = 0x80;
+    get().hardwareRegion = 'U';
+    get().computedChecksum = 0;
 }
 
 void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::vector<byte>& dest)
@@ -55,10 +105,14 @@ void RomLoader::PageMemory(int number, uint64_t pageSize, uint64_t start, std::v
         std::memcpy(dest.data() + start, get().cartridgeMemory.data() + offset, copySize);
 }
 
+const std::vector<byte>& RomLoader::Bytes() { return get().cartridgeMemory; }
+
 byte RomLoader::GetCountry()
 {
 	return get().header.country[0];
 }
+
+byte RomLoader::GetHardwareRegion() { return get().hardwareRegion; }
 
 void RomLoader::LoadRomFile(std::string romName)
 {
@@ -102,8 +156,8 @@ void RomLoader::LoadRomFile(std::string romName)
 void RomLoader::LoadBINMDGEN(std::string romName)
 {
     get().cartridgeMemory = ReadRom(romName);
-    if (get().cartridgeMemory.size() > 0x400000)
-        throw std::runtime_error("ROM exceeds the 4 MiB cartridge area: " + romName);
+    if (get().cartridgeMemory.size() > 0x800000)
+        throw std::runtime_error("ROM exceeds the 8 MiB cartridge image limit: " + romName);
     get().cartridgeSize = static_cast<long>(get().cartridgeMemory.size());
 }
 
@@ -159,24 +213,10 @@ void RomLoader::LoadHeader()
 	InvertDWordEndian(get().header.ramStart);
 	InvertDWordEndian(get().header.ramEnd);
 
-	get().version = 0x0;
-
-	BitSet(version, 7); //overseas
-	if(get().header.country[0] == 'J' || get().header.country[0] == 'U')
-	{
-		BitReset(version, 6); //NTSC
-		Genesis::SetRegionToPAL(false);
-	}
-	else if(get().header.country[0] == 'E' || get().header.country[0] == 'F')
-	{
-		BitSet(version, 6); //PAL
-		Genesis::SetRegionToPAL(true);
-	}
-	else
-	{
-		BitReset(version, 6); //NTSC
-		Genesis::SetRegionToPAL(false);
-	}
+    get().hardwareRegion=SelectRegion(get().header.country);
+    get().version=byte((get().hardwareRegion=='J' ? 0:0x80) |
+                      (get().hardwareRegion=='E' ? 0x40:0));
+    Genesis::SetHardwareRegion(get().hardwareRegion);
 }
 
 byte RomLoader::GetVersion()
@@ -194,13 +234,12 @@ void RomLoader::Checksum()
 		    checksum += get().cartridgeMemory[i + 1];
 	}
 
-	if(checksum != get().header.checksum)
-	{
-		get().cartridgeMemory[0x18E] = (checksum >> 8) & 0xFF;
-		get().cartridgeMemory[0x18F] = (checksum & 0xFF);
-		get().header.checksum = checksum;
-	}
+    get().computedChecksum=checksum;
+    if(checksum!=get().header.checksum)
+        std::cerr<<"DrivOnix: ROM header checksum differs from the image; original bytes preserved\n";
 }
+
+bool RomLoader::ChecksumMatches() { return get().computedChecksum==get().header.checksum; }
 
 void RomLoader::PrintRomHeader()
 {

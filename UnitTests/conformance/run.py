@@ -45,7 +45,7 @@ def operation(opcode, catalog):
 
 def case_digest(case):
     content = {key: case[key] for key in ("initial", "final", "length", "sr_mask")}
-    content.update({key: case[key] for key in ("actions", "field_masks", "memory_masks") if key in case})
+    content.update({key: case[key] for key in ("actions", "field_masks", "memory_masks", "execution_profile") if key in case})
     return canonical_hash(content)
 
 
@@ -84,6 +84,7 @@ def main(argv=None):
     parser.add_argument("--limit-per-group", type=int, default=0, help="0 = every case; positive = deterministic spread")
     parser.add_argument("--group", action="append", help="Run only these external groups, plus handwritten cases")
     parser.add_argument("--handwritten-only", action="store_true")
+    parser.add_argument("--active-only", action="store_true", help="Execute verified external groups; explicitly report locked unreliable TAS/TRAPV exclusions")
     parser.add_argument("--mode", choices=("strict", "audit"), default="strict")
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--record-baseline", type=Path)
@@ -180,6 +181,9 @@ def main(argv=None):
     known_groups = {Path(entry["cache_path"]).name.removesuffix(".json.bin") for entry in entries}
     if requested - known_groups:
         raise CorpusError("Unknown group(s): " + ", ".join(sorted(requested - known_groups)))
+    excluded=[]
+    if args.active_only and requested.intersection(metadata["quarantined"]):
+        raise CorpusError("An explicitly requested group is quarantined; remove --active-only to report its unreliable data")
     if not args.handwritten_only:
         for entry in entries:
             group = Path(entry["cache_path"]).name.removesuffix(".json.bin")
@@ -187,6 +191,11 @@ def main(argv=None):
                 continue
             data = verified_bytes(args.cache, entry)
             count = struct.unpack_from("<II", data)[1]
+            if args.active_only and group in metadata["quarantined"]:
+                excluded.append({"group":group,"available_per_decoder":count,"reason":metadata["quarantined"][group]})
+                totals["excluded_quarantined"]+=count*len(paths)
+                print(f"{group}: excluded {count} unreliable external cases per decoder: {metadata['quarantined'][group]}",flush=True)
+                continue
             chosen = indices(count, args.limit_per_group)
             cases = []
             for test in decode(data):
@@ -199,6 +208,7 @@ def main(argv=None):
             "dispatch": list(paths), "limit_per_group": args.limit_per_group,
             "groups": sorted(requested), "handwritten_only": args.handwritten_only,
             "selected_cases": selected, "expectations_sha256": digest.hexdigest()}
+    if args.active_only: plan["active_only"]=True
     regressions, resolved = {}, 0
     if args.baseline:
         regressions, resolved = gate(plan, observed, json.loads(args.baseline.read_text()))
@@ -226,7 +236,7 @@ def main(argv=None):
               "not_observed": ["prefetch queue after execution", "bus transaction ordering/function codes/UDS/LDS", "external RESET devices"],
               "complete_hardware_conformance": False, "plan": plan,
               "sources": {"execution": metadata["execution_source"], "catalog": metadata["catalog_source"]},
-              "totals": totals, "known_failure_gate": {"used": bool(args.baseline), "regressions": regressions,
+              "totals": totals, "excluded_unreliable_groups":excluded, "known_failure_gate": {"used": bool(args.baseline), "regressions": regressions,
                                                          "resolved_assertions": resolved},
               "failing_assertion_categories": failure_fields, "groups": by_group,
               "instruction_matrix": dict(sorted(matrix.items()))}

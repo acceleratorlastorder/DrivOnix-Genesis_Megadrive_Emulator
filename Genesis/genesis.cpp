@@ -1,604 +1,200 @@
 #include "genesis.hpp"
-
-Genesis::Genesis()
-{
-	this->isPAL = false;
+#include "Cartridge/cartridge.hpp"
+#include "Cartridge/eeprom.hpp"
+#include "../Z80/z80.hpp"
+#include "../Audio/audio.hpp"
+#ifndef DRIVONIX_HEADLESS
+#include "../Platform/audioOutput.hpp"
+#include <chrono>
+#include <thread>
+#endif
+#include <algorithm>
+#include <cstring>
+#include <stdexcept>
+namespace {
+byte ZRead(dword address, void*) { return Genesis::M68KReadMemoryBYTE(address); }
+void ZWrite(dword address, byte data, void*) { Genesis::M68KWriteMemoryBYTE(address,data); }
+bool VDPAddress(dword a) { return (a&0xe700e0)==0xc00000; }
 }
-
-void Genesis::Init()
-{
-	get().M68kMemory[0xA10009] = 0x00;
-	get().M68kMemory[0xA1000B] = 0x00;
-	get().M68kMemory[0xA1000D] = 0x00;
-	get().M68kMemory[0xA1000F] = 0xFF;
-	get().M68kMemory[0xA10011] = 0x00;
-	get().M68kMemory[0xA10013] = 0x00;
-	get().M68kMemory[0xA10015] = 0xFF;
-	get().M68kMemory[0xA10017] = 0x00;
-	get().M68kMemory[0xA10019] = 0x00;
-	get().M68kMemory[0xA1001B] = 0xFB;
-	get().M68kMemory[0xA1001D] = 0x00;
-	get().M68kMemory[0xA1001F] = 0x00;
-
-	get().FPS = get().isPAL ? 50 : 60;
+Genesis::Genesis() : powerOff(false),hardwareRegion('U'),masterCycles(0),frameDeadline(0),frames(0),openBus(0xffff),observer(nullptr),ram(65536,0) { std::memset(io,0,sizeof(io)); }
+Genesis& Genesis::get() { static Genesis instance; return instance; }
+void Genesis::Init() {
+    auto& s=get();
+    std::memset(s.io,0,sizeof(s.io));
+    for (unsigned i=0xf;i<0x20;i+=6) s.io[i]=0xff;
+    s.masterCycles=s.frameDeadline=s.frames=0;
+    s.openBus=0xffff; s.powerOff=false;
+    Audio::Init(MasterClock());
+    EEPROM::SetMasterClock(MasterClock());
+    Z80::Init(ZRead,ZWrite,nullptr);
+    GamePad::Init();
+    M68k::SetResetHandler(ResetDevices);
 }
-
-void Genesis::SetRegionToPAL(bool pal)
-{
-	get().isPAL = pal;
+void Genesis::ResetDevices() {
+    Z80::SetReset(true);Z80::SetBusRequest(false);
+    Audio::Init(MasterClock());
+    EEPROM::SetMasterClock(MasterClock());
+    GamePad::Init();
+    YM7101::Init();
 }
-
-void Genesis::ResetM68kMemory()
-{
-	for(int i = 0; i < M68K_MEM_SIZE; ++i)
-	{
-		get().M68kMemory[i] = 0x00;
-	}
+void Genesis::SetRegionToPAL(bool pal) { SetHardwareRegion(pal ? 'E':'U'); }
+void Genesis::SetHardwareRegion(byte region) { get().hardwareRegion=region=='J' || region=='E' ? region:'U'; }
+byte Genesis::GetHardwareRegion() { return get().hardwareRegion; }
+bool Genesis::IsPAL() { return GetHardwareRegion()=='E'; }
+uint32_t Genesis::MasterClock() { return IsPAL() ? 53203424:53693175; }
+uint64_t Genesis::MasterCycles() { return get().masterCycles; }
+uint64_t Genesis::FrameCount() { return get().frames; }
+void Genesis::AllocM68kMemory() { get().ram.resize(65536); }
+void Genesis::ResetM68kMemory() { std::fill(get().ram.begin(),get().ram.end(),0); }
+void Genesis::InsertCartridge() { Cartridge::Load(RomLoader::Bytes(),GetRomName());EEPROM::SetMasterClock(MasterClock()); }
+void Genesis::InsertCartridge(const std::vector<byte>& rom,const std::string& path) { Cartridge::Load(rom,path);EEPROM::SetMasterClock(MasterClock()); }
+void Genesis::SaveCartridge() { Cartridge::Save(); }
+void Genesis::SetRomName(const std::string& path) { get().romName=path; }
+const std::string& Genesis::GetRomName() { return get().romName; }
+void Genesis::Advance(unsigned ticks) {
+    masterCycles+=ticks;
+    YM7101::Advance(ticks);
+    Z80::Advance(ticks);
+    GamePad::Advance(ticks);
+    EEPROM::Advance(ticks);
+    if (YM7101::GetRequestInt()) {
+        const int level=YM7101::GetIntType();
+        if (level>=0) M68k::RequestAutoVectorInt(static_cast<M68k::INT_TYPE>(level));
+    }
+    Z80::Interrupt(YM7101::Z80Interrupt());
 }
-
-void Genesis::AllocM68kMemory()
-{
-	get().M68kMemory.resize(M68K_MEM_SIZE);
+void Genesis::SetInstructionObserver(void (*observer)(const CPU_STATE_DEBUG&)) { get().observer=observer; }
+void Genesis::StallMasterCycles(unsigned ticks) { if (ticks) get().Advance(ticks); }
+void Genesis::RunFrame() {
+    auto& s=get();
+    s.frameDeadline+=uint64_t(3420)*(IsPAL() ? 313:262);
+    while (s.masterCycles<s.frameDeadline) {
+        const unsigned stall=YM7101::TakeStallCycles();
+        if (stall) { s.Advance(stall); continue; }
+        if(s.observer) s.observer(M68k::GetCpuState());
+        const int cycles=M68k::Update();
+        if (cycles<0) throw std::runtime_error("68000 returned a negative cycle count");
+        // STOP still allows video, audio and interrupt sources to advance.
+        s.Advance(unsigned(cycles>0 ? cycles:4)*7);
+    }
+    ++s.frames;
 }
-
-void Genesis::InsertCartridge()
-{
-	RomLoader::PageMemory(0, 0x400000, 0, get().M68kMemory);
-}
-
-bool Genesis::Bios(byte country)
-{
-	sfClock* clock;
-    clock = sfClock_create();
-
-    sfEvent event;
-
-	const double VdpUpdateInterval = 1000/get().FPS;
-	get().cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
-
-    double lastFrameTime = 0;
-    
-    get().powerOff = 0;
-
-    while(sfRenderWindow_isOpen(CRT::GetWindow()) && !get().powerOff) //emu loop
-    {
-        while(sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
-        {
-      		if (event.type == sfEvtClosed)
-      		{
-          		sfRenderWindow_close(CRT::GetWindow());
-      		}
-
-            get().powerOff = get().powerOff || GamePad::Update(event);
-    	}
-
-        if (!sfRenderWindow_isOpen(CRT::GetWindow()) || get().powerOff)
-            break;
-
-    	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
-
-    	if((lastFrameTime + VdpUpdateInterval) <= currentTime)
-    	{
-      		lastFrameTime = currentTime;
-      			
-      		get().Update();
-      		Genesis::M68KWriteMemoryBYTE(0xFF00FE, country);
-      		CRT::Render();
-    	}
-
-    	if(Genesis::M68KReadMemoryLONG(0xFF00FF) == 0xCAFE) //magic number
-    	{
-            sfClock_destroy(clock);
-            return true;
-    	}
-  	}
-    sfClock_destroy(clock);
+bool Genesis::Loop(bool bios,byte country) {
+#ifndef DRIVONIX_HEADLESS
+    auto& s=get();
+    using Clock=std::chrono::steady_clock;
+    auto origin=Clock::now();
+    uint64_t wallFrames=0;
+    const double period=double(3420*(IsPAL()?313:262))/MasterClock();
+    s.powerOff=false;
+    while (sfRenderWindow_isOpen(CRT::GetWindow()) && !s.powerOff) {
+        sfEvent event;
+        while (sfRenderWindow_pollEvent(CRT::GetWindow(),&event)) {
+            if (event.type==sfEvtClosed) sfRenderWindow_close(CRT::GetWindow());
+            if (event.type==sfEvtLostFocus) for (int p=0;p<2;++p) for (int b=0;b<=GamePad::MD_MODE;++b) GamePad::SetButton(p,b,false);
+            s.powerOff=s.powerOff || GamePad::Update(event);
+        }
+        if (!sfRenderWindow_isOpen(CRT::GetWindow()) || s.powerOff) break;
+        if (bios) M68KWriteMemoryBYTE(0xff00fe,country);
+        RunFrame();
+        AudioOutput::Submit(Audio::DrainSamples());
+        CRT::Render();
+        if (bios && M68KReadMemoryLONG(0xff0100)==0xcafe) return true;
+        ++wallFrames;
+        auto deadline=origin+std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(wallFrames*period));
+        if (Clock::now()>deadline+std::chrono::milliseconds(100)) { origin=Clock::now();wallFrames=0; }
+        else std::this_thread::sleep_until(deadline);
+    }
+#else
+    (void)bios; (void)country;
+#endif
     return false;
 }
-
-void Genesis::Run()
-{
-
-	sfClock* clock;
-    clock = sfClock_create();
-
-    sfEvent event;
-
-	const double VdpUpdateInterval = 1000/get().FPS;
-
-	get().cycleThisFrame = get().isPAL ? (M68K_PAL_CYCLES_PER_SECOND / get().FPS) : (M68K_NTSC_CYCLES_PER_SECOND / get().FPS);
-
-    double lastFrameTime = 0;
-    
-    get().powerOff = 0;
-
-    while(sfRenderWindow_isOpen(CRT::GetWindow()) && !get().powerOff) //emu loop
-    {
-        while(sfRenderWindow_pollEvent(CRT::GetWindow(), &event))
-        {
-      		if (event.type == sfEvtClosed)
-      		{
-          		sfRenderWindow_close(CRT::GetWindow());
-      		}
-
-            get().powerOff = get().powerOff || GamePad::Update(event);
-    	}
-
-        if (!sfRenderWindow_isOpen(CRT::GetWindow()) || get().powerOff)
-            break;
-
-    	double currentTime = sfTime_asMilliseconds(sfClock_getElapsedTime(clock));
-
-    	if((lastFrameTime + VdpUpdateInterval) <= currentTime)
-    	{
-      		lastFrameTime = currentTime;
-      			
-      		get().Update();
-      	
-      		CRT::Render();
-    	}
-  	}
-    sfClock_destroy(clock);
+void Genesis::Run() { get().Loop(false,0); SaveCartridge(); }
+bool Genesis::Bios(byte country) { return get().Loop(true,country); }
+byte Genesis::M68KReadMemoryBYTE(dword a) {
+    a&=0xffffff;
+    auto& s=get();
+    if (a<0x400000) return Cartridge::Read(a);
+    if (a>=0xe00000) return s.ram[a&0xffff];
+    if (a>=0xa00000 && a<=0xa0ffff) return Z80::Read68k(a&0xffff);
+    if (a==0xa11100) return Z80::BusGranted()?0:1;
+    if (a>=0xa10000 && a<0xa10020) {
+        switch (a|1) {
+        case 0xa10001: return byte((GetHardwareRegion()=='J' ? 0:0x80)|(IsPAL()?0x40:0)|0x20);
+        case 0xa10003: return GamePad::ReadData(0);
+        case 0xa10005: return GamePad::ReadData(1);
+        case 0xa10007: return 0x7f;
+        case 0xa10009: return GamePad::ReadControl(0);
+        case 0xa1000b: return GamePad::ReadControl(1);
+        default: return s.io[a&0x1f];
+        }
+    }
+    if (VDPAddress(a)) {
+        const word value=M68KReadMemoryWORD(a&~1u);
+        return (a&1) ? byte(value):byte(value>>8);
+    }
+    return (a&1) ? byte(s.openBus):byte(s.openBus>>8);
 }
-
-void Genesis::Update()
-{
-	//INIT_TIMER
-	//START_TIMER
-	int cycleThisUpdate = 0;
-
-	while(cycleThisUpdate < get().cycleThisFrame)
-	{
-		int CPUcycles = M68k::Update();
-
-		//printf("CPU Cycles : %d\n", CPUcycles);
-
-		YM7101::Update(CPUcycles);
-
-		if(YM7101::GetRequestInt())
-		{
-			int type = YM7101::GetIntType();
-			M68k::RequestAutoVectorInt((M68k::INT_TYPE)type);
-		}
-
-		cycleThisUpdate += CPUcycles;
-	}
-
-	//STOP_TIMER("Update");
+void Genesis::M68KWriteMemoryBYTE(dword a,byte value) {
+    a&=0xffffff;
+    auto& s=get();
+    if (a<0x400000 || (a>=0xa130f1 && a<=0xa130ff)) { Cartridge::Write(a,value);return; }
+    if (a>=0xe00000) { s.ram[a&0xffff]=value;return; }
+    if (a>=0xa00000 && a<=0xa0ffff) { Z80::Write68k(a&0xffff,value);return; }
+    if (a==0xa11100) { Z80::SetBusRequest((value&1)!=0);return; }
+    if (a==0xa11200) { Z80::SetReset((value&1)==0);return; }
+    if (a>=0xa10000 && a<0xa10020) {
+        if (!(a&1)) return;
+        switch(a) {
+        case 0xa10003: GamePad::Write(0,value,false);break;
+        case 0xa10005: GamePad::Write(1,value,false);break;
+        case 0xa10009: GamePad::Write(0,value,true);break;
+        case 0xa1000b: GamePad::Write(1,value,true);break;
+        default: s.io[a&0x1f]=value;break;
+        }
+        return;
+    }
+    if (VDPAddress(a)) {
+        switch(a&0x1f) {
+        case 0:case 1:case 2:case 3: YM7101::WriteDataPortBYTE(value);break;
+        case 4:case 5:case 6:case 7: YM7101::WriteControlPortBYTE(value);break;
+        case 0x11:case 0x13:case 0x15:case 0x17: Audio::WritePSG(value);break;
+        }
+    }
 }
-
-Genesis& Genesis::get(void)
-{
-	static Genesis instance;
-	return instance;
+word Genesis::M68KReadMemoryWORD(dword a) {
+    a&=0xffffff;
+    auto& s=get();
+    word value;
+    if (VDPAddress(a)) {
+        switch(a&0x1e) {
+        case 0:case 2: value=YM7101::ReadDataPortWORD();break;
+        case 4:case 6: value=word((YM7101::ReadControlPortWORD()&0x03ff)|(s.openBus&0xfc00));break;
+        case 8:case 10:case 12:case 14: value=YM7101::GetHVCounter();break;
+        default: value=s.openBus;break;
+        }
+    } else if (a==0xa11100) value=Z80::BusGranted()?0:0x0100;
+    else if (a>=0xa00000 && a<=0xa0ffff) {const byte data=Z80::Read68k(a&0xffff);value=word((word(data)<<8)|data);}
+    else if (a>=0xa10000 && a<0xa10020) {const byte data=M68KReadMemoryBYTE(a|1);value=word((word(data)<<8)|data);}
+    else value=word((word(M68KReadMemoryBYTE(a))<<8)|M68KReadMemoryBYTE((a+1)&0xffffff));
+    s.openBus=value;
+    return value;
 }
-
-void Genesis::SetRomName(const std::string& path)
-{
-    get().romName = path;
+void Genesis::M68KWriteMemoryWORD(dword a,word value) {
+    a&=0xffffff; get().openBus=value;
+    if (a<0x400000) {Cartridge::WriteWord(a,value);return;}
+    if (a>=0xa00000 && a<=0xa0ffff) {Z80::Write68k(a&0xffff,byte(value>>8));return;}
+    if (VDPAddress(a)) {
+        switch(a&0x1e) {
+        case 0:case 2: YM7101::WriteDataPortWORD(value);break;
+        case 4:case 6: YM7101::WriteControlPortWORD(value);break;
+        case 0x10:case 0x12:case 0x14:case 0x16: Audio::WritePSG(byte(value));break;
+        }
+    } else {
+        M68KWriteMemoryBYTE(a,byte(value>>8));
+        M68KWriteMemoryBYTE((a+1)&0xffffff,byte(value));
+    }
 }
-
-const std::string& Genesis::GetRomName()
-{
-	return get().romName;
-}
-
-byte Genesis::M68KReadMemoryBYTE(dword address)
-{
-	address = address % M68K_MEM_SIZE;
-
-	//ROM Cartridge/Expension port
-	if(address < 0xA00000)
-	{
-		return (byte)get().M68kMemory[address];
-	}
-	//Z80 Area
-	else if(address >= 0xA00000 && address <= 0xA0FFFF)
-	{
-		return 0;
-	}
-	//I/O Registers
-	else if(address >= 0xA10000 && address <= 0xA10FFF)
-	{
-		BitSet(address, 0);
-
-		if(address == 0xA10001)
-		{
-			return (byte)RomLoader::GetVersion();
-		}
-		else if(address == 0xA10003)
-		{
-			//Manette 1 data
-			return GamePad::ReadData(0);
-		}
-		else if(address == 0xA10005)
-		{
-			//Manette 2 data
-			return GamePad::ReadData(1);
-		}
-		else if(address == 0xA10007)
-		{
-			//Expansion port data
-			return 0x0;
-		}
-		else if(address == 0xA10009)
-		{
-			//Manette 1 control
-			return GamePad::ReadControl(0);
-		}
-		else if(address == 0xA1000B)
-		{
-			//Manette 2 control
-			return GamePad::ReadControl(1);
-		}
-		else if(address == 0xA1000D)
-		{
-			//Expansion port data
-			return 0x0;
-		}
-		else
-		{
-			return (byte)get().M68kMemory[address];
-		}
-	}
-	//Z80 Control
-	else if(address >= 0xA11000 && address <= 0xA11FFF)
-	{
-		//z80bus
-		return 0;
-	}
-	//VDP Ports
-	else if(address >= 0xC00000 && address <= 0xDFFFFF)
-	{
-		if(address < 0xC00004)
-		{
-			word vdpword = YM7101::ReadDataPortWORD();
-
-			if((address % 2) == 0)
-			{
-				return (byte)(vdpword >> 8);
-			}
-			else
-			{
-				return (byte)vdpword;
-			}
-		}
-		else if(address < 0xC00008)
-		{
-			word vdpword = YM7101::ReadControlPortWORD();
-
-			if((address % 2) == 0)
-			{
-				return (byte)(vdpword >> 8);
-			}
-			else
-			{
-				return (byte)vdpword;
-			}
-		}
-		else if(address < 0xC0000F)
-		{
-			if((address % 2) == 0)
-			{
-				return YM7101::GetVCounter();
-			}
-			else
-			{
-				return YM7101::GetHCounter();
-			}
-		}
-		else if(address == 0xC00011)
-		{
-			//PSG
-			return 0;
-		}
-		else
-		{
-			return (byte)get().M68kMemory[address];
-		}
-	}
-	//RAM (Mirrored every $FFFF)
-	else if(address >= 0xE00000 && address <= 0xFFFFFF)
-	{
-		address = address % 0x100000;
-		address += 0xE00000;
-		return (byte)get().M68kMemory[address];
-	}
-
-	return 0;
-}
-
-void Genesis::M68KWriteMemoryBYTE(dword address, byte data)
-{
-
-	address = address % M68K_MEM_SIZE;
-
-	//ROM Cartridge/Expension port
-	if(address < 0xA00000)
-	{
-		//on peut pas écrire dans la rom
-	}
-	//Z80 Area
-	else if(address >= 0xA00000 && address <= 0xA0FFFF)
-	{
-		//osef du z80
-	}
-	//I/O Registers
-	else if(address >= 0xA10000 && address <= 0xA10FFF)
-	{
-		BitSet(address, 0); //pair et impair = pareil
-
-		if(address == 0xA10003)
-		{
-			//Manette 1
-			GamePad::Write(0, data, false);
-		}
-		else if(address == 0xA10005)
-		{
-			//Manette 2
-			GamePad::Write(1, data, false);
-		}
-		else if(address == 0xA10007)
-		{
-			//Expansion port data
-		}
-		else if(address == 0xA10009)
-		{
-			//Manette 1 control
-			GamePad::Write(0, data, true);
-		}
-		else if(address == 0xA1000B)
-		{
-			//Manette 2 control
-			GamePad::Write(1, data, true);
-		}
-		else if(address == 0xA1000D)
-		{
-			//Expansion port data
-		}
-		else
-		{
-			get().M68kMemory[address] = data;
-		}
-	}
-	//Z80 Control
-	else if(address >= 0xA11000 && address <= 0xA11FFF)
-	{
-		//osef du z80
-	}
-	//VDP Ports
-	else if(address >= 0xC00000 && address <= 0xDFFFFF)
-	{
-		if(address < 0xC00004)
-		{
-			YM7101::WriteDataPortBYTE(data);
-		}
-		else if(address < 0xC00008)
-		{
-			YM7101::WriteControlPortBYTE(data);
-		}
-		else if(address < 0xC00010)
-		{
-			//readonly
-		}
-		else if(address == 0xC00011)
-		{
-			//PSG
-		}
-		else
-		{
-			get().M68kMemory[address] = data;
-		}
-	}
-	//RAM (Mirrored every $FFFF)
-	else if(address >= 0xE00000 && address <= 0xFFFFFF)
-	{
-		address = address % 0x100000;
-		address += 0xE00000;
-		get().M68kMemory[address] = data;
-	}
-}
-
-word Genesis::M68KReadMemoryWORD(dword address)
-{
-
-	address = address % M68K_MEM_SIZE;
-
-	//ROM Cartridge/Expension port
-	if(address < 0xA00000)
-	{
-		return (word)((get().M68kMemory[address] << 8) | get().M68kMemory[address + 1]);
-	}
-	//Z80 Area
-	else if(address >= 0xA00000 && address <= 0xA0FFFF)
-	{
-		return 0;
-	}
-	//I/O Registers
-	else if(address >= 0xA10000 && address <= 0xA10FFF)
-	{
-		BitSet(address, 0);
-
-		if(address == 0xA10001)
-		{
-			return RomLoader::GetVersion();
-		}
-		else if(address == 0xA10003)
-		{
-			//Manette 1
-			return GamePad::ReadData(0);
-		}
-		else if(address == 0xA10005)
-		{
-			//Manette 2
-			return GamePad::ReadData(1);
-		}
-		else if(address == 0xA10007)
-		{
-			//Expansion port data
-			return 0x0;
-		}
-		else if(address == 0xA10009)
-		{
-			//Manette 1 control
-			return GamePad::ReadControl(0);
-		}
-		else if(address == 0xA1000B)
-		{
-			//Manette 2 control
-			return GamePad::ReadControl(1);
-		}
-		else if(address == 0xA1000D)
-		{
-			//Expansion port data
-			return 0x0;
-		}
-		else
-		{
-			return (word)get().M68kMemory[address];
-		}
-	}
-	//Z80 Control
-	else if(address >= 0xA11000 && address <= 0xA11FFF)
-	{
-		//z80bus
-		return 0;
-	}
-	//VDP Ports
-	else if(address >= 0xC00000 && address <= 0xDFFFFF)
-	{
-		if(address < 0xC00004)
-		{
-			return YM7101::ReadDataPortWORD();
-		}
-		else if(address < 0xC00008)
-		{
-			return YM7101::ReadControlPortWORD();
-		}
-		else if(address < 0xC0000F)
-		{
-			return YM7101::GetHVCounter();
-		}
-		else if(address == 0xC00011 || address == 0xC00013 || address == 0xC00015 || address == 0xC00017)
-		{
-			//PSG
-			return 0;
-		}
-		else
-		{
-			return (word)((get().M68kMemory[address] << 8) | get().M68kMemory[address + 1]);
-		}
-	}
-	//RAM (Mirrored every $FFFF)
-	else if(address >= 0xE00000 && address <= 0xFFFFFF)
-	{
-		address = address % 0x100000;
-		address += 0xE00000;
-		return (word)((get().M68kMemory[address] << 8) | get().M68kMemory[address + 1]);
-	}
-
-	return 0;
-}
-
-void Genesis::M68KWriteMemoryWORD(dword address, word data)
-{
-
-	address = address % M68K_MEM_SIZE;
-
-	//ROM Cartridge/Expension port
-	if(address < 0xA00000)
-	{
-		//on peut pas écrire dans la rom
-	}
-	//Z80 Area
-	else if(address >= 0xA00000 && address <= 0xA0FFFF)
-	{
-		//osef du z80
-	}
-	//I/O Registers
-	else if(address >= 0xA10000 && address <= 0xA10FFF)
-	{
-		BitSet(address, 0);
-
-		if(address == 0xA10003)
-		{
-			//Manette 1
-			GamePad::Write(0, data, false);
-		}
-		else if(address == 0xA10005)
-		{
-			//Manette 2
-			GamePad::Write(1, data, false);
-		}
-		else if(address == 0xA10007)
-		{
-			//Expansion port data
-		}
-		else if(address == 0xA10009)
-		{
-			//Manette 1 control
-			GamePad::Write(0, data, true);
-		}
-		else if(address == 0xA1000B)
-		{
-			//Manette 2 control
-			GamePad::Write(1, data, true);
-		}
-		else if(address == 0xA1000D)
-		{
-			//Expansion port data
-		}
-		else
-		{
-			get().M68kMemory[address] = (byte)data;
-		}
-	}
-	//Z80 Control
-	else if(address >= 0xA11000 && address <= 0xA11FFF)
-	{
-		//osef du z80
-	}
-	//VDP Ports
-	else if(address >= 0xC00000 && address <= 0xDFFFFF)
-	{
-		if(address < 0xC00004)
-		{
-			YM7101::WriteDataPortWORD(data);
-		}
-		else if(address < 0xC00008)
-		{
-			YM7101::WriteControlPortWORD(data);
-		}
-		else if(address < 0xC00010)
-		{
-			//readonly
-		}
-		else if(address == 0xC00011 || address == 0xC00013 || address == 0xC00015 || address == 0xC00017)
-		{
-			//PSG
-		}
-		else
-		{
-			get().M68kMemory[address] = data;
-		}
-	}
-	//RAM (Mirrored every $FFFF)
-	else if(address >= 0xE00000 && address <= 0xFFFFFF)
-	{
-		address = address % 0x100000;
-		address += 0xE00000;
-		get().M68kMemory[address] = (byte)(data >> 8);
-		get().M68kMemory[address + 1] = (byte)(data & 0xFF);
-	}
-}
-
-dword Genesis::M68KReadMemoryLONG(dword address)
-{
-	return (dword)((get().M68KReadMemoryWORD(address) << 16) | get().M68KReadMemoryWORD(address + 2));
-}
-
-void Genesis::M68KWriteMemoryLONG(dword address, dword data)
-{
-	get().M68KWriteMemoryWORD(address, (word)(data >> 16));
-	get().M68KWriteMemoryWORD(address + 2, (word)(data & 0xFFFF));
-}
+dword Genesis::M68KReadMemoryLONG(dword a) { return (dword(M68KReadMemoryWORD(a))<<16)|M68KReadMemoryWORD((a+2)&0xffffff); }
+void Genesis::M68KWriteMemoryLONG(dword a,dword value) { M68KWriteMemoryWORD(a,word(value>>16));M68KWriteMemoryWORD((a+2)&0xffffff,word(value)); }

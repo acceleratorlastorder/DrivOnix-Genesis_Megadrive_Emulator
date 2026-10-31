@@ -16,7 +16,7 @@
  ```
 
 DrivOnix is a SEGA Megadrive/Genesis emulator for Linux and Windows, written in C++/CSFML.
-The emulator can boot the majority of Genesis games but most games have in-game bugs.
+The current implementation includes the 68000, Z80, VDP, FM/PSG audio, cartridge saves and controller protocols. See the test coverage and remaining accuracy boundaries below; a commercial-game compatibility matrix has not been established.
 
 <img src="Images/sonic.PNG" width="320"><img src="Images/jim.PNG" width="320"><img src="Images/rage.PNG" width="320"><img src="Images/vector.PNG" width="320">
 
@@ -54,7 +54,7 @@ Run without arguments to select a ROM in the GTK file picker, or pass its path:
 
 This is a native Linux build of the full graphical emulator. CSFML **2.x** is
 required; CSFML 3 uses a different API. On Wayland desktops, XWayland must be
-available because CSFML 2 uses X11. Other distributions need a C++11 compiler,
+available because CSFML 2 uses X11. Other distributions need a C++14 compiler,
 CMake 3.16 or newer, CSFML 2 development files, GTK 3 development files and
 pkg-config. Python 3.9 or newer is needed to run tests; pass
 `-DBUILD_TESTING=OFF` when building without Python.
@@ -77,7 +77,7 @@ The original 32-bit MinGW build is still available:
 compile.bat
 ```
 
-It uses MinGW and the bundled 32-bit CSFML libraries and DLLs. For a native
+It uses CMake, a C++14 MinGW toolchain, matching installed CSFML 2 headers, and the bundled 32-bit CSFML import libraries/DLLs. For a native
 64-bit MSVC build, build matching dependencies and use CMake (Visual Studio
 2022 C++ tools, CMake and Python required):
 
@@ -106,15 +106,50 @@ xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gu
 ```
 
 The separate CPU conformance suite remains documented in
-[UnitTests/README.txt](UnitTests/README.txt). Platform support does not resolve
-the CPU accuracy failures recorded there or add the missing Z80 and sound cores.
+[UnitTests/README.txt](UnitTests/README.txt). The CPU tests now require strict correct outputs instead of accepting recorded
+known failures. The production 68000 remains DrivOnix's own implementation.
+The new Z80 worker runs the pinned 1,604,000-case instruction corpus; its shared
+core is also used by the emulator.
+
+The main build's CTest targets cover the real console bus, timed VDP FIFO/DMA,
+planes/sprites/window/interlace/interrupts, controller handshakes, save memories,
+audio synthesis/timers, native startup and dependency integrity. Linux CI also
+checks the actual window, BIOS handoff and controller-driven rendered output.
+See [console validation](UnitTests/frontend/VALIDATION.txt) for the exercised
+hardware, save-failure checks and measured headless performance.
+
+The video renderer operates on scanlines. Arbitrary mid-line fetch effects,
+internal sprite-attribute caching, interlace half-line edge cases and Z80 pin
+waveforms are not fully certified. Sega CD, 32X, SVP and other special expansion
+hardware are not implemented by this base-console build. See
+[YM7101/README.txt](YM7101/README.txt), [Z80/README.txt](Z80/README.txt) and
+[Genesis/Cartridge/EEPROM.txt](Genesis/Cartridge/EEPROM.txt) for precise limits.
+
+A headless runner provides reproducible integration/performance checks:
+
+```sh
+./build/linux/console_runner /path/to/diagnostic.bin 600
+./build/linux/console_runner Bios/DrivOnix.bios 1500 --bios
+./build/linux/console_runner /path/to/diagnostic.bin 600 --dump frame.ppm
+```
+
+It executes the same console code, produces audio samples without an output
+device, and reports emulated clocks/frames, wall time and CPU state. Add `--z80`
+to install a synthetic active Z80 loop and PSG tone for a controlled stress case.
+Compare emulated duration with wall time on the intended minimum machine;
+synthetic results do not establish every game's frame-time behavior.
 
 ## Usage
 
 Launch `DrivOnix` (Linux) or `DrivOnix.exe` (Windows) and select a ROM, or pass a
-ROM path as the first argument. Cancelling the picker exits normally; invalid
+ROM path as the first argument. Use `--no-audio` to disable the host sound device while retaining deterministic sound-chip execution. Cancelling the picker exits normally; invalid
 or unreadable files report an error. BIN, MD, GEN and SMD extensions are accepted
-without case sensitivity. PAL or NTSC mode is automatically set by the BIOS.
+without case sensitivity. The ROM header selects USA, Japan or Europe hardware,
+in that preference order when several regions are supported. The loader accepts
+J/U/E combinations, USA/JAPAN/EUROPE names and hexadecimal masks; invalid fields
+default to USA. Japan uses domestic NTSC hardware, USA uses overseas NTSC, and
+Europe uses overseas PAL. The selected hardware is preserved through the BIOS
+and cartridge handoff. See [region handling](Genesis/RomLoader/README.txt).
 
 <img src="Images/bios.PNG" width="320">
 
@@ -134,7 +169,9 @@ Other options:
 <kbd>A</kbd> - Start<br/>
 <kbd>K</kbd> - A<br/>
 <kbd>L</kbd> - B<br/>
-<kbd>M</kbd> - C<br/><br/>
+<kbd>M</kbd> - C<br/>
+<kbd>I</kbd>, <kbd>O</kbd>, <kbd>P</kbd> - X, Y, Z<br/>
+<kbd>Enter</kbd> - Mode<br/><br/>
 
 -Player 2<br/>
 <kbd>↑</kbd> - Up<br/>
@@ -144,13 +181,27 @@ Other options:
 <kbd>Numpad 4</kbd> - Start<br/>
 <kbd>Numpad 1</kbd> - A<br/>
 <kbd>Numpad 2</kbd> - B<br/>
-<kbd>Numpad 3</kbd> - C<br/><br/>
+<kbd>Numpad 3</kbd> - C<br/>
+<kbd>Numpad 7</kbd>, <kbd>Numpad 8</kbd>, <kbd>Numpad 9</kbd> - X, Y, Z<br/>
+<kbd>Numpad 0</kbd> - Mode<br/><br/>
 
 -Emulator<br/>
 <kbd>Esc</kbd> - Quit Emulator<br/><br/>
 
 ### Saving 
-Actually not working
+Cartridge SRAM and supported I2C EEPROM boards load/save beside the ROM as
+`game.bin.srm` and `game.bin.eep`. Save files are validated against the configured
+capacity. Changes are flushed to a new file and atomically replace the old save
+on cartridge changes and normal exit. Failures before replacement preserve the
+previous save; a directory-sync failure can be reported after replacement.
+Failed writes retain the changed memory for retry. Existing unreadable saves
+are reported instead of being treated as empty memory. The ROM directory must
+be writable. Save states are not implemented.
+
+SRAM supports byte lanes, enable/write-protect controls, and persistent storage.
+Known Sega, EA, Acclaim and Codemasters serial boards select their documented
+EEPROM pinouts and capacities. ROM images up to 8 MiB and standard 512 KiB bank
+windows are supported.
 
 ## Resources
 Resources were used to understand and test the Genesis hardware. Some of these include:

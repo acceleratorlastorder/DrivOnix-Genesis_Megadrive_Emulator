@@ -1,4 +1,6 @@
 #include "ym7101.hpp"
+#include <algorithm>
+#include <iterator>
 
 YM7101::YM7101()
 {
@@ -16,20 +18,20 @@ void YM7101::Init()
 	get().vdpResolution = std::pair<int, int>(256, 224);
 	get().is256Screen = true;
 	get().vCounter = 0x0;
-	get().hCounter = 0x0;
 	get().controlPortPending = false;
 	get().controlPortData = 0;
-	get().refresh = false;
+    get().hvFrozen=false;get().hvLatch=0;
 	get().lineInt = 0xFF;
-	get().maxSprites = 0;
-	get().spritePixelCount = 0;
-	get().maxInt = 255;
-	get().spriteMask2 = 0xFF;
-	get().spriteMask = std::make_pair(0xFF, std::make_pair(0xFF, 0xFF));
 	get().requestInt = false;
 	get().status = 0x3600;
 
-	std::memset(get().vram, 0x0, 0x10000);
+	std::memset(get().vram.bytes, 0x0, sizeof(get().vram.bytes));
+    get().lineCycles=get().scanline=get().stallCycles=0;
+    get().horizontalPending=get().verticalPending=get().dmaFillPending=false;
+    get().fifoCount=get().dmaType=get().dmaRemaining=0;
+    get().totalCycles=get().dmaReady=0;
+    get().status=Genesis::IsPAL() ? 0x3601:0x3600;
+    CRT::SetResolution(256,224);
 
 	for(int i = 0; i < 24; ++i)
 	{
@@ -46,8 +48,6 @@ void YM7101::Init()
 		get().vsram[i] = 0;
 	}
 
-	get().hCounterFirst = true;
-	get().vCounterFirst = true;
 
 	CRT::ResetScreen();
 }
@@ -106,31 +106,47 @@ void YM7101::IncrementAddress()
 
 byte YM7101::GetHCounter()
 {
-	return (byte)get().hCounter;
+    if(get().hvFrozen) return byte(get().hvLatch);
+    const unsigned phase=get().lineCycles;
+    // Counter phase is referenced to HINT / V-counter increment, not H=0.
+    // H32 has a constant divide-by-20 half-dot clock and skips 94..E8.
+    if(!get().Is40Cell())
+    {
+        unsigned counter=0x85+phase/20;
+        if(counter>=0x94) counter+=0x55;
+        return byte(counter);
+    }
+    // H40 normally divides by 16, with its shorter jump and the variable
+    // horizontal-sync clock. These boundaries are VDP master-clock facts.
+    if(phase<272) return byte(0xa5+phase/16);
+    if(phase<280) return 0xb6;
+    if(phase<288) return 0xe4;
+    if(phase<304) return 0xe5;
+    if(phase>=652) return byte(0xf8+(phase-652)/16);
+    static const unsigned sync[]={304,321,341,361,381,399,419,439,459,478,497,517,537,557,575,595,615,635};
+    return byte(0xe6+(std::upper_bound(std::begin(sync),std::end(sync),phase)-std::begin(sync))-1);
 }
 
 byte YM7101::GetVCounter()
 {
-	byte result = (byte)get().vCounter;
+    if(get().hvFrozen) return byte(get().hvLatch>>8);
+	unsigned line=get().scanline;
+    const unsigned jump=Genesis::IsPAL() ? (get().vdpResolution.second==240 ? 0x10b:0x103):0xeb;
+    if (line>=jump) line-=Genesis::IsPAL()?57:6;
+    byte result=byte(line);
 
-	if(TestBit(get().vdpRegister[0xC], 1)) //interlaced ?
-	{
-		if(TestBit(get().vCounter, 8))
-		{
-			BitSet(result, 0);
-		}
-		else
-		{
-			BitReset(result, 0);
-		}
-	}
+    if(get().vdpRegister[12]&2)
+    {
+        if((get().vdpRegister[12]&6)==6) line<<=1;
+        result=byte((line&~1u)|((line>>8)&1));
+    }
 
 	return result;
 }
 
 word YM7101::GetHVCounter()
 {
-	return ((get().GetVCounter() << 8) |((byte)get().hCounter >> 1));
+	return word((word(get().GetVCounter())<<8)|GetHCounter());
 }
 
 void YM7101::WriteControlPortBYTE(byte data)
@@ -163,14 +179,17 @@ void YM7101::WriteControlPortWORD(word data)
 
 		if(TestBit(get().controlPortData, 7) && TestBit(get().vdpRegister[1], 4))
 		{
-			get().DMA(data);
+			if (((get().vdpRegister[23]>>6)&3)==2) get().dmaFillPending=true;
+            else get().DMA(data);
 		}
 	}
 }
 
 word YM7101::ReadControlPortWORD()
 {
-	word result = get().status;
+	word result = word((get().status & ~0x302) | (get().fifoCount==0 ? 0x200:0) | (get().fifoCount==4 ? 0x100:0) | (get().dmaType ? 2:0));
+    // Status reads reset sprite flags and the two-word command latch, not IRQ latches.
+    get().status &= ~word(0x60);
 	get().controlPortPending = false;
 	BitReset(get().status, 1);
 	return result;
@@ -184,36 +203,19 @@ void YM7101::WriteDataPortBYTE(byte data)
 
 void YM7101::WriteDataPortWORD(word data)
 {
-	int code = get().GetControlCode();
-
-	if(code == READ_VRAM || code == READ_CRAM || code == READ_VSRAM)
-	{
-		//on ignore les reads
-		return;
-	}
-
-	get().controlPortPending = false;
-
-	switch(code)
-	{
-		case WRITE_VRAM:
-		get().WriteVram(data);
-		break;
-
-		case WRITE_CRAM:
-		get().WriteCram(data);
-		break;
-
-		case WRITE_VSRAM:
-		get().WriteVsram(data);
-		break;
-	}
-
-	get().IncrementAddress();
+    auto& s=get();
+    if (s.dmaFillPending) { s.dmaFillPending=false;s.DMAVRAMFill(data);return; }
+    const unsigned code=s.GetControlCode();
+    if (code!=WRITE_VRAM && code!=WRITE_CRAM && code!=WRITE_VSRAM) return;
+    while (s.fifoCount==4) Genesis::StallMasterCycles(unsigned(s.fifo[0].ready-s.totalCycles));
+    const uint64_t after=s.fifoCount ? s.fifo[s.fifoCount-1].ready:s.totalCycles;
+    s.fifo[s.fifoCount++]={s.GetAddressRegister(),data,code,s.NextAccess(after,code==WRITE_VRAM?2:1)};
+    s.IncrementAddress();s.controlPortPending=false;
 }
 
 word YM7101::ReadDataPortWORD()
 {
+    while (get().fifoCount) Genesis::StallMasterCycles(unsigned(get().fifo[0].ready-get().totalCycles));
 	int code = get().GetControlCode();
 
 	if(code == WRITE_VRAM || code == WRITE_REG || code == WRITE_CRAM || code == WRITE_VSRAM)
@@ -257,7 +259,19 @@ void YM7101::UpdateRegister(word data)
 	byte reg = (data >> 8) & 0x7F;
 	if(reg < 24)
 	{
+        if(reg==0)
+        {
+            const bool freeze=(data&2)!=0;
+            if(freeze&&!get().hvFrozen) get().hvLatch=GetHVCounter();
+            get().hvFrozen=freeze;
+        }
 		get().vdpRegister[reg] = data & 0xFF;
+        if (reg==0 || reg==1) get().requestInt=(get().verticalPending && TestBit(get().vdpRegister[1],5)) || (get().horizontalPending && TestBit(get().vdpRegister[0],4));
+        const unsigned width=get().Is40Cell()?320:256;
+        const unsigned height=Genesis::IsPAL() && TestBit(get().vdpRegister[1],3)?240:224;
+        get().vdpResolution=std::make_pair(int(width),int(height));
+        get().is256Screen=width==256;
+        CRT::SetResolution(width,((get().vdpRegister[12]&6)==6)?height*2:height);
 	}
 }
 
@@ -281,98 +295,77 @@ void YM7101::DMA(word data)
 	}
 }
 
+uint64_t YM7101::NextAccess(uint64_t after, unsigned slots)
+{
+    // Access positions are hardware timing facts, in master clocks from HBLANK.
+    static const unsigned h32[]={230,510,810,970,1130,1450,1610,1770,2090,2250,2410,2730,2890,3050,3350,3370};
+    static const unsigned h40[]={352,820,948,1076,1332,1460,1588,1844,1972,2100,2356,2484,2612,2868,2996,3124,3364,3380};
+    uint64_t result=after;
+    while(slots--) {
+        const uint64_t delta=result-totalCycles;
+        const unsigned position=unsigned((lineCycles+delta)%3420);
+        const unsigned line=unsigned((scanline+(lineCycles+delta)/3420)%(Genesis::IsPAL()?313:262));
+        const bool blank=line>=unsigned(vdpResolution.second) || !TestBit(vdpRegister[1],6);
+        unsigned next=3420;
+        if (blank) {
+            const unsigned count=Is40Cell()?204:166;
+            next=unsigned((uint64_t(position)*count/3420+1)*3420/count);
+            if(next<=position) ++next;
+        } else {
+            const unsigned* table=Is40Cell()?h40:h32;
+            const unsigned count=Is40Cell()?18:16;
+            for(unsigned i=0;i<count;++i) if(table[i]>position) {next=table[i];break;}
+        }
+        result+=next-position;
+        if (!blank && next==3420) ++slots;
+    }
+    return result;
+}
+void YM7101::CommitWrite(word address,unsigned code,word value)
+{
+    if(code==WRITE_VRAM) {
+        if(address&1) InvertWordEndian(value);
+        address&=0xfffe;vram[address]=byte(value>>8);vram[address+1]=byte(value);
+    } else if(code==WRITE_CRAM) cram[(address&0x7f)>>1]=value&0x0eee;
+    else if(code==WRITE_VSRAM) {
+        const unsigned index=(address&0x7f)>>1;
+        if(index<40) vsram[index]=value&0x7ff;
+    }
+}
 void YM7101::DMAFromM68KToVRAM()
 {
-	/*Registers 19, 20, specify how many 16-bit words to transfer:*/
-	word length = (get().vdpRegister[20] << 8) | get().vdpRegister[19];
-
-	if(length == 0x0)
-	{
-		length = 0xFFFF;
-	}
-
-	/*Registers 21, 22, 23 specify the source address on the 68000 side:*/
-	dword address = ((get().vdpRegister[23] & 0x7F) << 17) | (get().vdpRegister[22] << 9) | (get().vdpRegister[21] << 1);
-
-	int code = (get().controlPortData >> 30) & 0x3;
-
-	if(TestBit(get().controlPortData, 4))
-	{
-		BitSet(code, 2);
-	}
-	else
-	{
-		BitReset(code, 2);
-	}
-
-	for( ; length > 0; length--)
-	{
-		if(address > 0xFFFFFF)
-		{
-			address = (address - 0xFFFFFF) + 0xFF0000;
-		}
-
-		word data = Genesis::M68KReadMemoryWORD(address);
-
-		address += 2;
-
-		switch(code)
-		{
-			case WRITE_VRAM:
-			get().WriteVram(data);
-			break;
-
-			case WRITE_CRAM:
-			get().WriteCram(data);
-			break;
-
-			case WRITE_VSRAM:
-			get().WriteVsram(data);
-			break;
-		}
-
-		get().IncrementAddress();
-	}
-
-	get().vdpRegister[19] = length & 0xFF;
-	get().vdpRegister[20] = (length >> 8) & 0xFF;
-	get().vdpRegister[21] = (address >> 1) & 0xFF;
-	get().vdpRegister[22] = (address >> 9) & 0xFF;
-	get().vdpRegister[23] = (get().vdpRegister[23] & 0x80) | ((address >> 17) & 0x7F);
+    dmaRemaining=(vdpRegister[20]<<8)|vdpRegister[19];if(!dmaRemaining) dmaRemaining=65536;
+    dmaSource=((vdpRegister[23]&0x7f)<<17)|(vdpRegister[22]<<9)|(vdpRegister[21]<<1);
+    dmaCode=GetControlCode()&7;dmaType=1;
+    dmaReady=NextAccess(fifoCount ? fifo[fifoCount-1].ready:totalCycles,dmaCode==WRITE_VRAM?2:1);
 }
-
 void YM7101::DMAVRAMFill(word data)
 {
-	/*Registers 19, 20, specify how many 8-bit bytes to fill:*/
-	word length = (get().vdpRegister[20] << 8) | get().vdpRegister[19];
-
-	get().vram[get().GetAddressRegister()] = (byte)((data >> 8) & 0xFF);
-
-	get().IncrementAddress();
-
-	for( ; length > 0; length--)
-	{
-		get().vram[get().GetAddressRegister()] = (byte)((data >> 8) & 0xFF);
-
-		get().IncrementAddress();
-	} 
+    dmaRemaining=(vdpRegister[20]<<8)|vdpRegister[19];if(!dmaRemaining) dmaRemaining=65536;
+    dmaType=2;dmaValue=data;dmaCode=WRITE_VRAM;
+    CommitWrite(GetAddressRegister(),WRITE_VRAM,data);
+    dmaReady=NextAccess(fifoCount ? fifo[fifoCount-1].ready:totalCycles,3);
 }
-
 void YM7101::DMAVRAMCopy()
 {
-	/*Registers 19, 20, specify how many 8-bit bytes to copy:*/
-	word length = (get().vdpRegister[20] << 8) | get().vdpRegister[19];
-	/*The address bits in register 23 are ignored.
- 	Registers 21, 22 specify the source address in VRAM:*/
-	word address = (get().vdpRegister[22] << 8) | get().vdpRegister[21];
-
-	for( ; length > 0; length--)
-	{
-		byte data = get().vram[address];
-		get().vram[get().GetAddressRegister()] = data;
-		get().IncrementAddress();
-		address++;
-	}
+    dmaRemaining=(vdpRegister[20]<<8)|vdpRegister[19];if(!dmaRemaining) dmaRemaining=65536;
+    dmaSource=(vdpRegister[22]<<8)|vdpRegister[21];dmaType=3;
+    dmaReady=NextAccess(fifoCount ? fifo[fifoCount-1].ready:totalCycles,2);
+}
+void YM7101::DmaStep()
+{
+    if(dmaType==1) {
+        const word value=(dmaSource&0xe700e0)==0xc00000 ? 0xffff:Genesis::M68KReadMemoryWORD(dmaSource);
+        CommitWrite(GetAddressRegister(),dmaCode,value);
+        dmaSource=(dmaSource&0xfe0000)|((dmaSource+2)&0x1ffff);
+        vdpRegister[21]=byte(dmaSource>>1);vdpRegister[22]=byte(dmaSource>>9);
+        vdpRegister[23]=byte((vdpRegister[23]&0x80)|(dmaSource>>17));
+    } else if(dmaType==2) vram[GetAddressRegister()^1]=byte(dmaValue>>8);
+    else {vram[GetAddressRegister()]=vram[dmaSource++];vdpRegister[21]=byte(dmaSource);vdpRegister[22]=byte(dmaSource>>8);}
+    IncrementAddress();--dmaRemaining;
+    vdpRegister[19]=byte(dmaRemaining);vdpRegister[20]=byte(dmaRemaining>>8);
+    if(!dmaRemaining) dmaType=0;
+    else dmaReady=NextAccess(totalCycles,dmaType==3 || (dmaType==1 && dmaCode==WRITE_VRAM)?2:1);
 }
 
 void YM7101::WriteVram(word data)
@@ -384,6 +377,7 @@ void YM7101::WriteVram(word data)
 		InvertWordEndian(data);
 	}
 
+	address &= 0xfffe;
 	get().vram[address] = data >> 8;
 	get().vram[address + 1] = data & 0xFF;
 }
@@ -405,6 +399,7 @@ void YM7101::WriteVsram(word data)
 word YM7101::ReadVram()
 {
 	word address = get().GetAddressRegister();
+	address &= 0xfffe;
 	return get().vram[address] << 8 | get().vram[address + 1];
 }
 
@@ -429,21 +424,13 @@ bool YM7101::GetRequestInt()
 
 int YM7101::GetIntType()
 {
-	int result = -1;
-	if(get().requestInt)
-	{
-		if(TestBit(get().status, 7) && TestBit(get().vdpRegister[1], 5))
-		{
-			BitReset(get().status, 7);
-			result = 6;
-		}
-		else
-		{
-			result = 4;
-		}
-	}
-	get().requestInt = false;
-	return result;
+    if (get().verticalPending && TestBit(get().vdpRegister[1],5)) {
+        get().verticalPending=false;get().status &= ~word(0x80);get().requestInt=get().horizontalPending && TestBit(get().vdpRegister[0],4); return 6;
+    }
+    if (get().horizontalPending && TestBit(get().vdpRegister[0],4)) {
+        get().horizontalPending=false;get().requestInt=get().verticalPending && TestBit(get().vdpRegister[1],5); return 4;
+    }
+    get().requestInt=false;return -1;
 }
 
 word YM7101::GetBaseLayerA()
@@ -605,830 +592,177 @@ void YM7101::GetHScroll(int line, word& aScroll, word& bScroll)
 	bScroll &= 0x3FF;
 }
 
-bool YM7101::SetIntensity(bool priority, int xPos, bool isSprite, int color, int palette)
-{
-	bool result = false;
-	int newIntensity = INTENSITY_NOTSET;
-	int currentIntensity = get().lineIntensity[xPos];
-
-	if(currentIntensity == INTENSITY_NOTSET)
-	{
-		if(!priority)
-		{
-			newIntensity = INTENSITY_SHADOW;
-		}
-		else
-		{
-			newIntensity = INTENSITY_NORMAL;
-		}
-	}
-	else if(currentIntensity == INTENSITY_SHADOW)
-	{
-		if(priority)
-		{
-			newIntensity = INTENSITY_NORMAL;
-		}
-	}
-
-	if(isSprite && (palette == 3))
-	{
-		if(color == 14 && (currentIntensity < INTENSITY_LIGHT))
-		{
-			result = true;
-			newIntensity = currentIntensity + 1;
-		}
-		else if(color == 15 && (currentIntensity > INTENSITY_SHADOW))
-		{
-			result = true;
-			newIntensity = currentIntensity - 1;
-		}
-	}
-
-	if(newIntensity != INTENSITY_NOTSET)
-	{
-		get().lineIntensity[xPos] = newIntensity;
-	}
-
-	return result;
-}
-
-void YM7101::RenderBackdrop()
-{
-	if(get().vCounter >= get().vdpResolution.second)
-	{
-		return;
-	}
-	int cramAddress = get().vdpRegister[0x7] & 0x3F;
-	word color = get().cram[cramAddress];
-
-	byte red = get().GetColorShade(color & 0xF);
-	byte green = get().GetColorShade((color >> 4) & 0xF);
-	byte blue = get().GetColorShade((color >> 8) & 0xF);
-
-	for(int x = 0; x < get().vdpResolution.first; ++x)
-	{
-		CRT::Write(x, get().vCounter, red, green, blue);
-	}
-}
-
-void YM7101::RenderLayer(word baseAddress, bool priority, int width, int height, word horizontalScroll, int layer)
-{
-	word hStartingCol = (horizontalScroll >> 3);
-	hStartingCol = (width - (hStartingCol % width)) % width;
-
-	word hFineScroll = (horizontalScroll & 0x7);
-	hFineScroll = (8 - (hFineScroll % 8)) % 8;
-
-	int horizontalTilesNumber = (get().vdpResolution.first / 8); //32 ou 40 selon la resolution
-
-	if(hFineScroll != 0)
-	{
-		horizontalTilesNumber++;
-
-		if(hStartingCol == 0)
-		{
-			hStartingCol = width - 1;
-		}
-		else
-		{
-			hStartingCol--;
-		}
-	}
-
-	int tileRow = (get().vCounter / 8);
-	int pixelCount = 0;
-
-	//on draw les pixels de la scanline courante des 32/40 tiles
-	for(int tilecolumn = 0; tilecolumn < horizontalTilesNumber; ++tilecolumn)
-	{
-		//on draw les 8 pixels du tile courant
-		for(int xAdvance = hFineScroll; xAdvance < 8; ++xAdvance)
-		{
-			int absX = pixelCount;
-
-			pixelCount++;
-
-			//on récup la bonne row en fonction du vScroll
-			word verticalScroll = get().GetVScroll(layer, absX / 16);
-
-			if(TestBit(get().vdpRegister[0xC], 1))
-			{
-				verticalScroll >>= 1;
-			}
-
-			word vStartingRow = verticalScroll >> 3;
-			word vFineScroll = verticalScroll & 0x7;
-
-			int scrollRow = tileRow + vStartingRow;
-
-			if(((get().vCounter % 8) + vFineScroll) > 7)
-			{
-				scrollRow++;
-			}
-
-			scrollRow = scrollRow % height;
-
-			//on va récupérer la bonne address memoire qui stock les data du tile
-			word nameBaseOffset = baseAddress;
-			nameBaseOffset += scrollRow * (width * 2);
-
-			int modulo = ((hStartingCol + tilecolumn) % width);
-			modulo = modulo < 0 ? modulo + width : modulo; //on prend en compte le negatif
-			nameBaseOffset += modulo * 2;
-
-			//on recup la coordonnée précise de x et y du pixel
-			bool hFlip = TestBit(get().vram[nameBaseOffset], 3);
-			bool vFlip = TestBit(get().vram[nameBaseOffset], 4);
-
-			int scrollYPixel = (get().vCounter + vFineScroll) % 8;
-
-			int xPixel = xAdvance;
-
-			if(hFlip)
-			{
-				xPixel = 7 - xAdvance;
-			}
-
-			xPixel = xPixel % 8;
-
-			int yPixel = scrollYPixel;
-
-			if(vFlip)
-			{
-				yPixel = 7 - scrollYPixel;
-			}
-
-			//on check la priorité
-			if(TestBit(get().vram[nameBaseOffset], 7) != priority)
-			{
-				continue;
-			}
-
-			//on récupère les informations du tile courant
-			word tileData = ((get().vram[nameBaseOffset] & 0x7) << 8) | get().vram[nameBaseOffset + 1];
-
-			if(TestBit(get().vdpRegister[0xC], 1))
-			{
-				tileData *= 64;
-
-				tileData +=  8 * yPixel;
-			}
-			else
-			{
-				tileData *= 32;
-
-				tileData += 4 * yPixel;
-			}
-
-			//on recup les couleurs
-			byte data1 = get().vram[tileData];
-			byte data2 = get().vram[tileData + 1];
-			byte data3 = get().vram[tileData + 2];
-			byte data4 = get().vram[tileData + 3];
-
-			int colorIndex = 0;
-
-			switch(xPixel)
-			{
-				case 0 :
-				colorIndex = data1 >> 4;
-				break;
-
-				case 1:
-				colorIndex = data1 & 0xF;
-				break;
-
-				case 2:
-				colorIndex = data2 >> 4;
-				break;
-
-				case 3:
-				colorIndex = data2 & 0xF;
-				break;
-
-				case 4:
-				colorIndex = data3 >> 4;
-				break;
-
-				case 5:
-				colorIndex = data3 & 0xF;
-				break;
-
-				case 6:
-				colorIndex = data4 >> 4;
-				break;
-
-				case 7:
-				colorIndex = data4 & 0xF;
-				break;
-			}
-
-			byte palette = (get().vram[nameBaseOffset] >> 5) & 0x3;
-
-			int cramAddress = (16 * palette) + colorIndex;
-			word color = get().cram[cramAddress];
-
-			byte red = get().GetColorShade(color & 0xF);
-			byte green = get().GetColorShade((color >> 4) & 0xF);
-			byte blue = get().GetColorShade((color >> 8) & 0xF);
-
-			if(TestBit(get().vdpRegister[0xC], 3))
-			{
-				get().SetIntensity(priority, absX, false, colorIndex, palette);
-			}
-
-			if(colorIndex == 0) //transparence
-			{
-				continue;
-			}
-
-			if(absX >= get().vdpResolution.first || (TestBit(get().vdpRegister[0], 5) && absX < 8)) //colonne blank de gauche
-			{
-				continue;
-			}
-
-			CRT::Write(absX, get().vCounter, red, green, blue);
-		}
-		hFineScroll = 0;
-	}
-}
-
-void YM7101::RenderWindow(word baseAddress, bool priority)
-{
-	int width = 32;
-	int height = 32;
-
-	int tileNumber = get().vdpResolution.first / 8;
-
-	if(tileNumber == 40)
-	{
-		width = 64;
-	}
-
-	bool hRight = TestBit(get().vdpRegister[0x11], 7);
-	byte hPos = (get().vdpRegister[0x11] & 0x1F) * 2;
-
-	bool vDown = !TestBit(get().vdpRegister[0x12], 7);
-	byte vPos = (get().vdpRegister[0x12] & 0x1F) * 8;
-
-	if(hPos == 0 && vPos == 0)
-	{
-		return;
-	}
-
-	int tileRow = get().vCounter / 8;
-
-	int startRow = vDown ? 0 : vPos;
-	int endRow = vDown ? vPos : (height * 8);
-
-	bool invertArea = (get().vCounter >= startRow) && (get().vCounter < endRow);
-	
-	int startCol = hRight ? hPos : 0;
-	int endCol = hRight ? tileNumber : hPos;
-
-	if(invertArea)
-	{
-		startCol = 0;
-		endCol = tileNumber;
-	}
-
-	for(int tilecolumn = startCol; tilecolumn < endCol; ++tilecolumn)
-	{
-		for(int xAdvance = 0; xAdvance < 8; ++xAdvance)
-		{
-			word nameBaseOffset = baseAddress;
-			nameBaseOffset += tileRow * (width * 2);
-			nameBaseOffset += tilecolumn * 2;
-
-			bool hFlip = TestBit(get().vram[nameBaseOffset], 3);
-			bool vFlip = TestBit(get().vram[nameBaseOffset], 4);
-
-			int xPixel = xAdvance;
-
-			if(hFlip)
-			{
-				xPixel = 7 - xAdvance;
-			}
-
-			int yPixel = get().vCounter % 8;
-
-			if(vFlip)
-			{
-				yPixel = 7 - (get().vCounter % 8);
-			}
-
-			int absX = (tilecolumn * 8) + xAdvance;
-
-			if(TestBit(get().vram[nameBaseOffset], 7) != priority)
-			{
-				continue;
-			}
-
-			word tileData = (get().vram[nameBaseOffset] & 0x7) << 8;
-			tileData |= get().vram[nameBaseOffset + 1];
-			tileData *= 32;
-
-			tileData += 4 * yPixel;
-
-			byte data1 = get().vram[tileData];
-			byte data2 = get().vram[tileData + 1];
-			byte data3 = get().vram[tileData + 3];
-			byte data4 = get().vram[tileData + 4];
-
-			if((absX >= get().vdpResolution.first) || (TestBit(get().vdpRegister[0], 5) && absX < 8))
-			{
-				continue;
-			}
-
-			int colorIndex = 0;
-
-			switch(xPixel)
-			{
-				case 0 :
-				colorIndex = data1 >> 4;
-				break;
-
-				case 1:
-				colorIndex = data1 & 0xF;
-				break;
-
-				case 2:
-				colorIndex = data2 >> 4;
-				break;
-
-				case 3:
-				colorIndex = data2 & 0xF;
-				break;
-
-				case 4:
-				colorIndex = data3 >> 4;
-				break;
-
-				case 5:
-				colorIndex = data3 & 0xF;
-				break;
-
-				case 6:
-				colorIndex = data4 >> 4;
-				break;
-
-				case 7:
-				colorIndex = data4 & 0xF;
-				break;
-			}
-
-			byte palette = (get().vram[nameBaseOffset] >> 5) & 0x3;
-
-			int cramAddress = (16 * palette) + colorIndex;
-			word color = get().cram[cramAddress];
-
-			byte red = get().GetColorShade(color & 0xF);
-			byte green = get().GetColorShade((color >> 4) & 0xF);
-			byte blue = get().GetColorShade((color >> 8) & 0xF);
-
-			if(TestBit(get().vdpRegister[0xC], 3))
-			{
-				get().SetIntensity(priority, absX, false, colorIndex, palette);
-			}
-
-			if(colorIndex == 0)
-			{
-				continue;
-			}
-
-			CRT::Write(absX, get().vCounter, red, green, blue);
-		}
-	}
-}
-
-void YM7101::RenderSprite(bool priority)
-{
-	int spriteCount = 0;
-	word spriteBase = get().GetSpriteBase();
-
-	bool cell40 = get().Is40Cell();
-	int maxSpriteOnScanline = cell40 ? 20 : 16;
-	int maxPixel = cell40 ? 320 : 256;
-
-	int nextSprite = 0;
-	int spriteIndex = -1;
-
-	do
-	{
-		spriteIndex++;
-
-		int sprite = nextSprite;
-		int index = sprite * 8;
-
-		nextSprite = get().vram[spriteBase + index + 3] & 0x7F;
-
-		get().maxSprites--;
-
-		if(TestBit(get().vram[spriteBase + index + 4], 7) != priority)
-		{
-			continue;
-		}
-
-		int yPos = get().vram[spriteBase + index] << 8;
-		yPos |= get().vram[spriteBase + index + 1];
-
-		if(TestBit(get().vdpRegister[0xC], 1))
-		{
-			yPos = (yPos & 0x3FE) >> 1;
-		}
-		else
-		{
-			yPos &= 0x3FF;
-		}
-
-		yPos -= 128;
-
-		int height = (get().vram[spriteBase + index + 2] & 0x3);
-
-		int spriteHeight = ((height + 1) * 8);
-
-		if((get().vCounter >= yPos) && (get().vCounter < (yPos + spriteHeight)))
-		{
-			int hValue = (get().vram[spriteBase + index + 2] >> 2) & 0x3;
-
-			spriteCount++;
-
-			if(spriteCount > maxSpriteOnScanline)
-			{
-				BitSet(get().status, 6);
-				break;
-			}
-
-			int xPos = (get().vram[spriteBase + index + 6] & 0x3) << 8;
-			xPos |= get().vram[spriteBase + index + 7];
-
-			if(xPos == 0 && !TestBit(get().vdpRegister[0xC], 1))
-			{
-				get().spriteMask = std::make_pair(spriteIndex, std::make_pair(yPos, yPos + spriteHeight));
-			}
-			else if(xPos == 1)
-			{
-				get().spriteMask2 = yPos;
-			}
-
-			xPos -= 128;
-
-			byte palette = (get().vram[spriteBase + index + 4] >> 5) & 0x3;
-
-			word tileNumber = (get().vram[spriteBase + index + 4] & 0x7) << 8;
-			tileNumber |= get().vram[spriteBase + index + 5];
-
-			bool vFlip = TestBit(get().vram[spriteBase + index + 4], 4);
-			bool hFlip = TestBit(get().vram[spriteBase + index + 4], 3);
-
-			int yIndex = get().vCounter - yPos;
-
-			if(vFlip)
-			{
-				yIndex = (spriteHeight - 1) - yIndex;
-			}
-
-			int startAddress = 0;
-			int memSize = 0;
-
-			if(TestBit(get().vdpRegister[0xC], 1))
-			{
-				memSize = 64;
-				startAddress = tileNumber * memSize;
-				startAddress += (yIndex * 8);
-			}
-			else
-			{
-				memSize = 32;
-				startAddress = tileNumber * memSize;
-				startAddress += (yIndex * 4);
-			}
-
-			for(int width = 0; width <= hValue; ++width)
-			{
-				int patternIndex = width;
-
-				if(hFlip)
-				{
-					patternIndex = (hValue - width);
-				}
-
-				int patternAddress = startAddress + (patternIndex * ((height + 1) * memSize));
-
-				byte data1 = get().vram[patternAddress];
-				byte data2 = get().vram[patternAddress + 1];
-				byte data3 = get().vram[patternAddress + 2];
-				byte data4 = get().vram[patternAddress + 3];
-
-				for(int i = 0; i < 8; ++i)
-				{
-					int x = (xPos + i);
-
-					if((x < 0) || (x >= get().vdpResolution.first) || (TestBit(get().vdpRegister[0], 5) && x < 8))
-					{
-						get().spritePixelCount++;
-						if(get().spritePixelCount >= maxPixel)
-						{
-							return;
-						}
-						continue;
-					}
-
-					int colorIndex = 0;
-
-					switch(hFlip ? (7 - i) : i)
-					{
-						case 0 :
-						colorIndex = data1 >> 4;
-						break;
-
-						case 1:
-						colorIndex = data1 & 0xF;
-						break;
-
-						case 2:
-						colorIndex = data2 >> 4;
-						break;
-
-						case 3:
-						colorIndex = data2 & 0xF;
-						break;
-
-						case 4:
-						colorIndex = data3 >> 4;
-						break;
-
-						case 5:
-						colorIndex = data3 & 0xF;
-						break;
-
-						case 6:
-						colorIndex = data4 >> 4;
-						break;
-
-						case 7:
-						colorIndex = data4 & 0xF;
-						break;
-					}
-
-					int cramAddress = (16 * palette) + colorIndex;
-					word color = get().cram[cramAddress];
-
-					byte red = get().GetColorShade(color & 0xF);
-					byte green = get().GetColorShade((color >> 4) & 0xF);
-					byte blue = get().GetColorShade((color >> 8) & 0xF);
-
-					bool transparentIntensity = false;
-					if(TestBit(get().vdpRegister[0xC], 3) && (get().spriteLineData[x] > spriteIndex))
-					{
-						transparentIntensity = get().SetIntensity(priority, x, true, colorIndex, palette);
-						if(transparentIntensity)
-						{
-						 	get().spritePixelCount++;
-						 	get().spriteLineData[x] = spriteIndex;
-						 	if(get().spritePixelCount >= maxPixel)
-						 	{
-						 		return;
-						 	}
-						 	continue;
-						}
-					}
-
-					if(get().spriteLineData[x] != get().maxInt)
-					{
-						BitSet(get().status, 5);
-					}
-
-					if(get().spriteLineData[x] > spriteIndex)
-					{
-						get().spritePixelCount++;
-						if(((red == 0xE0) && (green == 0x0) && (blue == 0xE0)) || (colorIndex == 0) || transparentIntensity)
-						{
-							continue;
-						}
-
-						if((get().vCounter >= get().spriteMask.second.first) && (get().vCounter <= get().spriteMask.second.second) && (spriteIndex > get().spriteMask.first) && ((get().spriteMask2 == 0xFF) || get().spriteMask.second.first == get().spriteMask2))
-						{
-							continue;
-						}
-
-						get().spriteLineData[x] = spriteIndex;
-
-						CRT::Write(x, get().vCounter, red, green, blue);
-
-						if(get().spritePixelCount >= maxPixel)
-						{
-							return;
-						}
-					}
-				}
-				xPos += 8;
-			}
-		}
-	}while(nextSprite != 0 && get().maxSprites > 0);
-}
-
 void YM7101::Render()
 {
-	get().spritePixelCount = 0;
-
-	if(TestBit(get().vdpRegister[0], 0))
-	{
-		//screen disabled
-		return;
-	}
-
-	std::memset(&get().lineIntensity, INTENSITY_NOTSET, sizeof(int) * 320);
-	std::memset(&get().spriteLineData, get().maxInt, sizeof(byte) * 320);
-
-	get().RenderBackdrop();
-
-	if(!TestBit(get().vdpRegister[1], 6))
-	{
-		//que le backdrop
-		return;
-	}
-
-	word baseLayerA = get().GetBaseLayerA();
-	word baseLayerB = get().GetBaseLayerB();
-	word baseWindow = get().GetBaseWindow();
-
-	std::pair<int, int> layerSize = get().GetLayerSize();
-
-	word aHScroll = 0;
-	word bHScroll = 0;
-
-	get().GetHScroll(get().vCounter, aHScroll, bHScroll);
-
-	bool cell40 = get().Is40Cell();
-
-	for(int i = 0; i < 2; ++i)
-	{
-		get().maxSprites = cell40 ? 80 : 64;
-		bool priority;
-		if(i == 0)
-		{
-			priority = false;
-		}
-		else
-		{
-			priority = true;
-		}
-
-		get().RenderLayer(baseLayerB, priority, layerSize.first, layerSize.second, bHScroll, LAYER_B);
-		get().RenderLayer(baseLayerA, priority, layerSize.first, layerSize.second, aHScroll, LAYER_A);
-		get().RenderSprite(priority);
-		get().RenderWindow(baseWindow, priority);
-	}
-
-	if(TestBit(get().vdpRegister[0xC], 3))
-	{
-		for(int i = 0; i < get().vdpResolution.first; ++i)
-		{
-			CRT::ApplyIntensity(i, get().vCounter, get().lineIntensity[i]);
-		}
-	}
+    auto& s=get();
+    const bool interlace=(s.vdpRegister[12]&6)==6;
+    const unsigned tileHeight=interlace?16:8;
+    const unsigned outputY=interlace?(unsigned(s.vCounter)*2+((s.status>>4)&1)):s.vCounter;
+    if(s.vCounter>=s.vdpResolution.second) return;
+    const unsigned screenWidth=s.vdpResolution.first;
+    struct Pixel { unsigned color=0; bool high=false; };
+    auto vword=[&](unsigned address) { return word((word(s.vram[address])<<8)|s.vram[address+1]); };
+    auto pattern=[&](word attribute,unsigned x,unsigned y) {
+        if(attribute&0x0800) x=7-x;
+        if(attribute&0x1000) y=tileHeight-1-y;
+        const unsigned address=(attribute&0x07ff)*(interlace?64:32)+y*4+x/2;
+        const byte packed=s.vram[address];
+        return unsigned((x&1)?packed&15:packed>>4);
+    };
+    const auto size=s.GetLayerSize();
+    word scrollA=0,scrollB=0;
+    s.GetHScroll(s.vCounter,scrollA,scrollB);
+    auto plane=[&](unsigned layer,unsigned x) {
+        Pixel pixel;
+        const unsigned scroll=layer?scrollB:scrollA;
+        const unsigned sx=(x-scroll)&(unsigned(size.first)*8-1);
+        const unsigned vertical=s.GetVScroll(layer,x/16)&(interlace?0x7ff:0x3ff);
+        const unsigned sy=(outputY+vertical)&(unsigned(size.second)*tileHeight-1);
+        const unsigned base=layer?s.GetBaseLayerB():s.GetBaseLayerA();
+        const word attribute=vword(base+((sy/tileHeight)*size.first+sx/8)*2);
+        const unsigned color=pattern(attribute,sx&7,sy&(tileHeight-1));
+        pixel.color=color?(((attribute>>9)&0x30)|color):0;
+        pixel.high=(attribute&0x8000)!=0;
+        return pixel;
+    };
+    auto window=[&](unsigned x) {
+        Pixel pixel;
+        const unsigned columns=s.Is40Cell()?64:32;
+        const unsigned base=(s.vdpRegister[3]&(s.Is40Cell()?0x3c:0x3e))<<10;
+        const word attribute=vword(base+((outputY/tileHeight)*columns+x/8)*2);
+        const unsigned color=pattern(attribute,x&7,outputY&(tileHeight-1));
+        pixel.color=color?(((attribute>>9)&0x30)|color):0;
+        pixel.high=(attribute&0x8000)!=0;
+        return pixel;
+    };
+    std::array<Pixel,320> sprites{};
+    const unsigned maximumSprites=s.Is40Cell()?80:64;
+    const unsigned maximumOnLine=s.Is40Cell()?20:16;
+    const unsigned spriteBase=s.GetSpriteBase();
+    unsigned link=0,onLine=0,dots=0;
+    bool earlierNonzeroX=false;
+    for(unsigned visited=0;visited<maximumSprites&&TestBit(s.vdpRegister[1],6);++visited)
+    {
+        if(link>=maximumSprites) break;
+        const unsigned at=spriteBase+link*8;
+        const unsigned rawY=vword(at)&(interlace?0x3ff:0x1ff);
+        const int sy=int(rawY)-(interlace?256:128);
+        const byte dimensions=s.vram[at+2];
+        const unsigned tilesHigh=(dimensions&3)+1,tilesWide=((dimensions>>2)&3)+1;
+        const unsigned rawX=vword(at+6)&0x1ff;
+        const int sx=int(rawX)-128;
+        const word attribute=vword(at+4);
+        link=s.vram[at+3]&0x7f;
+        if(int(outputY)>=sy&&int(outputY)<sy+int(tilesHigh*tileHeight))
+        {
+            if(++onLine>maximumOnLine) { s.status|=0x40;break; }
+            if(rawX==0&&earlierNonzeroX) break;
+            earlierNonzeroX|=rawX!=0;
+            unsigned py=unsigned(int(outputY)-sy);
+            if(attribute&0x1000) py=tilesHigh*tileHeight-1-py;
+            for(unsigned pos=0;pos<tilesWide*8;++pos)
+            {
+                if(dots++>=screenWidth) { s.status|=0x40;break; }
+                const int x=sx+int(pos);
+                if(x<0||x>=int(screenWidth)) continue;
+                const unsigned px=(attribute&0x0800)?tilesWide*8-1-pos:pos;
+                const unsigned tile=(attribute&0x7ff)+(px/8)*tilesHigh+py/tileHeight;
+                const word tileAttribute=word((attribute&0xe000)|(tile&0x7ff));
+                const unsigned color=pattern(tileAttribute,px&7,py&(tileHeight-1));
+                if(!color) continue;
+                if(sprites[x].color) s.status|=0x20;
+                else sprites[x]={unsigned(((attribute>>9)&0x30)|color),(attribute&0x8000)!=0};
+            }
+            if(dots>screenWidth) break;
+        }
+        if(link==0) break;
+    }
+    for(unsigned x=0;x<screenWidth;++x)
+    {
+        unsigned selected=s.vdpRegister[7]&0x3f;
+        int intensity=INTENSITY_NORMAL;
+        if(TestBit(s.vdpRegister[1],6)&&!TestBit(s.vdpRegister[0],0)&&!(TestBit(s.vdpRegister[0],5)&&x<8))
+        {
+            const unsigned edgeX=(s.vdpRegister[17]&31)*16;
+            const unsigned edgeY=(s.vdpRegister[18]&31)*tileHeight;
+            const bool horizontal=(s.vdpRegister[17]&0x80)?x>=edgeX:x<edgeX;
+            const bool vertical=(s.vdpRegister[18]&0x80)?outputY>=edgeY:outputY<edgeY;
+            const Pixel a=(horizontal||vertical)?window(x):plane(0,x);
+            const Pixel b=plane(1,x);
+            const Pixel sprite=sprites[x];
+            const bool shadows=TestBit(s.vdpRegister[12],3);
+            intensity=shadows&&!a.high&&!b.high?INTENSITY_SHADOW:INTENSITY_NORMAL;
+            // Plane priorities are resolved before selecting the first SAT sprite.
+            if(b.color) selected=b.color;
+            if(a.color&&(!b.high||a.high||!b.color)) selected=a.color;
+            const bool highPlane=(a.color&&a.high)||(b.color&&b.high);
+            if(sprite.color&&(sprite.high||!highPlane))
+            {
+                if(shadows&&sprite.color==0x3e) intensity=std::min(INTENSITY_LIGHT,intensity+1);
+                else if(shadows&&sprite.color==0x3f) intensity=INTENSITY_SHADOW;
+                else
+                {
+                    selected=sprite.color;
+                    if(sprite.high||(sprite.color&15)==14) intensity=INTENSITY_NORMAL;
+                }
+            }
+        }
+        const word color=s.cram[selected];
+        CRT::Write(x,outputY,s.GetColorShade(color&15),s.GetColorShade((color>>4)&15),s.GetColorShade((color>>8)&15));
+        if(intensity!=INTENSITY_NORMAL) CRT::ApplyIntensity(x,outputY,intensity);
+    }
 }
 
-void YM7101::Update(int clicks)
+void YM7101::Update(int clicks) { if (clicks>0) Advance(unsigned(clicks)*7); }
+unsigned YM7101::TakeStallCycles() { return get().dmaType==1 ? unsigned(get().dmaReady-get().totalCycles):0; }
+bool YM7101::Z80Interrupt()
 {
+    const unsigned edge=get().Is40Cell()?788:770;
+    const unsigned blank=get().vdpResolution.second;
+    return (get().scanline==blank && get().lineCycles>=edge) ||
+           (get().scanline==blank+1 && get().lineCycles<edge);
+}
+unsigned YM7101::Scanline() { return get().scanline; }
+unsigned YM7101::LineCycles() { return get().lineCycles; }
+void YM7101::Advance(unsigned ticks)
+{
+    auto& s=get();
+    while (ticks) {
+        unsigned step=std::min(ticks,3420-s.lineCycles);
+        const unsigned vintEdge=s.Is40Cell()?788:770;
+        if(s.scanline==unsigned(s.vdpResolution.second)&&s.lineCycles<vintEdge)
+            step=std::min(step,vintEdge-s.lineCycles);
+        if(s.fifoCount) step=std::min<unsigned>(step,unsigned(s.fifo[0].ready-s.totalCycles));
+        if(s.dmaType) step=std::min<unsigned>(step,unsigned(s.dmaReady-s.totalCycles));
+        s.lineCycles+=step;ticks-=step;s.totalCycles+=step;
+        if(s.fifoCount && s.fifo[0].ready==s.totalCycles) {
+            const auto entry=s.fifo[0];s.CommitWrite(entry.address,entry.code,entry.value);
+            for(unsigned i=1;i<s.fifoCount;++i) s.fifo[i-1]=s.fifo[i];
+            --s.fifoCount;
+        }
+        if(s.dmaType && s.dmaReady==s.totalCycles) s.DmaStep();
+        if (s.lineCycles>=3420) {
+            s.lineCycles=0;
+            if (s.scanline<unsigned(s.vdpResolution.second)) { s.vCounter=word(s.scanline);s.Render(); }
+            if (s.scanline<=unsigned(s.vdpResolution.second)) {
+                if (!s.lineInt) { s.lineInt=s.vdpRegister[10];s.horizontalPending=true; }
+                else --s.lineInt;
+            } else s.lineInt=s.vdpRegister[10];
+            ++s.scanline;
 
-	bool cell40 = get().Is40Cell();
-	if((get().vdpResolution.first == 256) && cell40)
-	{
-		get().vdpResolution = std::make_pair<int, int>(320, 224);
-		get().is256Screen = false;
-	}
-	else if((get().vdpResolution.first == 320) && !cell40)
-	{
-		get().vdpResolution = std::make_pair<int, int>(256, 224);
-		get().is256Screen = true;
-	}
-
-	bool nextLine = false;
-
-	get().refresh = false;
-
-	if((get().hCounter + clicks) > 0xFF && !get().hCounterFirst)
-	{
-		nextLine = true;
-	}
-
-	get().hCounter = (get().hCounter + clicks) % 0xFF;
-
-	int jumpBackCoord = 0xE9;
-	int jumpBackTo = cell40 ? 0x53 : 0x93;
-
-	if(get().hCounterFirst && get().hCounter > jumpBackCoord)
-	{
-		get().hCounterFirst = false;
-		int delta = get().hCounter - jumpBackCoord;
-		get().hCounter = jumpBackTo + delta;
-	}
-
-	if(get().hCounter >= 0xE4 || get().hCounter < 0x8)
-	{
-		BitSet(get().status, 2);
-	}
-	else
-	{
-		BitReset(get().status, 2);
-	}
-
-	if(nextLine)
-	{
-		get().hCounterFirst = true;
-
-		word vcount = get().vCounter;
-
-		get().vCounter++;
-
-		if(vcount == 0xFF)
-		{
-			get().vCounter = 0;
-			get().vCounterFirst = true;
-
-			BitReset(get().status, 7);
-			BitReset(get().status, 5);
-
-			get().lineInt = get().vdpRegister[0xA];
-
-			if(TestBit(get().vdpRegister[0xC], 1))
-			{
-				if(!TestBit(get().status, 4))
-				{
-					BitSet(get().status, 4);
-				}
-				else
-				{
-					BitReset(get().status, 4);
-				}
-			}
-
-			get().spriteMask = std::make_pair(0xFF, std::make_pair(0xFF, 0xFF));
-			get().spriteMask2 = 0xFF;
-
-			get().Render();
-		}
-		else if((vcount == 0xEB) && get().vCounterFirst)
-		{
-			get().vCounterFirst = false;
-			int delta = get().vCounter - 0xEB;
-			get().vCounter = 0xE5 + delta;
-		}
-		else if(get().vCounter == get().vdpResolution.second)
-		{
-			BitSet(get().status, 7);
-			get().refresh = true;
-		}
-
-		if(get().vCounter >= 0xE0)
-		{
-			BitSet(get().status, 3);
-		}
-		else
-		{
-			BitReset(get().status, 3);
-		}
-
-		if(get().vCounter >= get().vdpResolution.second)
-		{
-			if(get().vCounter != get().vdpResolution.second)
-			{
-				get().lineInt = get().vdpRegister[0xA];
-			}
-		}
-
-		if(get().vCounter < get().vdpResolution.second)
-		{
-			get().Render();
-		}
-
-		if(get().vCounter <= get().vdpResolution.second)
-		{
-			bool underflow = false;
-
-			if(get().lineInt == 0)
-			{
-				underflow = true;
-			}
-
-			get().lineInt--;
-
-			if(underflow)
-			{
-				get().lineInt = get().vdpRegister[0xA];
-
-				if(TestBit(get().vdpRegister[0], 0))
-				{
-					get().requestInt = true;
-				}
-			}
-		}
-	}
-
-	if(TestBit(get().status, 7) && TestBit(get().vdpRegister[1], 5))
-	{
-		get().requestInt = true;
-	}
+            if (s.scanline>=unsigned(Genesis::IsPAL()?313:262)) {
+                s.scanline=0;s.lineInt=s.vdpRegister[10];
+                BitReset(s.status,7);BitReset(s.status,5);BitReset(s.status,6);
+                if (TestBit(s.vdpRegister[12],1)) s.status^=0x10;
+            }
+        }
+        if(s.scanline==unsigned(s.vdpResolution.second)&&s.lineCycles==vintEdge)
+        {
+            s.status|=0x80;s.verticalPending=true;
+        }
+        if (s.scanline>=unsigned(s.vdpResolution.second) || !TestBit(s.vdpRegister[1],6)) BitSet(s.status,3);else BitReset(s.status,3);
+        const unsigned blankStart=s.Is40Cell()?228:280,blankEnd=s.Is40Cell()?872:860;
+        if (s.lineCycles>=blankStart && s.lineCycles<blankEnd) BitSet(s.status,2);else BitReset(s.status,2);
+        s.requestInt=(s.verticalPending && TestBit(s.vdpRegister[1],5)) || (s.horizontalPending && TestBit(s.vdpRegister[0],4));
+    }
 }

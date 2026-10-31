@@ -309,8 +309,141 @@ def instruction_cases():
         add(exception(group, f"user opcode {opcode:04x} privilege violation", opcode, 8, {"sr": 0}, saved_pc=PC))
     add(case("Test_NOP", "NOP preserves all flags", [0x4E71], cycles=4))
     cases.extend(addressing_cases())
+    cases.extend(timing_cases())
     for index, item in enumerate(cases):
         item["index"] = index
+    return cases
+
+
+def timing_cases():
+    """Motorola 68000 timing totals, also checked by independent MAME vectors.
+
+    These deliberately cover exact encodings where pinned Musashi's tables are
+    inaccurate; they are never obtained from DrivOnix or a recorded baseline.
+    """
+    cases = []
+    initial = {"d0": 1, "d1": 3, "a0": 1, "a1": 3, "sr": 0x2700}
+    for name, base, subtract in (("ADD", 0xD200, False), ("SUB", 0x9200, True)):
+        result, sr = arithmetic(3, 1, 32, 0x2700, subtract)
+        for ea, source in ((0, "Dn"), (8, "An")):
+            cases.append(case("Test_" + name, f"{name}.L {source},Dn takes 8 cycles",
+                              [base | 0x80 | ea], initial, {"d1": result, "sr": sr}, cycles=8))
+        for bits, size in ((8, 0), (16, 0x40)):
+            result, sr = arithmetic(3, 1, bits, 0x2700, subtract)
+            cases.append(case("Test_" + name, f"{name}.{bits} immediate-EA source takes 8 cycles",
+                              [base | size | 0x3C, 1], initial, {"d1": result, "sr": sr}, cycles=8))
+    for name, base, subtract in (("ADDA", 0xD3C0, False), ("SUBA", 0x93C0, True)):
+        result = 2 if subtract else 4
+        for ea, source in ((0, "Dn"), (8, "An")):
+            cases.append(case("Test_" + name, f"{name}.L {source},An takes 8 cycles",
+                              [base | ea], initial, {"a1": result}, cycles=8))
+        cases.append(case("Test_" + name, f"{name}.W immediate-EA source takes 12 cycles",
+                          [(base & ~0x100) | 0x3C, 1], initial, {"a1": result}, cycles=12))
+    for name, base in (("AND", 0xC200), ("OR", 0x8200)):
+        result = 1 if name == "AND" else 3
+        cases.append(case("Test_" + name, f"{name}.L Dn,Dn takes 8 cycles", [base | 0x80],
+                          initial, {"d1": result, "sr": flags(result, 32, 0x2700)}, cycles=8))
+        for bits, size in ((8, 0), (16, 0x40)):
+            cases.append(case("Test_" + name, f"{name}.{bits} immediate-EA source takes 8 cycles",
+                              [base | size | 0x3C, 1], initial,
+                              {"d1": result, "sr": flags(result, bits, 0x2700)}, cycles=8))
+    for name, opcode, result in (("ADDQ", 0x5249, 4), ("SUBQ", 0x5349, 2)):
+        cases.append(case("Test_" + name, f"{name}.W #1,An takes 8 cycles and preserves flags",
+                          [opcode], initial, {"a1": result}, cycles=8))
+    # Invalid decimal digit bytes still have repeatable correction-network
+    # behavior; Musashi's decimal comparisons do not reproduce these cases.
+    cases.append(case("Test_ABCD", "ABCD invalid digits 5D+36+X retain 9A without carry", [0xC300],
+                      {"d0": 0x36, "d1": 0x5D, "sr": 0x2710},
+                      {"d1": 0x9A, "sr": 0x2700}, sr_mask=0xFFF5, cycles=6))
+    cases.append(case("Test_SBCD", "SBCD invalid positive digits DA-01 retain D9 without carry", [0x8300],
+                      {"d0": 1, "d1": 0xDA, "sr": 0x2700},
+                      {"d1": 0xD9, "sr": 0x2700}, sr_mask=0xFFF5, cycles=6))
+    cases.append(case("Test_SBCD", "SBCD invalid digits 10-0F-X retain FA with decimal borrow", [0x8300],
+                      {"d0": 0x0F, "d1": 0x10, "sr": 0x2710},
+                      {"d1": 0xFA, "sr": 0x2711}, sr_mask=0xFFF5, cycles=6))
+    cases.append(case("Test_NBCD", "NBCD invalid FF with X produces 9A with carry", [0x4800],
+                      {"d0": 0xFF, "sr": 0x2710},
+                      {"d0": 0x9A, "sr": 0x2711}, sr_mask=0xFFF5, cycles=6))
+    cases.append(case("Test_ANDI", "ANDI.L immediate to data register takes 16 cycles", [0x0281, 0, 1],
+                      {"d1": 3, "sr": 0x2700}, {"d1": 1, "sr": 0x2700}, cycles=16))
+    for name, dynamic, immediate, low_cycles in (("BCHG", 0x0141, 0x0841, 6),
+                                                ("BCLR", 0x0181, 0x0881, 8),
+                                                ("BSET", 0x01C1, 0x08C1, 6)):
+        for bit in (1, 17):
+            value = 0 if name == "BCLR" else 1 << bit
+            for static in (False, True):
+                words = [immediate, bit] if static else [dynamic]
+                state = {"d0": bit if not static else 0, "d1": 0, "sr": 0x2700}
+                cases.append(case("Test_" + name, f"{name} {'immediate' if static else 'dynamic'} register bit {bit} timing",
+                                  words, state, {"d1": value, "sr": 0x2704},
+                                  cycles=low_cycles + (4 if static else 0) + (2 if bit >= 16 else 0)))
+    cases.append(case("Test_BTST", "BTST dynamic immediate EA takes 10 cycles", [0x013C, 0],
+                      {"d0": 0, "sr": 0x2700}, {"sr": 0x2704}, cycles=10))
+    for name, opcode in (("DIVU", 0x82C0), ("DIVS", 0x83C0)):
+        item = exception("Test_" + name, name + " divide-zero clears incoming carry before stacking SR",
+                         opcode, 5, {"d0": 0, "d1": 8, "sr": 0x2701}, mask=0xFFF1)
+        item["final"]["sr"] &= ~1
+        item["expected_ram"][SSP - 5] &= ~1
+        cases.append(item)
+    for bits, opcode in ((16, 0x4278), (32, 0x42B8)):
+        frame = bytes_at(SSP - 14, 21, 2) + bytes_at(SSP - 12, DATA + 1, 4)
+        frame += bytes_at(SSP - 8, opcode, 2) + bytes_at(SSP - 6, 0x2701, 2) + bytes_at(SSP - 4, PC + 4, 4)
+        item = case("Test_CLR", f"CLR.{bits} odd memory faults on dummy read before flags change",
+                    [opcode, DATA + 1], {"sr": 0x2701},
+                    {"pc": HANDLER, "ssp": SSP - 14, "sr": 0x2701}, ram=bytes_at(12, HANDLER, 4),
+                    writes=frame, cycles=62)
+        item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
+        cases.append(item)
+    for opcode in range(0xF620, 0xF628):
+        cases.append(exception("Test_ILLEGAL", f"68040 MOVE16 {opcode:04x} raises line F on MC68000",
+                               opcode, 11, saved_pc=PC))
+    for words, initial, changes, target, saved, clocks, label in (
+            ([0x40D8], {"a0": DATA + 1}, {"a0": DATA + 3}, DATA + 1, PC + 2, 58, "postincrement"),
+            ([0x40E0], {"a0": DATA + 3}, {"a0": DATA + 1}, DATA + 1, PC + 4, 60, "predecrement"),
+            ([0x40F8, DATA + 1], {}, {}, DATA + 1, PC + 4, 62, "absolute word"),
+            ([0x40F9, 0, DATA + 1], {}, {}, DATA + 1, PC + 6, 66, "absolute long")):
+        frame = bytes_at(SSP - 14, 21, 2) + bytes_at(SSP - 12, target, 4)
+        frame += bytes_at(SSP - 8, words[0], 2) + bytes_at(SSP - 6, 0x2701, 2) + bytes_at(SSP - 4, saved, 4)
+        item = case("Test_MOVE_FROM_SR", "MOVE SR " + label + " faults on destination dummy read",
+                    words, {"sr": 0x2701, **initial},
+                    {"pc": HANDLER, "ssp": SSP - 14, "sr": 0x2701, **changes},
+                    ram=bytes_at(12, HANDLER, 4), writes=frame, cycles=clocks)
+        item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
+        cases.append(item)
+    cases.append(case("Test_LINK", "LINK A7 stores original stack pointer before decrement", [0x4E57, 0],
+                      {"sr": 0x2700}, {"ssp": SSP - 4}, writes=bytes_at(SSP - 4, SSP, 4), cycles=16))
+    for value, bound, clocks, negative, label in ((1, 0, 42, False, "upper bound"),
+                                                (0xFFFE, 0, 44, True, "negative lower check"),
+                                                (0xFFFF, 0xFFFE, 42, True, "negative upper check")):
+        status = 0x2705 | (N if negative else 0)
+        frame = bytes_at(SSP - 6, status, 2) + bytes_at(SSP - 4, PC + 2, 4)
+        item = case("Test_CHK", "CHK memory " + label + " trap timing", [0x4190],
+                    {"sr": 0x2705, "a0": DATA, "d0": value},
+                    {"pc": HANDLER, "ssp": SSP - 6, "sr": status},
+                    ram=bytes_at(24, HANDLER, 4) + bytes_at(DATA, bound, 2), writes=frame,
+                    cycles=clocks, sr_mask=0xFFF8)
+        item["memory_masks"] = {SSP - 5: 0xF8}
+        cases.append(item)
+    for name, opcode, saved in (("JMP", 0x4EE8, PC + 2), ("JSR", 0x4EA8, PC + 4)):
+        frame = bytes_at(SSP - 14, 22, 2) + bytes_at(SSP - 12, DATA + 1, 4)
+        frame += bytes_at(SSP - 8, opcode, 2) + bytes_at(SSP - 6, 0x2700, 2) + bytes_at(SSP - 4, saved, 4)
+        item = case("Test_" + name, name + " odd displacement target faults in 60 cycles", [opcode, 1],
+                    {"sr": 0x2700, "a0": DATA}, {"pc": HANDLER, "ssp": SSP - 14},
+                    ram=bytes_at(12, HANDLER, 4), writes=frame, cycles=60)
+        item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
+        cases.append(item)
+    for words, source, target, saved, clocks, status, label in (
+            ([0x2140, 1], {"a0": DATA, "d0": 0x12345678}, DATA + 1, PC + 4, 62, 0x2703, "register to displacement"),
+            ([0x2180, 0x1001], {"a0": DATA, "d0": 0x12345678}, DATA + 1, PC + 4, 64, 0x2703, "register to index"),
+            ([0x20BC, 0x1234, 0x5678], {"a0": DATA + 1}, DATA + 1, PC + 8, 66, 0x270F, "immediate to indirect"),
+            ([0x20FC, 0x1234, 0x5678], {"a0": DATA + 1}, DATA + 1, PC + 8, 66, 0x270F, "immediate to postincrement")):
+        frame = bytes_at(SSP - 14, 5, 2) + bytes_at(SSP - 12, target, 4)
+        frame += bytes_at(SSP - 8, words[0], 2) + bytes_at(SSP - 6, status, 2) + bytes_at(SSP - 4, saved, 4)
+        item = case("Test_MOVE", "MOVE.L " + label + " fault preserves staged condition flags", words,
+                    {"sr": 0x270F, **source}, {"pc": HANDLER, "ssp": SSP - 14, "sr": status},
+                    ram=bytes_at(12, HANDLER, 4), writes=frame, cycles=clocks)
+        item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31}
+        cases.append(item)
     return cases
 
 
@@ -433,5 +566,11 @@ def sequence_cases():
                 # and upper SSW bits are not defined. Assert the defined fields.
                 item["memory_masks"] = {SSP - 14: 0, SSP - 13: 31, **{SSP - 4 + n: 0 for n in range(4)}}
                 add(item)
+    for opcode, extension in ((0x31C0, [PC + 4]), (0x33C0, [0, PC + 6])):
+        address = PC + 2 + 2 * len(extension)
+        add(case("sequences", f"self modifying MOVE extension words preserve next prefetched opcode ({opcode:04x})",
+                 [opcode, *extension, 0x7201], {"d0": 0x7202},
+                 {"d1": 1, "pc": address + 2, "sr": 0x2710},
+                 writes=bytes_at(address, 0x7202, 2), actions=[0, 0]))
     for index, item in enumerate(cases): item["index"] = index
     return cases

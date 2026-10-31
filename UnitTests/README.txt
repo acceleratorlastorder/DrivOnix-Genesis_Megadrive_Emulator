@@ -1,78 +1,63 @@
 CPU opcode tests
 ================
 
-Requires CMake, a C++11 compiler, and Python 3.9 or newer. Build and run without
-Windows, CSFML, a display, or a game ROM:
+The original MC68000 core is repaired in place. These tests compile the same
+M68k/m68k.cpp and Bits/bitsUtils.cpp used by the emulator, including the production
+fetch, legality checks and generated decoder. No replacement 68000 core is linked
+into the emulator. The independent oracle is an optional test target only.
+
+Build and run the seven offline CTest targets with CMake, a C++11 compiler and
+Python 3.9 or newer; no display, CSFML, game ROM or network is needed:
 
     cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug
     cmake --build build/cpu --config Debug --parallel 2
     ctest --test-dir build/cpu -C Debug --output-on-failure
 
-The CMake target compiles the actual M68k/m68k.cpp and Bits/bitsUtils.cpp.
-DRIVONIX_CPU_TESTS selects cpuTestMemory.cpp as an isolated, big-endian memory
-fixture instead of the console's display/I/O dependencies. It preserves
-the current RAM mapping and read-only ROM writes. This is CPU unit coverage;
-it does not validate Genesis I/O, rendering, audio, ROM booting, or game behavior.
+opcode_reference and opcode_optimized check the existing asserted C++ cases with
+both decoders. legacy_cpu_tests retains the 17 original asserted groups.
+conformance_adapter and complete_suite_adapter validate the input decoder,
+comparison masks, worker protocol and crash recovery with independent fixtures
+and deliberately corrupted results. handwritten_conformance strictly executes
+all 28 JSON cases on both decoders. complete_instruction_specifications strictly
+executes 8,155 readable instruction cases and 42 multi-instruction sequences per
+decoder, covering all 84 original groups. The 67 old empty C++ templates are not
+executed or counted as passes.
 
-opcode_reference and opcode_optimized run the same ten asserted test groups.
-The second uses M68k::Update(), including its opcode fetch and generated switch
-dispatch, which is the path the emulator uses. Tests check register results,
-defined flags, reserved status bits, privilege rejection, and operand PC advance.
-MOVE USP is checked by transferring two different values through USP into other
-address registers. DIVU includes remainder packing, zero quotient, unsigned
-quotients 0x8000/0xFFFF, and overflow. MULU includes zero, a nonzero product with
-a zero low word, and products setting bit 31. Undefined DIVU overflow N/Z flags
-are deliberately not asserted. Divide-by-zero exception delivery and full
-exception stack frames are not covered by these groups.
+A pass requires the expected state and every supplied cycle count. Historical
+known-failure snapshots remain as audit history; neither CTest nor CI accepts
+known wrong results through a baseline. Strict commands return nonzero on wrong
+state, timing or crashes. --mode audit is available to finish a diagnostic report;
+its zero exit status is not a CPU conformance pass.
 
-legacy_cpu_tests retains 17 asserted C++ groups. The 67 empty templates have been
-replaced by real specifications in conformance/specifications.py. All 84 groups
-from the original registry are required by conformance/legacy-groups.json and
-checked by the expanded specification suite, not counted as placeholder passes.
-All legacy debug states are zero initialized, and a failed test returns a
-nonzero process exit code. The runner no longer waits for an interactive pause.
-The ADDA checks use address registers and verify flag preservation; the old
-test wrote beyond the data-register array. ASL/ASR memory and zero-count
-register cases now have assertions, including operand and X-flag preservation.
+DRIVONIX_CPU_TESTS selects the isolated big-endian test bus. External vectors use
+a writable 24-bit flat bus; legacy checks retain their Genesis-style fixture.
+This separates instruction semantics from console devices. It does not establish
+correct VDP rendering, sound, bus arbitration or compatibility with game ROMs.
+The root CMake project has separate console, VDP, audio, Z80 and frontend tests.
 
-conformance_adapter checks the external-vector decoder, protocol, comparison
-logic, failure recovery, and regression gate using independent fixtures and
-deliberately corrupted results. handwritten_known_failure_gate runs 28 readable
-specifications through both dispatch paths. Seven currently fail per path; this
-gate permits only the recorded wrong bits while keeping the correct expected
-outputs. A passing regression gate does not mean those CPU cases pass.
+The expanded cases follow the original DocUnitTestM68K.pdf method: source and
+destination values, flags, addressing, timing and observable sequences. They
+include full shift counts, arithmetic boundaries, BCD, all condition codes,
+status/stack banks, synchronous exceptions, interrupts, STOP/reset, address-error
+frames and self-modifying code that observes instruction prefetch. Undefined
+hardware bits are masked narrowly; correct expected outputs are never captured
+from DrivOnix. See conformance/COMPLETE.txt and conformance/ORACLE-CORRECTIONS.txt.
 
-complete_suite_adapter checks the expanded specifications and Z80 worker contract.
-complete_instruction_specifications runs 8,089 instruction cases plus 40 sequence
-cases through both dispatch paths, using an explicit known-failure regression
-baseline. An optional pinned independent reference checks the specifications and
-every one of the 65,536 opcode words, including illegal encodings. See
-conformance/COMPLETE.txt for the full sweep, eight operand patterns, and Z80 data.
-
-The pinned SingleStepTests/m68000 corpus and original instruction matrix are
-documented in conformance/README.txt. Fetching and running external data is explicit;
-ordinary CTest needs no network. CI also runs a fixed external sample and saves
-the diagnostic reports as artifacts. DocUnitTestM68K.pdf remains the original
-test-design guide; use its source/destination/flags/addressing approach when
-adding focused cases alongside the external vectors.
-
-For address/undefined-behavior sanitizer checks with GCC or Clang:
+For GCC/Clang address and undefined-behavior sanitizer checks:
 
     cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
     cmake --build build/cpu-sanitized --parallel 2
     ctest --test-dir build/cpu-sanitized --output-on-failure
 
-The original UnitTests/compile.bat still builds the Windows suite with the real
-Genesis implementation and the existing MinGW/CSFML prerequisites.
+These are the same seven strict targets and the same hardware expectations.
+Sanitizer failures are CPU failures; no known-crash allowance is supplied.
 
-Both ordinary and sanitizer CTest run seven targets. The expanded CPU suite uses
-a separate reviewed sanitizer profile so existing unsafe cases remain reported
-as crashes and any newly unsafe case fails CI. Those known crashes are not
-sanitizer-clean CPU passes. See COMPLETE.txt for strict and diagnostic commands.
+conformance/README.txt documents the pinned independent MAME vectors.
+conformance/COMPLETE.txt gives the optional independent all-opcode sweep and the
+production Z80 worker commands. conformance/COVERAGE.txt records measured scope.
+CI runs strict CPU checks on Linux and Windows and sanitizer checks on Linux,
+then uploads readable reports. Ordinary CTest never downloads external data.
 
-Hardware expectations follow the Motorola M68000 Family Programmer's Reference
-Manual (MC68000 forms, not the later 68010/68020 variants):
+The original compile.bat remains a legacy Windows build using MinGW/CSFML.
+Hardware references select MC68000 forms, not later 68010/68020 instructions:
 https://www.nxp.com/docs/en/reference-manual/M68000PRM.pdf
-
-Relevant sections: status register 1.3.2, DIVU 4-96, MULU 4-138,
-MOVE from SR 4-125, and MOVE USP 6-21.

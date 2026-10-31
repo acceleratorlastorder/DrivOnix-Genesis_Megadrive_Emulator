@@ -1,201 +1,123 @@
 #include "crt.hpp"
+#include "../YM7101/ym7101.hpp"
+#ifndef DRIVONIX_HEADLESS
 #include "../Platform/platform.hpp"
-
+#include <fstream>
+#endif
+#include <algorithm>
 #include <stdexcept>
-
-CRT::CRT() : window(nullptr), screenImg(nullptr), screenTex(nullptr), screenSpr(nullptr), pixelSize(1)
-{
-
-}
-
-CRT& CRT::get(void)
-{
-	static CRT instance;
-	return instance;
-}
-
-void CRT::Init()
-{
-	get().GetConfig();
-
-	if(get().pixelSize == 1 || get().pixelSize == 2)
-	{
-		get().mode = sfVideoMode{320 * get().pixelSize, 224 * get().pixelSize, 32};
-		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
-		get().sprPosX = 0.0f;
-		get().sprPosY = 0.0f;
-	}
-	else if(get().pixelSize == 3)
-	{
-		sfVideoMode screenParam = sfVideoMode_getDesktopMode();
-
-		get().mode = sfVideoMode{screenParam.width, screenParam.height, 32};
-		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfFullscreen, NULL);
-
-		int widthMDScreen = get().pixelSize * 320;
-    	int heightMDScreen = get().pixelSize * 224;
-    	
-    	int x = (screenParam.width / 2) - (widthMDScreen / 2);
-    	int y = (screenParam.height / 2) - (heightMDScreen / 2);
-
-    	get().sprPosX = (float)x;
-		get().sprPosY = (float)y;
-	}
-	else
-	{
-		get().mode = sfVideoMode{320 * get().pixelSize, 224 * get().pixelSize, 32};
-		get().window = sfRenderWindow_create(get().mode, "DrivOnix - Chili Hot Dog Version", sfClose, NULL);
-		get().sprPosX = 0.0f;
-		get().sprPosY = 0.0f;
-	}
-
-    if (!get().window)
-        throw std::runtime_error("Cannot create the emulator window");
-    get().screenImg = sfImage_createFromColor(320 * get().pixelSize, 224 * get().pixelSize, sfBlack);
-    if (!get().screenImg)
-        throw std::runtime_error("Cannot create the emulator framebuffer");
-    get().screenTex = sfTexture_createFromImage(get().screenImg, NULL);
-	if (!get().screenTex)
-        throw std::runtime_error("Cannot create the emulator texture");
-	get().screenSpr = sfSprite_create();
-	if (!get().screenSpr)
-        throw std::runtime_error("Cannot create the emulator sprite");
-	sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
-	sfSprite_setPosition(get().screenSpr, sfVector2f{ get().sprPosX, get().sprPosY });
-}
-
-void CRT::Shutdown()
-{
-    if (get().screenSpr) sfSprite_destroy(get().screenSpr);
-    if (get().screenTex) sfTexture_destroy(get().screenTex);
-    if (get().screenImg) sfImage_destroy(get().screenImg);
-    if (get().window) sfRenderWindow_destroy(get().window);
-    get().screenSpr = nullptr;
-    get().screenTex = nullptr;
-    get().screenImg = nullptr;
-    get().window = nullptr;
-}
-
-void CRT::GetConfig()
-{
-	std::ifstream input(Platform::DataFile("Config/config.txt"));
-	for(int i = 0; i < 1; i++)
-	{
-		std::string id;
-		std::string value;
-		std::string empty;
-		std::getline(input, id, '=');
-		std::getline(input, value, ';');
-		std::getline(input, empty, '\n');
-
-		if(id.compare("ScreenSize") == 0 && !value.empty())
-		{
-			if(value.at(0) == '1')
-			{
-				get().pixelSize = 1;
-			}
-			else if(value.at(0) == '2')
-			{
-				get().pixelSize = 2;
-			}
-			else if(value.at(0) == '3')
-			{
-				get().pixelSize = 3;
-			}
-			else
-			{
-				get().pixelSize = 1;
-			}
-		}
-	}
-
-	input.close();
-}
-
-void CRT::Render()
-{
-
-	int offsetScreen = 0;
-
-	if(YM7101::GetIs256Screen())
-	{
-		offsetScreen = (320 - 256) / 2;
-		offsetScreen *= get().pixelSize;
-	}
-
-	for(int x = 0; x < 320; ++x)
-    {
-        for(int y = 0; y < 224; ++y)
-        {
-          	sfColor color;
-          	color.r = get().screenData[x][y][0];
-          	color.g = get().screenData[x][y][1];
-          	color.b = get().screenData[x][y][2];
-          	color.a = 255;
-
-          	byte ix;
-          	byte iy;
-          	
-          	for(ix = 0; ix < get().pixelSize; ++ix)
-          	{
-            	for(iy = 0; iy < get().pixelSize; ++iy)
-            	{
-              		sfImage_setPixel(get().screenImg, x * get().pixelSize + ix, y * get().pixelSize + iy, color);
-            	}
-          	}
+CRT::CRT() : width(320), height(224), pixelSize(1)
+#ifndef DRIVONIX_HEADLESS
+    , window(nullptr), texture(nullptr), sprite(nullptr), fullscreen(false)
+#endif
+{ pixels.fill(0); }
+CRT& CRT::get() { static CRT instance; return instance; }
+void CRT::Init() {
+#ifndef DRIVONIX_HEADLESS
+    auto& s = get();
+    std::ifstream config(Platform::DataFile("Config/config.txt"));
+    std::string line;
+    while (std::getline(config, line)) {
+        if (line.compare(0, 11, "ScreenSize=") == 0 && line.size() > 11) {
+            s.pixelSize = line[11] >= '1' && line[11] <= '3' ? unsigned(line[11] - '0') : 1;
+            break;
         }
     }
-
-    sfTexture_updateFromImage(get().screenTex, get().screenImg, 0, 0);
-    sfSprite_setTexture(get().screenSpr, get().screenTex, sfTrue);
-
-    sfSprite_setPosition(get().screenSpr, sfVector2f{ ((float)offsetScreen + get().sprPosX), get().sprPosY });
-
-    sfRenderWindow_clear(get().window, sfBlack);
-    sfRenderWindow_drawSprite(get().window, get().screenSpr, NULL);
-    sfRenderWindow_display(get().window);
+    s.fullscreen = s.pixelSize == 3;
+    const sfVideoMode mode = s.fullscreen ? sfVideoMode_getDesktopMode() : sfVideoMode{320*s.pixelSize, s.height*s.pixelSize, 32};
+    s.window = sfRenderWindow_create(mode, "DrivOnix - Chili Hot Dog Version", s.fullscreen ? sfFullscreen : sfClose, nullptr);
+    if (!s.window) throw std::runtime_error("Cannot create emulator window");
+    s.texture = sfTexture_create(320, 480);
+    s.sprite = sfSprite_create();
+    if (!s.texture || !s.sprite) throw std::runtime_error("Cannot create emulator framebuffer");
+    sfTexture_setSmooth(s.texture, sfFalse);
+    sfSprite_setTexture(s.sprite, s.texture, sfTrue);
+    sfSprite_setScale(s.sprite, sfVector2f{float(s.pixelSize), float(s.pixelSize)});
+    SetResolution(s.width, s.height);
+#endif
+    ResetScreen();
 }
-
-void CRT::ResetScreen()
-{
-	memset(get().screenData, 1, sizeof(get().screenData));
+void CRT::Shutdown() {
+#ifndef DRIVONIX_HEADLESS
+    auto& s = get();
+    if (s.sprite) sfSprite_destroy(s.sprite);
+    if (s.texture) sfTexture_destroy(s.texture);
+    if (s.window) sfRenderWindow_destroy(s.window);
+    s.sprite = nullptr; s.texture = nullptr; s.window = nullptr;
+#endif
 }
-
-void CRT::Write(int x, int y, byte red, byte green, byte blue)
-{
-	get().screenData[x][y][0] = red;
-	get().screenData[x][y][1] = green;
-	get().screenData[x][y][2] = blue;
+void CRT::SetResolution(unsigned width, unsigned height) {
+    auto& s = get();
+    if ((width != 256 && width != 320) || (height != 224 && height != 240 && height != 448 && height != 480))
+        throw std::runtime_error("Unsupported framebuffer dimensions");
+#ifndef DRIVONIX_HEADLESS
+    if(s.width==width&&s.height==height&&s.sprite&&sfSprite_getTextureRect(s.sprite).height==int(height)) return;
+#else
+    if(s.width==width&&s.height==height) return;
+#endif
+    const bool resize = s.height != height;
+    const bool changed = resize || s.width != width;
+    const unsigned displayHeight=height>240?height/2:height;
+    s.width = width; s.height = height;
+    if(changed) ResetScreen();
+#ifndef DRIVONIX_HEADLESS
+    if (s.sprite) {
+        sfTexture_setSmooth(s.texture,height>240?sfTrue:sfFalse);
+        sfSprite_setTextureRect(s.sprite, sfIntRect{0, 0, 320, int(height)});
+        sfVector2f position{0,0};
+        if (s.fullscreen) {
+            const auto size = sfRenderWindow_getSize(s.window);
+            s.pixelSize=std::max(1u,std::min(size.x/320,size.y/displayHeight));
+            sfSprite_setScale(s.sprite,sfVector2f{float(s.pixelSize),float(s.pixelSize)});
+            position = sfVector2f{(float(size.x)-320*s.pixelSize)/2, (float(size.y)-displayHeight*s.pixelSize)/2};
+        } else if (resize) sfRenderWindow_setSize(s.window, sfVector2u{320*s.pixelSize, displayHeight*s.pixelSize});
+        sfSprite_setScale(s.sprite,sfVector2f{float(s.pixelSize),float(s.pixelSize)*(height>240?0.5f:1.0f)});
+        const auto viewSize=sfRenderWindow_getSize(s.window);
+        sfView* view=sfView_createFromRect(sfFloatRect{0,0,float(viewSize.x),float(viewSize.y)});
+        sfRenderWindow_setView(s.window,view);sfView_destroy(view);
+        sfSprite_setPosition(s.sprite, position);
+    }
+#else
+    (void)resize; (void)displayHeight;
+#endif
 }
-
-void CRT::ApplyIntensity(int x, int y, int intensity)
-{
-	byte red = get().screenData[x][y][0];
-	byte green = get().screenData[x][y][1];
-	byte blue = get().screenData[x][y][2];
-
-	switch(intensity)
-	{
-		case INTENSITY_SHADOW:
-		red /= 2;
-		green /= 2;
-		blue /= 2;
-		break;
-
-		case INTENSITY_LIGHT:
-		red = std::min<int>(((255 - red) / 2) + red, 255);
-		green = std::min<int>(((255 - green) / 2) + green, 255);
-		blue = std::min<int>(((255 - blue) / 2) + blue, 255);
-		break;
-	}
-
-	get().screenData[x][y][0] = red;
-	get().screenData[x][y][1] = green;
-	get().screenData[x][y][2] = blue;
+void CRT::Render() {
+#ifndef DRIVONIX_HEADLESS
+    auto& s = get();
+    if (!s.window) return;
+    sfTexture_updateFromPixels(s.texture, s.pixels.data(), 320, s.height, 0, 0);
+    sfRenderWindow_clear(s.window, sfBlack);
+    sfRenderWindow_drawSprite(s.window, s.sprite, nullptr);
+    sfRenderWindow_display(s.window);
+#endif
 }
-
-sfRenderWindow* CRT::GetWindow()
-{
-	return get().window;
+void CRT::ResetScreen() {
+    auto& p = get().pixels;
+    p.fill(0);
+    for (unsigned i = 3; i < p.size(); i += 4) p[i] = 255;
 }
-
+const byte* CRT::Pixels() { return get().pixels.data(); }
+unsigned CRT::Height() { return get().height; }
+void CRT::Write(int x, int y, byte red, byte green, byte blue) {
+    auto& s = get();
+    if (x < 0 || x >= int(s.width) || y < 0 || y >= int(s.height)) return;
+    const unsigned index = (unsigned(y)*320 + unsigned(x) + (320-s.width)/2)*4;
+    s.pixels[index] = red; s.pixels[index+1] = green; s.pixels[index+2] = blue;
+}
+void CRT::ApplyIntensity(int x, int y, int intensity) {
+    auto& s = get();
+    if (x < 0 || x >= int(s.width) || y < 0 || y >= int(s.height)) return;
+    const unsigned index = (unsigned(y)*320 + unsigned(x) + (320-s.width)/2)*4;
+    for (unsigned c = 0; c < 3; ++c) {
+        auto& value = s.pixels[index+c];
+        if (intensity == INTENSITY_SHADOW) value /= 2;
+        else if (intensity == INTENSITY_LIGHT) value = byte(128 + value/2);
+    }
+}
+sfRenderWindow* CRT::GetWindow() {
+#ifndef DRIVONIX_HEADLESS
+    return get().window;
+#else
+    return nullptr;
+#endif
+}

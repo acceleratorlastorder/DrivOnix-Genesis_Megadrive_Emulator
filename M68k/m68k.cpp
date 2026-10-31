@@ -1,4 +1,5 @@
 #include "m68k.hpp"
+#include "opcodeLegality.hpp"
 
 #ifdef DRIVONIX_CPU_TESTS
 #include "../UnitTests/cpuTestMemory.hpp"
@@ -11,6 +12,40 @@ namespace
 	const word statusRegisterMask = 0xA71F; // Implemented MC68000 SR bits.
 	const word conditionCodeMask = 0x001F;
 }
+
+
+namespace
+{
+    struct AddressFault { dword address; bool write; };
+    // The 68000 rejects an odd word/long bus access before touching a device.
+    // These wrappers apply equally to real console and isolated test memory.
+    struct CpuBus
+    {
+        static byte M68KReadMemoryBYTE(dword address) { return Genesis::M68KReadMemoryBYTE(address); }
+        static word M68KReadMemoryWORD(dword address)
+        {
+            if (address & 1) throw AddressFault{address, false};
+            return Genesis::M68KReadMemoryWORD(address);
+        }
+        static dword M68KReadMemoryLONG(dword address)
+        {
+            if (address & 1) throw AddressFault{address, false};
+            return Genesis::M68KReadMemoryLONG(address);
+        }
+        static void M68KWriteMemoryBYTE(dword address, byte data) { Genesis::M68KWriteMemoryBYTE(address, data); }
+        static void M68KWriteMemoryWORD(dword address, word data)
+        {
+            if (address & 1) throw AddressFault{address, true};
+            Genesis::M68KWriteMemoryWORD(address, data);
+        }
+        static void M68KWriteMemoryLONG(dword address, dword data)
+        {
+            if (address & 1) throw AddressFault{address, true};
+            Genesis::M68KWriteMemoryLONG(address, data);
+        }
+    };
+}
+#define Genesis CpuBus
 
 M68k::M68k()
 {
@@ -54,7 +89,11 @@ void M68k::Init()
 	get().superVisorModeActivated = true;
 	get().programCounter = Genesis::M68KReadMemoryLONG(0x4);
 
-	get().interrupts.clear();
+	get().extensionValid = false;
+    get().interrupts.clear();
+    get().prefetchValid = false;
+    get().exceptionRaised = false;
+    get().opcodeClicks = 0;
 
 }
 
@@ -112,7 +151,9 @@ void M68k::ClicksMoveInit()
 void M68k::SetCpuState(CPU_STATE_DEBUG cpuState)
 {
 	get().programCounter = cpuState.programCounter;
-	get().CCR = cpuState.CCR;
+	get().CCR = cpuState.CCR & statusRegisterMask;
+    get().extensionValid = false;
+    get().prefetchValid = false;
 	get().stop = cpuState.stop;
 	get().superVisorModeActivated = TestBit(cpuState.CCR, 13);
 
@@ -157,18 +198,9 @@ CPU_VECTOR_STATE M68k::ReadVectorState()
 	return state;
 }
 
-int M68k::StepVector(bool optimized)
+int M68k::StepVector(bool optimized, bool traceBoundary)
 {
-	if(optimized) return Update();
-	// Match Update's instruction boundary while selecting the reference decoder.
-	get().CheckInt();
-	get().CheckPrivilege();
-	if(get().stop) return 4;
-	get().opcodeClicks = 0;
-	word opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
-	get().programCounter += 2;
-	ExecuteOpcode(opcode);
-	return get().opcodeClicks;
+    return get().StepInstruction(optimized, traceBoundary);
 }
 
 void M68k::VectorIRQ(unsigned level)
@@ -181,8 +213,9 @@ void M68k::VectorReset() { Init(); }
 
 void M68k::RequestAutoVectorInt(M68k::INT_TYPE level)
 {
-	int address = Genesis::M68KReadMemoryLONG(((int)level * 4) + 0x60);
-	get().RequestInt(level, address);
+    if (level < INT_AUTOVECTOR_1 || level > INT_AUTOVECTOR_7) return;
+    get().interrupts.erase(level);
+    get().RequestInt(level, 0);
 }
 
 void M68k::RequestInt(M68k::INT_TYPE level, dword address)
@@ -192,43 +225,144 @@ void M68k::RequestInt(M68k::INT_TYPE level, dword address)
 
 void M68k::CheckInt()
 {
-	if(get().interrupts.empty())
-	{
-		return;
-	}
+    if (get().interrupts.empty()) return;
+    const auto pending = --get().interrupts.end();
+    const INT_TYPE level = pending->first;
+    const dword handler = level <= INT_AUTOVECTOR_7 ? Genesis::M68KReadMemoryLONG((24 + unsigned(level)) * 4) : pending->second;
+    const unsigned mask = (get().CCR >> 8) & 7;
+    if (level <= INT_AUTOVECTOR_6 && unsigned(level) <= mask) return;
+    get().interrupts.erase(pending);
+    const word old = get().CCR;
+    get().CCR = (old | 0x2000) & ~word(0x8000);
+    get().CheckPrivilege();
+    get().registerAddress[7] -= 4;
+    Genesis::M68KWriteMemoryLONG(get().registerAddress[7], get().programCounter);
+    get().registerAddress[7] -= 2;
+    Genesis::M68KWriteMemoryWORD(get().registerAddress[7], old);
+    if (level <= INT_AUTOVECTOR_7)
+        get().CCR = (get().CCR & ~word(0x0700)) | (unsigned(level) << 8);
+    get().programCounter = handler;
+    get().stop = false;
+    get().servicingInt = true;
+    get().prefetchValid = false;
+    get().opcodeClicks += level <= INT_AUTOVECTOR_7 ? 44 : 34;
+}
 
-	std::pair<INT_TYPE, int> type = (*get().interrupts.rbegin());
 
-	int intLevel = (get().CCR >> 8) & 0x7;
+word M68k::ReadInstructionWord(dword address)
+{
+    if (get().extensionValid && get().extensionAddress == address) return get().extensionWord;
+    const word value = get().prefetchValid && get().prefetchAddress == address ? get().prefetchWord :
+        Genesis::M68KReadMemoryWORD(address);
+    get().extensionAddress = address;
+    get().extensionWord = value;
+    get().extensionValid = true;
+    get().prefetchAddress = address + 2;
+    get().prefetchWord = Genesis::M68KReadMemoryWORD(address + 2);
+    get().prefetchValid = true;
+    return value;
+}
 
-	if(type.first > INT_AUTOVECTOR_6 || type.first > intLevel)
-	{
-		word oldCCR = get().CCR;
+dword M68k::ReadInstructionLong(dword address)
+{
+    const dword high = get().ReadInstructionWord(address);
+    return (high << 16) | get().ReadInstructionWord(address + 2);
+}
 
-		get().interrupts.erase(--get().interrupts.rbegin().base());
+void M68k::CheckProgramAddress(dword address, unsigned cycles, dword savedPC)
+{
+    if (!(address & 1)) return;
+    get().faultCycles = cycles;
+    get().faultSavedPC = savedPC;
+    get().faultProgram = true;
+    throw AddressFault{address, false};
+}
 
-		BitSet(get().CCR, 13);
+void M68k::RaiseException(unsigned vector, dword savedPC, unsigned cycles)
+{
+    const word old = get().CCR;
+    get().CCR = (old | 0x2000) & ~word(0x8000);
+    get().CheckPrivilege();
+    get().registerAddress[7] -= 4;
+    Genesis::M68KWriteMemoryLONG(get().registerAddress[7], savedPC);
+    get().registerAddress[7] -= 2;
+    Genesis::M68KWriteMemoryWORD(get().registerAddress[7], old);
+    get().programCounter = Genesis::M68KReadMemoryLONG(vector * 4);
+    get().stop = false;
+    get().prefetchValid = false;
+    get().exceptionRaised = true;
+    get().opcodeClicks = cycles;
+}
 
-		get().CheckPrivilege();
+void M68k::SetResetHandler(void (*handler)()) { get().resetHandler = handler; }
 
-		get().servicingInt = true;
-
-		get().stop = false;
-
-		get().registerAddress[0x7] -= 4;
-		Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().programCounter);
-
-		get().registerAddress[0x7] -= 2;
-		Genesis::M68KWriteMemoryWORD(get().registerAddress[0x7], oldCCR);
-
-		if(type.first <= INT_AUTOVECTOR_7)
-		{
-			get().CCR &= 0xF8FF;
-			get().CCR |= type.first << 8;
-		}
-
-		get().programCounter = type.second;
-	}
+int M68k::StepInstruction(bool optimized, bool traceBoundary)
+{
+    get().opcodeClicks = 0;
+    get().CheckInt();
+    const unsigned entryCycles = get().opcodeClicks;
+    get().CheckPrivilege();
+    if (get().stop) return entryCycles + 4;
+    get().opcodeClicks = 0;
+    get().exceptionRaised = false;
+    get().extensionValid = false;
+    get().instructionPC = get().programCounter;
+    get().faultCycles = 50;
+    get().faultSavedPC = get().instructionPC + 2;
+    get().faultProgram = false;
+    const bool trace = traceBoundary && (get().CCR & 0x8000) != 0;
+    try
+    {
+        word opcode;
+        if (get().prefetchValid && get().prefetchAddress == get().programCounter)
+            opcode = get().prefetchWord;
+        else opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
+        get().currentOpcode = opcode;
+        get().faultInstructionWord = opcode;
+        get().programCounter += 2;
+        get().prefetchAddress = get().programCounter;
+        get().prefetchWord = Genesis::M68KReadMemoryWORD(get().prefetchAddress);
+        get().prefetchValid = true;
+        if ((opcode & 0xF000) == 0xA000)
+            get().RaiseException(10, get().instructionPC, 34);
+        else if ((opcode & 0xF000) == 0xF000)
+            get().RaiseException(11, get().instructionPC, 34);
+        else if (!M68000OpcodeValid(opcode))
+            get().RaiseException(4, get().instructionPC, 34);
+        else if ((opcode & 0xF1C0) == 0x4180) get().OpcodeCHK(opcode);
+        else if (optimized) get().ExecuteOpcodeOptimized(opcode);
+        else ExecuteOpcode(opcode);
+        get().CheckPrivilege();
+        if (trace && !get().exceptionRaised)
+        {
+            const unsigned instructionCycles = get().opcodeClicks;
+            get().RaiseException(9, get().programCounter, 34);
+            get().opcodeClicks += instructionCycles;
+        }
+    }
+    catch (const AddressFault& fault)
+    {
+        const word old = get().CCR;
+        const word ssw = (fault.write ? 0 : 16) | (get().faultProgram ? ((old & 0x2000) ? 6 : 2) : ((old & 0x2000) ? 5 : 1));
+        get().CCR = (old | 0x2000) & ~word(0x8000);
+        get().CheckPrivilege();
+        get().registerAddress[7] -= 4;
+        Genesis::M68KWriteMemoryLONG(get().registerAddress[7], get().faultSavedPC);
+        get().registerAddress[7] -= 2;
+        Genesis::M68KWriteMemoryWORD(get().registerAddress[7], old);
+        get().registerAddress[7] -= 2;
+        Genesis::M68KWriteMemoryWORD(get().registerAddress[7], get().faultInstructionWord);
+        get().registerAddress[7] -= 4;
+        Genesis::M68KWriteMemoryLONG(get().registerAddress[7], fault.address);
+        get().registerAddress[7] -= 2;
+        Genesis::M68KWriteMemoryWORD(get().registerAddress[7], ssw);
+        get().programCounter = Genesis::M68KReadMemoryLONG(12);
+        get().opcodeClicks = get().faultCycles;
+        get().stop = false;
+        get().prefetchValid = false;
+        get().exceptionRaised = true;
+    }
+    return entryCycles + get().opcodeClicks;
 }
 
 void M68k::CheckPrivilege()
@@ -254,23 +388,7 @@ void M68k::CheckPrivilege()
 
 int M68k::Update()
 {
-	get().CheckInt();
-
-	get().CheckPrivilege();
-
-	if(get().stop)
-	{
-		return 4;
-	}
-
-	get().opcodeClicks = 0;
-	const word opcode = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-	get().programCounter += 2;
-
-	get().ExecuteOpcodeOptimized(opcode);
-
-	return get().opcodeClicks;
+    return get().StepInstruction(true);
 }
 
 void M68k::SetDataRegister(int id, dword result, DATASIZE size)
@@ -331,8 +449,77 @@ dword M68k::SignExtendDWord(word data)
 	return result;
 }
 
+
+M68k::EA_DATA M68k::GetControlAddress(EA_TYPES mode, byte reg)
+{
+    EA_DATA result;
+    result.eatype = mode;
+    result.dataSize = LONG;
+    if (mode == EA_ADDRESS_REG_INDIRECT || mode == EA_ADDRESS_REG_INDIRECT_POST_INC || mode == EA_ADDRESS_REG_INDIRECT_PRE_DEC)
+        result.pointer = get().registerAddress[reg];
+    else if (mode == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT || (mode == EA_MODE_7 && reg == 2))
+    {
+        result.PCadvance = 2;
+        const dword base = mode == EA_MODE_7 ? get().programCounter : get().registerAddress[reg];
+        result.pointer = base + get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
+    }
+    else if (mode == EA_ADDRESS_REG_INDIRECT_INDEX || (mode == EA_MODE_7 && reg == 3))
+    {
+        const word extension = get().ReadInstructionWord(get().programCounter);
+        dword index = extension & 0x8000 ? get().registerAddress[(extension >> 12) & 7] : get().registerData[(extension >> 12) & 7];
+        if (!(extension & 0x0800)) index = get().SignExtendDWord(word(index));
+        result.PCadvance = 2;
+        result.pointer = (mode == EA_MODE_7 ? get().programCounter : get().registerAddress[reg]) + index +
+            get().SignExtendDWord(get().SignExtendWord(byte(extension)));
+    }
+    else if (mode == EA_MODE_7 && reg == 0)
+    {
+        result.pointer = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
+        result.PCadvance = 2;
+    }
+    else if (mode == EA_MODE_7 && reg == 1)
+    {
+        result.pointer = get().ReadInstructionLong(get().programCounter);
+        result.PCadvance = 4;
+    }
+    if (mode == EA_MODE_7) result.mode7Type = EA_MODE_7_TYPES(reg);
+    return result;
+}
+
 M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool readOnly, dword offset)
 {
+    // Address faults preserve the PC/pipeline stage reached by EA generation.
+    // Extension words consumed by an immediate source precede this operand.
+    if (size != BYTE && mode >= EA_ADDRESS_REG_INDIRECT && !(mode == EA_MODE_7 && reg == EA_MODE_7_IMMEDIATE))
+    {
+        const dword cursor = get().programCounter;
+        get().faultCycles = 58 + (cursor - get().instructionPC - 2) * 2;
+        get().faultSavedPC = cursor;
+        get().faultProgram = mode == EA_MODE_7 && (reg == EA_MODE_7_PC_WITH_DISPLACEMENT || reg == EA_MODE_7_PC_WITH_PREINDEX);
+        switch (mode)
+        {
+            case EA_ADDRESS_REG_INDIRECT_PRE_DEC:
+                get().faultCycles += 2;
+                if (size == WORD) get().faultSavedPC += 2;
+                break;
+            case EA_ADDRESS_REG_INDIRECT_DISPLACEMENT:
+                get().faultCycles += 4;
+                break;
+            case EA_ADDRESS_REG_INDIRECT_INDEX:
+                get().faultCycles += 6;
+                break;
+            case EA_MODE_7:
+                if (reg == EA_MODE_7_ABS_ADDRESS_WORD)
+                { get().faultCycles += 4; get().faultSavedPC += 2; }
+                else if (reg == EA_MODE_7_ABS_ADDRESS_LONG)
+                { get().faultCycles += 8; get().faultSavedPC += 4; }
+                else if (reg == EA_MODE_7_PC_WITH_DISPLACEMENT) get().faultCycles += 4;
+                else if (reg == EA_MODE_7_PC_WITH_PREINDEX) get().faultCycles += 6;
+                break;
+            default: break;
+        }
+    }
+
 	EA_DATA result;
 	result.dataSize = size;
 	switch(mode)
@@ -374,56 +561,22 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 		}
 		break;
 
-		case EA_ADDRESS_REG_INDIRECT_POST_INC:
-		{
-			dword address = get().registerAddress[reg];
-			result.pointer = address;
-			result.eatype = EA_ADDRESS_REG_INDIRECT_POST_INC;
-
-			switch(size)
-			{
-				case BYTE:
-				{
-					result.cycles = 4;
-					result.operand = Genesis::M68KReadMemoryBYTE(address);
-
-					if(!readOnly)
-					{
-						get().registerAddress[reg] +=1;
-
-						if(reg == 7) //le stackPointer est incrémenté par deux ici, pour garder son alignement (word)
-						{
-							get().registerAddress[reg] += 1;
-						}
-					}
-				}
-				break;
-
-				case WORD:
-				{
-					result.cycles = 4;
-					result.operand = Genesis::M68KReadMemoryWORD(address);
-					if(!readOnly)
-					{
-						get().registerAddress[reg] += 2;
-					}
-				}
-				break;
-
-				case LONG:
-				{
-					result.cycles = 8;
-					result.operand = Genesis::M68KReadMemoryLONG(address);
-
-					if(!readOnly)
-					{
-						get().registerAddress[reg] += 4;
-					}
-				}
-				break;
-			}
-		}
-		break;
+        case EA_ADDRESS_REG_INDIRECT_POST_INC:
+        {
+            const dword address = get().registerAddress[reg];
+            const unsigned increment = size == LONG ? 4 : (size == WORD || reg == 7 ? 2 : 1);
+            result.pointer = address;
+            result.eatype = mode;
+            result.cycles = size == LONG ? 8 : 4;
+            // A word access commits its increment before the bus fault. A
+            // long access has not committed its increment at the first word.
+            if ((!readOnly || (size != BYTE && (address & 1))) && !(size == LONG && (address & 1)))
+                get().registerAddress[reg] += increment;
+            if (size == BYTE) result.operand = Genesis::M68KReadMemoryBYTE(address);
+            else if (size == WORD) result.operand = Genesis::M68KReadMemoryWORD(address);
+            else result.operand = Genesis::M68KReadMemoryLONG(address);
+        }
+        break;
 
 		case EA_ADDRESS_REG_INDIRECT_PRE_DEC:
 		{
@@ -442,7 +595,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 						address -= 1;
 					}
 
-					if(!readOnly)
+					if(!readOnly || (size != BYTE && (address & 1)))
 					{
 						get().registerAddress[reg] -= 1;
 
@@ -463,7 +616,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 
 					dword address = get().registerAddress[reg] - 2;
 
-					if(!readOnly)
+					if(!readOnly || (size != BYTE && (address & 1)))
 					{
 						get().registerAddress[reg] -= 2;
 					}
@@ -479,7 +632,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 
 					dword address = get().registerAddress[reg] - 4;
 
-					if(!readOnly)
+					if(!readOnly || (size != BYTE && (address & 1)))
 					{
 						get().registerAddress[reg] -= 4;
 					}
@@ -499,7 +652,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 
 			dword address = get().registerAddress[reg] + offset;
 
-			signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
+			signed_dword displacement = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
 
 			address += displacement;
 
@@ -530,7 +683,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 			result.eatype = EA_ADDRESS_REG_INDIRECT_INDEX;
 			result.PCadvance = 2;
 
-			word data = Genesis::M68KReadMemoryWORD(get().programCounter);
+			word data = get().ReadInstructionWord(get().programCounter);
 
 			bool inDataReg = !TestBit(data, 15);
 
@@ -549,23 +702,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 				word pointer = result.pointer & 0xFFFF;
 				result.pointer = get().SignExtendDWord(pointer);
 			}
-
-			int scale = (data >> 9) & 0x3;
-
-			switch(scale)
-			{
-				case 1:
-				result.pointer *= 2;
-				break;
-
-				case 2:
-				result.pointer *= 4;
-				break;
-
-				case 3:
-				result.pointer *= 8;
-				break;
-			}
+            // The MC68000 brief extension has no index scaling.
 
 			result.pointer += get().registerAddress[reg];
 			result.pointer += displacement;
@@ -600,7 +737,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 				case EA_MODE_7_ABS_ADDRESS_WORD:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_WORD;
-					result.pointer = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
+					result.pointer = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
@@ -626,7 +763,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 				case EA_MODE_7_ABS_ADDRESS_LONG:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
-					result.pointer = (Genesis::M68KReadMemoryWORD(get().programCounter) << 16) | Genesis::M68KReadMemoryWORD(get().programCounter + 2);
+					result.pointer = (get().ReadInstructionWord(get().programCounter) << 16) | get().ReadInstructionWord(get().programCounter + 2);
 					result.pointer += offset;
 					result.PCadvance = 4;
 
@@ -653,7 +790,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 				case EA_MODE_7_PC_WITH_DISPLACEMENT:
 				{
 					result.mode7Type = EA_MODE_7_PC_WITH_DISPLACEMENT;
-					result.pointer = get().programCounter + get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
+					result.pointer = get().programCounter + get().SignExtendDWord(get().ReadInstructionWord(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
@@ -669,7 +806,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 						break;
 
 						case LONG:
-						result.cycles = 8;
+						result.cycles = 12;
 						result.operand = Genesis::M68KReadMemoryLONG(result.pointer);
 						break;
 					}
@@ -681,7 +818,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 					result.mode7Type = EA_MODE_7_PC_WITH_PREINDEX;
 					result.PCadvance = 2;
 
-					word data = Genesis::M68KReadMemoryWORD(get().programCounter);
+					word data = get().ReadInstructionWord(get().programCounter);
 
 					bool inDataReg = !TestBit(data, 15);
 
@@ -700,23 +837,7 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 						word pointer = result.pointer & 0xFFFF;
 						result.pointer = get().SignExtendDWord(pointer);
 					}
-
-					int scale = (data >> 9) & 0x3;
-
-					switch(scale)
-					{
-						case 1:
-						result.pointer *= 2;
-						break;
-
-						case 2:
-						result.pointer *= 4;
-						break;
-
-						case 3:
-						result.pointer *= 8;
-						break;
-					}
+            // The MC68000 brief extension has no index scaling.
 
 					result.pointer += get().programCounter;
 					result.pointer += displacement;
@@ -751,19 +872,19 @@ M68k::EA_DATA M68k::GetEAOperand(EA_TYPES mode, byte reg, DATASIZE size, bool re
 					{
 						case BYTE:
 						result.cycles = 4;
-						result.operand = Genesis::M68KReadMemoryBYTE(get().programCounter + 1);
+						result.operand = (get().ReadInstructionWord(get().programCounter) & 0xFF);
 						result.PCadvance = 2;
 						break;
 
 						case WORD:
 						result.cycles = 4;
-						result.operand = Genesis::M68KReadMemoryWORD(get().programCounter);
+						result.operand = get().ReadInstructionWord(get().programCounter);
 						result.PCadvance = 2;
 						break;
 
 						case LONG:
 						result.cycles = 8;
-						result.operand = Genesis::M68KReadMemoryLONG(get().programCounter);
+						result.operand = get().ReadInstructionLong(get().programCounter);
 						result.PCadvance = 4;
 						break;
 					}
@@ -780,6 +901,41 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 {
 	EA_DATA result;
 	result.dataSize = size;
+    if (size != BYTE && mode >= EA_ADDRESS_REG_INDIRECT)
+    {
+        const unsigned top = get().currentOpcode >> 12;
+        const bool move = top >= 1 && top <= 3;
+        unsigned penalty = mode == EA_ADDRESS_REG_INDIRECT_PRE_DEC ? (move ? 4 : 2) :
+            mode == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT ? 4 : mode == EA_ADDRESS_REG_INDIRECT_INDEX ? 6 :
+            mode == EA_MODE_7 ? (reg == 1 ? 8 : 4) : 0;
+        get().faultCycles = 58 + penalty;
+        get().faultSavedPC = get().programCounter;
+        get().faultProgram = false;
+        if (move)
+        {
+            const unsigned sourceMode = (get().currentOpcode >> 3) & 7;
+            const unsigned sourceReg = get().currentOpcode & 7;
+            const bool longSize = size == LONG;
+            unsigned sourceCycles = 0;
+            if (sourceMode == 2 || sourceMode == 3) sourceCycles = longSize ? 8 : 4;
+            else if (sourceMode == 4) sourceCycles = longSize ? 10 : 6;
+            else if (sourceMode == 5) sourceCycles = longSize ? 12 : 8;
+            else if (sourceMode == 6) sourceCycles = longSize ? 14 : 10;
+            else if (sourceMode == 7)
+                sourceCycles = sourceReg == 1 ? (longSize ? 16 : 12) : sourceReg == 3 ? (longSize ? 14 : 10) :
+                    sourceReg == 4 ? (longSize ? 8 : 4) : (longSize ? 12 : 8);
+            get().faultCycles += sourceCycles;
+            get().faultSavedPC = get().programCounter + (mode == EA_MODE_7 && reg == 1 ? 4 : 2);
+            if (mode == EA_MODE_7 && reg == 1 && sourceMode >= 2 && !(sourceMode == 7 && sourceReg == 4))
+            {
+                // Memory-source MOVE overlaps the last absolute-address word
+                // with its source read; this fault precedes another PC advance.
+                get().faultCycles -= 4;
+                get().faultSavedPC -= 2;
+            }
+        }
+    }
+
 
 	switch(mode)
 	{
@@ -820,48 +976,19 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 		}
 		break;
 
-		case EA_ADDRESS_REG_INDIRECT_POST_INC:
-		{
-			dword address = get().registerAddress[reg];
-			result.pointer = address;
-			result.eatype = EA_ADDRESS_REG_INDIRECT_POST_INC;
-
-			switch(size)
-			{
-				case BYTE:
-				{
-					result.cycles = 4;
-					Genesis::M68KWriteMemoryBYTE(address, (byte)data);
-
-					get().registerAddress[reg] +=1;
-
-					if(reg == 7) //le stackPointer est incrémenté par deux ici, pour garder son alignement (word)
-					{
-						get().registerAddress[reg] += 1;
-					}
-				}
-				break;
-
-				case WORD:
-				{
-					result.cycles = 4;
-					Genesis::M68KWriteMemoryWORD(address, (word)data);
-
-					get().registerAddress[reg] += 2;
-				}
-				break;
-
-				case LONG:
-				{
-					result.cycles = 8;
-					Genesis::M68KWriteMemoryLONG(address, data);
-
-					get().registerAddress[reg] += 4;
-				}
-				break;
-			}
-		}
-		break;
+        case EA_ADDRESS_REG_INDIRECT_POST_INC:
+        {
+            const dword address = get().registerAddress[reg];
+            const unsigned increment = size == LONG ? 4 : (size == WORD || reg == 7 ? 2 : 1);
+            result.pointer = address;
+            result.eatype = mode;
+            result.cycles = size == LONG ? 8 : 4;
+            if (size == BYTE) Genesis::M68KWriteMemoryBYTE(address, byte(data));
+            else if (size == WORD) Genesis::M68KWriteMemoryWORD(address, word(data));
+            else Genesis::M68KWriteMemoryLONG(address, data);
+            get().registerAddress[reg] += increment;
+        }
+        break;
 
 		case EA_ADDRESS_REG_INDIRECT_PRE_DEC:
 		{
@@ -911,10 +1038,12 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 
 					dword address = get().registerAddress[reg] - 4;
 
-					get().registerAddress[reg] -= 4;
+					// The low word is transferred before committing long predecrement.
 
 					result.pointer = address;
-					Genesis::M68KWriteMemoryLONG(address, data);
+					Genesis::M68KWriteMemoryWORD(address + 2, word(data));
+                    Genesis::M68KWriteMemoryWORD(address, word(data >> 16));
+                    get().registerAddress[reg] = address;
 				}
 				break;
 			}
@@ -928,7 +1057,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 
 			dword address = get().registerAddress[reg] + offset;
 
-			signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
+			signed_dword displacement = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
 
 			address += displacement;
 
@@ -959,7 +1088,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 			result.eatype = EA_ADDRESS_REG_INDIRECT_INDEX;
 			result.PCadvance = 2;
 
-			word Data = Genesis::M68KReadMemoryWORD(get().programCounter);
+			word Data = get().ReadInstructionWord(get().programCounter);
 
 			bool inDataReg = !TestBit(Data, 15);
 
@@ -978,23 +1107,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 				word pointer = result.pointer & 0xFFFF;
 				result.pointer = get().SignExtendDWord(pointer);
 			}
-
-			int scale = (Data >> 9) & 0x3;
-
-			switch(scale)
-			{
-				case 1:
-				result.pointer *= 2;
-				break;
-
-				case 2:
-				result.pointer *= 4;
-				break;
-
-				case 3:
-				result.pointer *= 8;
-				break;
-			}
+            // MC68000 ignores scaled-index extension bits.
 
 			result.pointer += get().registerAddress[reg];
 			result.pointer += displacement;
@@ -1029,7 +1142,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 				case EA_MODE_7_ABS_ADDRESS_WORD:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_WORD;
-					result.pointer = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter)) + offset;
+					result.pointer = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter)) + offset;
 					result.PCadvance = 2;
 
 					switch(size)
@@ -1055,7 +1168,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 				case EA_MODE_7_ABS_ADDRESS_LONG:
 				{
 					result.mode7Type = EA_MODE_7_ABS_ADDRESS_LONG;
-					result.pointer = Genesis::M68KReadMemoryLONG(get().programCounter);
+					result.pointer = get().ReadInstructionLong(get().programCounter);
 					result.pointer += offset;
 					result.PCadvance = 4;
 
@@ -1088,7 +1201,7 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 					result.mode7Type = EA_MODE_7_PC_WITH_PREINDEX;
 					result.PCadvance = 4;
 
-					word Data = Genesis::M68KReadMemoryWORD(get().programCounter);
+					word Data = get().ReadInstructionWord(get().programCounter);
 
 					bool inDataReg = !TestBit(Data, 15);
 
@@ -1107,25 +1220,9 @@ M68k::EA_DATA M68k::SetEAOperand(EA_TYPES mode, byte reg, dword data, M68k::DATA
 						word pointer = result.pointer & 0xFFFF;
 						result.pointer = get().SignExtendDWord(pointer);
 					}
+            // MC68000 ignores scaled-index extension bits.
 
-					int scale = (Data >> 9) & 0x3;
-
-					switch(scale)
-					{
-						case 1:
-						result.pointer *= 2;
-						break;
-
-						case 2:
-						result.pointer *= 4;
-						break;
-
-						case 3:
-						result.pointer *= 8;
-						break;
-					}
-
-					result.pointer += Genesis::M68KReadMemoryWORD(get().programCounter + 2);
+					result.pointer += get().ReadInstructionWord(get().programCounter + 2);
 					result.pointer += displacement;
 					result.pointer += offset;
 
@@ -110275,2855 +110372,772 @@ void M68k::ExecuteOpcode(word opcode)
 
 }
 
+namespace
+{
+
+struct ArithmeticResult
+{
+    dword value;
+    word flags;
+};
+
+ArithmeticResult CalculateArithmetic(dword destination, dword source, unsigned bits,
+                                    word sr, bool subtract, bool extend = false, bool compare = false)
+{
+    const uint64_t mask = bits == 32 ? UINT32_MAX : (uint64_t(1) << bits) - 1;
+    const dword sign = dword(1) << (bits - 1);
+    const uint64_t dst = destination & mask;
+    const uint64_t src = source & mask;
+    const unsigned x = extend && (sr & 0x10) ? 1 : 0;
+    const uint64_t wide = subtract ? dst - src - x : dst + src + x;
+    const dword result = static_cast<dword>(wide & mask);
+    const bool carry = subtract ? dst < src + x : wide > mask;
+    const bool overflow = subtract ? ((dst ^ src) & (dst ^ result) & sign) != 0
+                                   : (~(dst ^ src) & (dst ^ result) & sign) != 0;
+    const bool zero = result == 0 && (!extend || (sr & 4));
+    const word flags = (compare ? (sr & 0x10) : (carry ? 0x10 : 0)) |
+        ((result & sign) ? 8 : 0) | (zero ? 4 : 0) | (overflow ? 2 : 0) | (carry ? 1 : 0);
+    return {result, flags};
+}
+
+bool DataSourceValid(unsigned mode, unsigned reg, unsigned size, bool addressRegisters = false)
+{
+    return size <= 2 && (mode != 1 || (addressRegisters && size != 0)) && (mode != 7 || reg <= 4);
+}
+
+bool DataDestinationValid(unsigned mode, unsigned reg)
+{
+    return mode != 1 && (mode != 7 || reg <= 1);
+}
+
+
+// 68000 restoring-divider timing: 15 quotient trials after the overflow test.
+// The dependency on operand bits is documented by Jorge Cwik's hardware timing
+// measurements (comp.sys.amiga.emulations, 2005-06-14).
+unsigned UnsignedDivisionCycles(dword dividend, word divisor)
+{
+    if ((dividend >> 16) >= divisor) return 10;
+    unsigned cycles = 76;
+    const dword trialDivisor = dword(divisor) << 16;
+    dword partial = dividend;
+    for (unsigned bit = 0; bit < 15; ++bit)
+    {
+        const bool high = (partial & 0x80000000u) != 0;
+        const dword shifted = partial << 1;
+        const bool subtract = high || shifted >= trialDivisor;
+        if (!high) cycles += subtract ? 2 : 4;
+        partial = subtract ? shifted - trialDivisor : shifted;
+    }
+    return cycles;
+}
+
+unsigned SignedDivisionCycles(int64_t dividend, int64_t divisor)
+{
+    const uint64_t numerator = dividend < 0 ? -dividend : dividend;
+    const uint64_t denominator = divisor < 0 ? -divisor : divisor;
+    if ((numerator >> 16) >= denominator) return dividend < 0 ? 18 : 16;
+    const unsigned quotient = static_cast<unsigned>(numerator / denominator);
+    int cycles = 122 + (dividend < 0 ? 2 : 0);
+    if (divisor >= 0) cycles += dividend < 0 ? 2 : -2;
+    for (unsigned bit = 1; bit <= 15; ++bit)
+        if (!(quotient & (1u << bit))) cycles += 2;
+    return static_cast<unsigned>(cycles);
+}
+
+word LogicalFlags(dword result, unsigned bits, word sr)
+{
+    const dword mask = bits == 32 ? UINT32_MAX : (dword(1) << bits) - 1;
+    const dword value = result & mask;
+    return (sr & ~word(15)) | ((value & (dword(1) << (bits - 1))) ? 8 : 0) | (value == 0 ? 4 : 0);
+}
+
+struct ShiftResult
+{
+    dword value;
+    word flags;
+};
+
+// Advance one bit at a time: all MC68000 register counts 0..63 are defined,
+// including counts wider than the operand. Unsigned arithmetic avoids host UB.
+ShiftResult ShiftOperand(dword value, unsigned bits, unsigned count, bool left, unsigned kind, word sr)
+{
+    const dword mask = bits == 32 ? UINT32_MAX : (dword(1) << bits) - 1;
+    const dword sign = dword(1) << (bits - 1);
+    value &= mask;
+    bool extend = (sr & 0x10) != 0;
+    bool carry = kind == 2 && extend;
+    bool overflow = false;
+    for (unsigned i = 0; i < count; ++i)
+    {
+        const dword previous = value;
+        carry = left ? (previous & sign) != 0 : (previous & 1) != 0;
+        if (left)
+        {
+            value = (previous << 1) & mask;
+            if (kind == 2 && extend) value |= 1;
+            if (kind == 3 && carry) value |= 1;
+        }
+        else
+        {
+            value = previous >> 1;
+            if ((kind == 0 && (previous & sign)) ||
+                (kind == 2 && extend) || (kind == 3 && carry)) value |= sign;
+        }
+        if (kind == 0 && left && ((previous ^ value) & sign)) overflow = true;
+        if (kind != 3) extend = carry;
+    }
+    const word flags = (extend ? 0x10 : 0) | ((value & sign) ? 8 : 0) |
+        (value == 0 ? 4 : 0) | (overflow ? 2 : 0) | (carry ? 1 : 0);
+    return {value, flags};
+}
+}
+
 void M68k::OpcodeABCD(word opcode)
 {
-	byte rx = (opcode >> 9) & 0x7;
-	byte rm = (opcode >> 3) & 0x1;
-	byte ry = opcode & 0x7;
-
-	byte src;
-	byte dest;
-
-	EA_TYPES type;
-
-	if(rm)
-	{
-		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
-		get().opcodeClicks += 18;
-	}
-	else
-	{
-		type = EA_DATA_REG;
-		get().opcodeClicks += 6;
-	}
-
-	
-	dest = (byte)get().GetEAOperand(type, rx, BYTE, true, 0).operand;
-	src = (byte)get().GetEAOperand(type, ry, BYTE, false, 0).operand;
-	
-
-	byte xflag = TestBit(get().CCR, X_FLAG);
-
-	word result = dest + src + xflag;
-
-	//BCD OVERFLOW CORRECTION
-	if(((dest & 0xF) + (src & 0xF) + xflag) > 9)
-	{
-		result += 0x6;
-	}
-
-	if((result >> 4) > 9)
-	{
-		result += 0x60;
-	}
-
-	if(result > 0x99)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	if((result & 0xFF) != 0)
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	get().SetEAOperand(type, rx, (byte)result, BYTE, 0);
+    const byte sourceReg = opcode & 7;
+    const byte destReg = (opcode >> 9) & 7;
+    const bool memory = (opcode & 8) != 0;
+    const EA_TYPES mode = memory ? EA_ADDRESS_REG_INDIRECT_PRE_DEC : EA_DATA_REG;
+    const byte source = static_cast<byte>(get().GetEAOperand(mode, sourceReg, BYTE, false, 0).operand);
+    const byte destination = static_cast<byte>(get().GetEAOperand(mode, destReg, BYTE, true, 0).operand);
+    const unsigned extend = (get().CCR >> 4) & 1;
+    unsigned decimal = (destination & 15) + (source & 15) + extend;
+    if (decimal > 9) decimal += 6;
+    decimal += (destination & 0xf0) + (source & 0xf0);
+    const bool carry = decimal > 0x9f;
+    if (carry) decimal += 0x60;
+    const byte value = static_cast<byte>(decimal);
+    get().SetEAOperand(mode, destReg, value, BYTE, 0);
+    // BCD keeps Z sticky. N and V are architecturally undefined.
+    get().CCR = (get().CCR & ~word(0x15)) | (carry ? 0x11 : 0) | ((value == 0 && (get().CCR & 4)) ? 4 : 0);
+    get().opcodeClicks += memory ? 18 : 6;
 }
 
 void M68k::OpcodeADD(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	if(!TestBit(opmode, 2))
-	{
-		//<EA> + DN -> DN
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 0:
-			size = BYTE;
-			break;
-
-			case 1:
-			size = WORD;
-			break;
-
-			case 2:
-			size = LONG;
-			break;
-		}
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 4;
-			break;
-
-			case LONG:
-			{
-				if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-				{
-					get().opcodeClicks += 8;
-				}
-				else
-				{
-					get().opcodeClicks += 6;
-				}
-			}
-			break;
-		}
-
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = ((uint64_t)src.operand & maxTypeSize) + ((uint64_t)dest.operand & maxTypeSize);
-
-		if(sonic > maxTypeSize)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
-				if(eggman > INT8_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
-				if(eggman > INT16_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
-				if(eggman > INT32_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-
-		dword result = src.operand + dest.operand;
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += src.cycles;
-
-	}
-	else
-	{
-		//DN + <EA> -> <EA>
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 4:
-			size = BYTE;
-			break;
-
-			case 5:
-			size = WORD;
-			break;
-
-			case 6:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		if(size == WORD && type == EA_ADDRESS_REG)
-		{
-			switch(size)
-			{
-				case BYTE:
-				case WORD:
-				get().opcodeClicks += 8;
-				break;
-
-				case LONG:
-				{
-					if(size == WORD && type == EA_ADDRESS_REG)
-					{
-						if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-						{
-							get().opcodeClicks += 8;
-						}
-						else
-						{
-							get().opcodeClicks += 6;
-						}
-					}
-					else
-					{
-						get().opcodeClicks += 12;
-					}
-				}
-				break;
-			}
-		}
-		else
-		{
-			switch(size)
-			{
-				case BYTE:
-				case WORD:
-				get().opcodeClicks += 8;
-				break;
-
-				case LONG:
-				get().opcodeClicks += 12;
-				break;
-			}
-		}
-
-		dword result = dest.operand + src.operand;
-
-		if(size == WORD && type == EA_ADDRESS_REG)
-		{
-			result = get().SignExtendDWord((word)dest.operand) + get().SignExtendDWord((word)src.operand);
-			size = LONG;
-		}
-
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = ((uint64_t)dest.operand & maxTypeSize) + ((uint64_t)src.operand & maxTypeSize);
-
-		if(sonic > maxTypeSize)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
-				if(eggman > INT8_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
-				if(eggman > INT16_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
-				if(eggman > INT32_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(type, eaReg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += src.cycles;
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const byte opmode = (opcode >> 6) & 7;
+    const DATASIZE size = static_cast<DATASIZE>(opmode & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    const bool toMemory = (opmode & 4) != 0;
+    if (size > LONG || (toMemory ? (mode < EA_ADDRESS_REG_INDIRECT || !DataDestinationValid(mode, eaReg))
+                                : !DataSourceValid(mode, eaReg, size, true)))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, toMemory, 0);
+    const dword destination = toMemory ? operand.operand : get().registerData[reg];
+    const dword source = toMemory ? get().registerData[reg] : operand.operand;
+    const ArithmeticResult result = CalculateArithmetic(destination, source, 8u << size, get().CCR, false);
+    if (toMemory) get().SetEAOperand(mode, eaReg, result.value, size, 0);
+    else get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    if (toMemory) get().opcodeClicks += (size == LONG ? 12 : 8) + operand.cycles;
+    else get().opcodeClicks += (size == LONG ? ((mode <= EA_ADDRESS_REG || (mode == EA_MODE_7 && eaReg == 4)) ? 8 : 6) : 4) + operand.cycles;
 }
 
 void M68k::OpcodeADDA(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	DATASIZE size = LONG;
-	switch(opmode)
-	{
-		case 3:
-		size = WORD;
-		break;
-
-		case 7:
-		size = LONG;
-		break;
-	}
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, size, false, 0);
-
-	switch(size)
-	{
-		case WORD:
-		get().opcodeClicks += 8;
-		break;
-
-		case LONG:
-		{
-			if(data.eatype == EA_DATA_REG || data.eatype == EA_ADDRESS_REG || data.mode7Type == EA_MODE_7_IMMEDIATE)
-			{
-				get().opcodeClicks += 8;
-			}
-			else
-			{
-				get().opcodeClicks += 6;
-			}
-		}
-		break;
-	}
-
-	if(size == WORD)
-	{
-		data.operand = get().SignExtendDWord((word)data.operand);
-	}
-
-	dword result = get().registerAddress[reg] + data.operand;
-
-	get().SetAddressRegister(reg, result, size);
-
-	get().programCounter += data.PCadvance;
-
-	get().opcodeClicks += data.cycles;
+    const byte reg = (opcode >> 9) & 7;
+    const DATASIZE size = (opcode & 0x100) ? LONG : WORD;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, size, true)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, false, 0);
+    const dword source = size == WORD ? static_cast<dword>(static_cast<signed_dword>(static_cast<signed_word>(operand.operand))) : operand.operand;
+    get().registerAddress[reg] += source;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (size == WORD || mode <= EA_ADDRESS_REG || (mode == EA_MODE_7 && eaReg == 4) ? 8 : 6) + operand.cycles;
 }
 
 void M68k::OpcodeADDI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	if(type == EA_DATA_REG || type == EA_ADDRESS_REG)
-	{
-		get().opcodeClicks += (size == LONG) ? 16 : 8;
-	}
-	else
-	{
-		get().opcodeClicks += (size == LONG) ? 20 : 12;
-	}
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = ((uint64_t)src.operand & maxTypeSize) + ((uint64_t)dest.operand & maxTypeSize);
-
-	if(sonic > maxTypeSize)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand;
-
-			if(eggman > INT8_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand;
-
-			if(eggman > INT16_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand;
-
-			if(eggman > INT32_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = src.operand + dest.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if(vectorman == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += dest.cycles;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA immediate = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += immediate.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(operand.operand, immediate.operand, 8u << size, get().CCR, false);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 16 : 8) : (size == LONG ? 20 : 12)) + operand.cycles;
 }
 
 void M68k::OpcodeADDQ(word opcode)
 {
-	dword data = (opcode >> 9) & 0x7;
-
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	data = (data == 0) ? 8 : data;
-
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(type == EA_ADDRESS_REG && size == WORD)
-	{
-		data = get().SignExtendDWord((word)data);
-	}
-
-	dword result = data + dest.operand;
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	if(type == EA_ADDRESS_REG && size == WORD)
-	{
-		size = LONG;
-	}
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		get().opcodeClicks += (size == LONG) ? 8 : 4;
-		break;
-
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == BYTE) ? 4 : 8;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 12 : 8;
-		break;
-	}
-
-	if(type == EA_ADDRESS_REG)
-	{
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = ((uint64_t)data & maxTypeSize) + ((uint64_t)dest.operand & maxTypeSize);
-
-		if(sonic > maxTypeSize)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)data + (signed_byte)dest.operand;
-
-				if(eggman > INT8_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)data + (signed_word)dest.operand;
-
-				if(eggman > INT16_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)data + (signed_dword)dest.operand;
-
-				if(eggman > INT32_MAX)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-	}
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += dest.cycles;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    const unsigned immediate = ((opcode >> 9) & 7) ? ((opcode >> 9) & 7) : 8;
+    if (size > LONG || (mode == EA_ADDRESS_REG ? size == BYTE : !DataDestinationValid(mode, reg)))
+    { OpcodeILLEGAL(); return; }
+    if (mode == EA_ADDRESS_REG)
+    {
+        get().registerAddress[reg] += immediate;
+        get().opcodeClicks += 8;
+        return;
+    }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(operand.operand, immediate, 8u << size, get().CCR, false);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 8 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeADDX(word opcode)
 {
-	byte rx = (opcode >> 9) & 0x7;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte rm = (opcode >> 3) & 0x1;
-	byte ry = opcode & 0x7;
-
-	EA_TYPES type;
-
-	if(rm)
-	{
-		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
-		get().opcodeClicks += (size == LONG) ? 30 : 18;
-	}
-	else
-	{
-		type = EA_DATA_REG;
-		get().opcodeClicks += (size == LONG) ? 8 : 4;
-	}
-
-	
-	EA_DATA dest = get().GetEAOperand(type, rx, size, true, 0);
-	EA_DATA src = get().GetEAOperand(type, ry, size, false, 0);
-	get().programCounter += src.PCadvance;
-
-	byte xflag = TestBit(get().CCR, X_FLAG);
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = ((uint64_t)src.operand & maxTypeSize) + ((uint64_t)dest.operand & maxTypeSize) + (uint64_t)xflag;
-
-	if(sonic > maxTypeSize)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)src.operand + (signed_byte)dest.operand + (signed_byte)xflag;
-
-			if(eggman > INT8_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)src.operand + (signed_word)dest.operand + (signed_word)xflag;
-
-			if(eggman > INT16_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)src.operand + (signed_dword)dest.operand + (signed_dword)xflag;
-
-			if(eggman > INT32_MAX)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = src.operand + dest.operand + xflag;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if(vectorman != 0)
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-	
-	EA_DATA data = get().SetEAOperand(type, rx, result, size, 0);
-
-	get().programCounter += data.PCadvance;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const byte sourceReg = opcode & 7;
+    const byte destReg = (opcode >> 9) & 7;
+    const bool memory = (opcode & 8) != 0;
+    const EA_TYPES mode = memory ? EA_ADDRESS_REG_INDIRECT_PRE_DEC : EA_DATA_REG;
+    // Source is decremented first when both operands share the same An.
+    EA_DATA source, destination;
+    if (memory && size == LONG)
+    {
+        // The paired-long microsequence reads each low word first and only
+        // then commits An. A failed first word leaves that register unchanged.
+        const dword sourceAddress = get().registerAddress[sourceReg];
+        get().faultCycles = 60;
+        get().faultSavedPC = get().instructionPC + 4;
+        get().faultProgram = false;
+        const word sourceLow = Genesis::M68KReadMemoryWORD(sourceAddress - 2);
+        const word sourceHigh = Genesis::M68KReadMemoryWORD(sourceAddress - 4);
+        get().registerAddress[sourceReg] -= 4;
+        source.operand = (dword(sourceHigh) << 16) | sourceLow;
+        const dword destinationAddress = get().registerAddress[destReg];
+        get().faultCycles = 68;
+        const word destinationLow = Genesis::M68KReadMemoryWORD(destinationAddress - 2);
+        const word destinationHigh = Genesis::M68KReadMemoryWORD(destinationAddress - 4);
+        destination.operand = (dword(destinationHigh) << 16) | destinationLow;
+    }
+    else
+    {
+        source = get().GetEAOperand(mode, sourceReg, size, false, 0);
+        try { destination = get().GetEAOperand(mode, destReg, size, true, 0); }
+        catch (const AddressFault&) { if (memory) get().faultCycles += 4; throw; }
+    }
+    const ArithmeticResult result = CalculateArithmetic(destination.operand, source.operand, 8u << size, get().CCR, false, true);
+    get().SetEAOperand(mode, destReg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += memory ? (size == LONG ? 30 : 18) : (size == LONG ? 8 : 4);
 }
 
 void M68k::OpcodeAND(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	if(!TestBit(opmode, 2))
-	{
-		//<EA> & DN -> DN
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 0:
-			size = BYTE;
-			break;
-
-			case 1:
-			size = WORD;
-			break;
-
-			case 2:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 4;
-			break;
-
-			case LONG:
-			{
-				if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-				{
-					get().opcodeClicks += 8;
-				}
-				else
-				{
-					get().opcodeClicks += 6;
-				}
-			}
-			break;
-		}
-
-		//C_FLAG
-		BitReset(get().CCR, C_FLAG);
-
-		//V_FLAG
-		BitReset(get().CCR, V_FLAG);
-
-		dword result = src.operand & dest.operand;
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += src.cycles;
-
-	}
-	else
-	{
-		//DN & <EA> -> <EA>
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 4:
-			size = BYTE;
-			break;
-
-			case 5:
-			size = WORD;
-			break;
-
-			case 6:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 8;
-			break;
-
-			case LONG:
-			get().opcodeClicks += 12;
-			break;
-		}
-
-		//C_FLAG
-		BitReset(get().CCR, C_FLAG);
-
-		//V_FLAG
-		BitReset(get().CCR, V_FLAG);
-
-		dword result = dest.operand & src.operand;
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(type, eaReg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += src.cycles;
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    const bool toMemory = (opcode & 0x100) != 0;
+    if (size > LONG || (toMemory ? (mode < EA_ADDRESS_REG_INDIRECT || !DataDestinationValid(mode, eaReg))
+                                : !DataSourceValid(mode, eaReg, size)))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, toMemory, 0);
+    const dword result = get().registerData[reg] & operand.operand;
+    if (toMemory) get().SetEAOperand(mode, eaReg, result, size, 0);
+    else get().SetDataRegister(reg, result, size);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (toMemory ? (size == LONG ? 12 : 8)
+        : (size == LONG ? (mode == EA_DATA_REG || (mode == EA_MODE_7 && eaReg == 4) ? 8 : 6) : 4)) + operand.cycles;
 }
 
 void M68k::OpcodeANDI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 16 : 8;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 20 : 12;
-		break;
-	}
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += dest.cycles;
-
-	//C_FLAG
-	BitReset(get().CCR, C_FLAG);
-
-	//V_FLAG
-	BitReset(get().CCR, V_FLAG);
-
-	dword result = src.operand & dest.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if(vectorman == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA immediate = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += immediate.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const dword result = operand.operand & immediate.operand;
+    get().SetEAOperand(mode, reg, result, size, 0);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 16 : 8) : (size == LONG ? 20 : 12)) + operand.cycles;
 }
 
 void M68k::OpcodeANDI_To_CCR()
 {
-	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-	get().programCounter += 2;
-
-	byte loCCR = (byte)get().CCR;
-	byte loImm = (byte)imm;
-
-	loCCR &= loImm;
-
-	get().CCR &= 0xFF00;
-	get().CCR |= loCCR;
-
-	get().opcodeClicks += 20;
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR & ~conditionCodeMask) | ((get().CCR & value) & conditionCodeMask);
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeANDI_To_SR()
 {
-	if(get().superVisorModeActivated)
-	{
-		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-		get().programCounter += 2;
-
-		get().CCR = (get().CCR & imm) & statusRegisterMask;
-
-		get().opcodeClicks += 20;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR & value) & statusRegisterMask;
+    get().CheckPrivilege();
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeASL_ASR_Register(word opcode)
 {
-	byte count_reg = (opcode >> 9) & 0x7;
-
-	byte dr = (opcode >> 8) & 0x1;
-
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte ir = (opcode >> 5) & 0x1;
-
-	byte reg = opcode & 0x7;
-
-	int shiftCount;
-
-	if(ir)
-	{
-		shiftCount = get().registerData[count_reg] % 64;
-	}
-	else
-	{
-		shiftCount = (count_reg == 0) ? 8 : count_reg;  
-	}
-
-	get().opcodeClicks += (6 + (2 * shiftCount)); 
-
-	signed_dword toShift = (signed_dword)get().registerData[reg];
-
-	int numBits = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		numBits = 8;
-		toShift &= 0xFF;
-		break;
-
-		case WORD:
-		numBits = 16;
-		toShift &= 0xFFFF;
-		break;
-
-		case LONG:
-		numBits = 32;
-		get().opcodeClicks += 2;
-		break;
-	}
-
-	signed_dword result = 0;
-
-	if(shiftCount == 0)
-	{
-		result = toShift;
-		BitReset(get().CCR, C_FLAG);
-	}
-	else if(dr) //ShiftLeft
-	{
-		bool bitSet = shiftCount != 0 && TestBit(toShift, numBits - shiftCount);
-
-		if(shiftCount == 0)
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-		else
-		{
-			if(bitSet)
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-
-		switch(size)
-		{
-			case BYTE:
-			result = ((signed_byte)toShift) << ((signed_byte)shiftCount);
-			break;
-
-			case WORD:
-			result = ((signed_word)toShift) << ((signed_word)shiftCount);
-			break;
-
-			case LONG:
-			result = ((signed_dword)toShift) << ((signed_dword)shiftCount);
-			break;
-		}
-	}
-	else //ShiftRight
-	{
-		bool bitSet = shiftCount != 0 && TestBit(toShift, shiftCount - 1);
-
-		if(shiftCount == 0)
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-		else
-		{
-			if(bitSet)
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-
-		switch(size)
-		{
-			case BYTE:
-			result = ((signed_byte)toShift) >> ((signed_byte)shiftCount);
-			break;
-
-			case WORD:
-			result = ((signed_word)toShift) >> ((signed_word)shiftCount);
-			break;
-
-			case LONG:
-			result = ((signed_dword)toShift) >> ((signed_dword)shiftCount);
-			break;
-		}
-	}
-
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().SetDataRegister(reg, (dword)result, size);
-
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const unsigned reg = opcode & 7;
+    const unsigned countReg = (opcode >> 9) & 7;
+    const unsigned count = (opcode & 0x20) ? (get().registerData[countReg] & 63) : (countReg ? countReg : 8);
+    const unsigned bits = 8u << size;
+    const ShiftResult result = ShiftOperand(get().registerData[reg], bits, count, (opcode & 0x100) != 0, 0, get().CCR);
+    get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += (size == LONG ? 8 : 6) + 2 * count;
 }
 
 void M68k::OpcodeASL_ASR_Memory(word opcode)
 {
-	byte dr = (opcode >> 8) & 0x1;
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	signed_dword toShift = (signed_dword)get().GetEAOperand(type, eaReg, WORD, true, 0).operand;
-
-	signed_dword result = 0;
-
-	if(dr) //ShiftLeft
-	{
-		bool bitSet = TestBit(toShift, 15);
-
-		if(bitSet)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		result = ((signed_word)toShift) << ((signed_word)1);
-	}
-	else //ShiftRight
-	{
-		bool bitSet = TestBit(toShift, 0);
-
-		if(bitSet)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		result = ((signed_word)toShift) >> ((signed_word)1);
-	}
-
-	BitReset(get().CCR, V_FLAG);
-
-	word vectorman = (word)result;
-	vectorman &= 0xFFFF;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 15))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	EA_DATA set = get().SetEAOperand(type, eaReg, (word)result, WORD, 0);
-
-	get().programCounter += set.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += set.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode < EA_ADDRESS_REG_INDIRECT || (mode == EA_MODE_7 && reg > 1))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, WORD, true, 0);
+    const ShiftResult result = ShiftOperand(operand.operand, 16, 1, (opcode & 0x100) != 0, 0, get().CCR);
+    get().SetEAOperand(mode, reg, result.value, WORD, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += 8 + operand.cycles;
 }
 
 void M68k::OpcodeBcc(word opcode)
 {
-	byte condition = (opcode >> 8) & 0xF;
-	byte displacement8 = opcode & 0xFF;
-
-	dword pcAdvance = 0; 
-
-	dword displacement = get().SignExtendDWord(get().SignExtendWord(displacement8));
-
-	if(displacement8 == 0)
-	{
-		word displacement16 = Genesis::M68KReadMemoryWORD(get().programCounter);
-		displacement = get().SignExtendDWord(displacement16);
-		pcAdvance = 2;
-		get().opcodeClicks += 4;
-	}
-	else if(displacement8 == 0xFF)
-	{
-		displacement = Genesis::M68KReadMemoryLONG(get().programCounter);
-		pcAdvance = 4;
-		get().opcodeClicks += 4;
-	}
-
-	if(get().ConditionTable(condition))
-	{
-		get().programCounter += displacement;
-		get().opcodeClicks += 10;
-	}
-	else
-	{
-		get().programCounter += pcAdvance;
-		get().opcodeClicks += 8;
-	}
+    const byte displacement8 = byte(opcode);
+    const bool extension = displacement8 == 0;
+    const dword displacement = extension ? get().SignExtendDWord(get().ReadInstructionWord(get().programCounter)) :
+        get().SignExtendDWord(get().SignExtendWord(displacement8));
+    if (get().ConditionTable((opcode >> 8) & 15))
+    {
+        const dword target = get().programCounter + displacement;
+        get().CheckProgramAddress(target, 60, get().instructionPC + 2);
+        get().prefetchValid = false;
+        get().programCounter = target;
+        get().opcodeClicks += 10;
+    }
+    else
+    {
+        get().programCounter += extension ? 2 : 0;
+        get().opcodeClicks += extension ? 12 : 8;
+    }
 }
 
 void M68k::OpcodeBCHGDynamic(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().registerData[(opcode >> 9) & 7];
 
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = get().registerData[reg] % modulo;
-	
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-		BitSet(dest.operand, bit);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-		BitReset(dest.operand, bit);
-	}
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 12;
-	get().opcodeClicks += dest.cycles;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value ^= mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 8 : 8) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBCHGStatic(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
-	get().programCounter += 2;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-		BitSet(dest.operand, bit);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-		BitReset(dest.operand, bit);
-	}
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += dest.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value ^= mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 12 : 12) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBCLRDynamic(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().registerData[(opcode >> 9) & 7];
 
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = get().registerData[reg] % modulo;
-	
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	BitReset(dest.operand, bit);
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-	get().programCounter += dest.PCadvance;
-	
-	get().opcodeClicks += (size == BYTE) ? 12 : 14;
-	get().opcodeClicks += dest.cycles;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value &= ~mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 10 : 8) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBCLRStatic(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
-	get().programCounter += 2;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-	
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	BitReset(dest.operand, bit);
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += (size == BYTE) ? 8 : 10;
-	get().opcodeClicks += dest.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value &= ~mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 14 : 12) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBSETDynamic(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().registerData[(opcode >> 9) & 7];
 
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = get().registerData[reg] % modulo;
-	
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	BitSet(dest.operand, bit);
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 12;
-	get().opcodeClicks += dest.cycles;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value |= mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 8 : 8) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBSETStatic(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
-	get().programCounter += 2;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	BitSet(dest.operand, bit);
-
-	get().SetEAOperand(type, eaReg, dest.operand, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += dest.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
+    value |= mask;
+    get().SetEAOperand(mode, reg, value, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 12 : 12) + operand.cycles;
+    if (mode == EA_DATA_REG && bit < 16) get().opcodeClicks -= 2;
 }
 
 void M68k::OpcodeBSR(word opcode)
 {
-	byte displacement8 = opcode & 0xFF;
-
-	dword pcAdvance = 0; 
-
-	dword displacement = get().SignExtendDWord(get().SignExtendWord(displacement8));
-
-	if(displacement8 == 0)
-	{
-		word displacement16 = Genesis::M68KReadMemoryWORD(get().programCounter);
-		pcAdvance = 2;
-		displacement = get().SignExtendDWord(displacement16);
-	}
-	else if(displacement8 == 0xFF)
-	{
-		displacement = Genesis::M68KReadMemoryLONG(get().programCounter);
-		pcAdvance = 4;
-	}	
-
-	get().registerAddress[7] -= 4;
-	Genesis::M68KWriteMemoryLONG(get().registerAddress[7], get().programCounter + pcAdvance);
-	get().programCounter += displacement;
-
-	get().opcodeClicks += 18;
+    const byte displacement8 = byte(opcode);
+    const bool extension = displacement8 == 0;
+    const dword displacement = extension ? get().SignExtendDWord(get().ReadInstructionWord(get().programCounter)) :
+        get().SignExtendDWord(get().SignExtendWord(displacement8));
+    get().registerAddress[7] -= 4;
+    Genesis::M68KWriteMemoryLONG(get().registerAddress[7], get().programCounter + (extension ? 2 : 0));
+    const dword target = get().programCounter + displacement;
+    get().CheckProgramAddress(target, 68, target);
+    get().prefetchValid = false;
+    get().programCounter = target;
+    get().opcodeClicks += 18;
 }
 
 void M68k::OpcodeBTSTDynamic(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode == EA_ADDRESS_REG || (mode == EA_MODE_7 && reg > 4)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().registerData[(opcode >> 9) & 7];
 
-	EA_TYPES type = (EA_TYPES)eaMode;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, false, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
 
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
 
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = get().registerData[reg] % modulo;
-	
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
-	get().programCounter += dest.PCadvance;
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	get().opcodeClicks += (size == BYTE) ? 4 : 6;
-	get().opcodeClicks += dest.cycles;
+    get().programCounter += operand.PCadvance;
+    if (mode == EA_MODE_7 && reg == EA_MODE_7_IMMEDIATE) get().opcodeClicks += 2;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 6 : 4) + operand.cycles;
 }
 
 void M68k::OpcodeBTSTStatic(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode == EA_ADDRESS_REG || (mode == EA_MODE_7 && reg > 3)) { OpcodeILLEGAL(); return; }
+    const unsigned bitNumber = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    const DATASIZE size = mode == EA_DATA_REG ? LONG : BYTE;
+    const unsigned bit = bitNumber & (mode == EA_DATA_REG ? 31 : 7);
+    const dword mask = dword(1) << bit;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, false, 0);
+    get().CCR = (get().CCR & ~word(4)) | ((operand.operand & mask) ? 0 : 4);
+    dword value = operand.operand;
 
-	EA_TYPES type = (EA_TYPES)eaMode;
 
-	int modulo = (type == EA_DATA_REG) ? 32 : 8;
-
-	DATASIZE size = (type == EA_DATA_REG) ? LONG : BYTE;
-
-	int bit = Genesis::M68KReadMemoryBYTE(get().programCounter + 1) % modulo;
-	get().programCounter += 2;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
-	get().programCounter += dest.PCadvance;
-
-	if(!TestBit(dest.operand, bit))
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	get().opcodeClicks += (size == BYTE) ? 8 : 10;
-	get().opcodeClicks += dest.cycles;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 10 : 8) + operand.cycles;
 }
 
 void M68k::OpcodeCHK(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	DATASIZE size = WORD; //long est juste dispo pour les M68020-30-40
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	signed_word Dn = get().registerData[reg];
-
-	EA_DATA bounds = get().GetEAOperand(type, eaReg, size, false, 0);
-
-	get().programCounter += bounds.PCadvance;
-
-	get().opcodeClicks += 10;
-	get().opcodeClicks += bounds.cycles;
-
-	if(Dn < 0)
-	{
-		get().OpcodeTRAP(6);
-		BitSet(get().CCR, N_FLAG);
-		get().opcodeClicks += 44;
-	}
-	else if(Dn > ((signed_word)bounds.operand))
-	{
-		get().OpcodeTRAP(6);
-		BitReset(get().CCR, N_FLAG);
-	}
+    const unsigned reg = (opcode >> 9) & 7;
+    const EA_DATA bounds = get().GetEAOperand(EA_TYPES((opcode >> 3) & 7), opcode & 7, WORD, false, 0);
+    get().programCounter += bounds.PCadvance;
+    const signed_word value = static_cast<signed_word>(get().registerData[reg]);
+    if (value < 0 || value > static_cast<signed_word>(bounds.operand))
+    {
+        get().CCR = (get().CCR & ~(1 << N_FLAG)) | (value < 0 ? 1 << N_FLAG : 0);
+        get().RaiseException(6, get().programCounter, (value < 0 && static_cast<signed_word>(word(value) - word(bounds.operand)) <= 0 ? 40 : 38) + bounds.cycles);
+    }
+    else get().opcodeClicks += 10 + bounds.cycles;
 }
 
 void M68k::OpcodeCLR(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA set = get().SetEAOperand(type, eaReg, 0, size, 0);
-
-	get().programCounter += set.PCadvance;
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 6 : 4;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 12 : 8;
-		get().opcodeClicks += set.cycles;
-		break;
-	}
-
-	BitReset(get().CCR, N_FLAG);
-	BitSet(get().CCR, Z_FLAG);
-	BitReset(get().CCR, V_FLAG);
-	BitReset(get().CCR, C_FLAG);
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    // The original 68000 always performs the memory read portion of CLR's
+    // read/modify/write cycle, even though its value is discarded.
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    get().SetEAOperand(mode, reg, 0, size, 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 6 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
+    get().CCR = (get().CCR & ~word(15)) | 4;
 }
 
 void M68k::OpcodeCMP_CMPA(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	DATASIZE size = LONG;
-
-	if(opmode > 2) //CMPA
-	{
-		switch(opmode)
-		{
-			case 3:
-			size = WORD;
-			break;
-
-			case 7:
-			size = LONG;
-			break;
-		}
-
-		get().opcodeClicks += 6;
-	}
-	else
-	{
-		size = (DATASIZE)opmode;
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 4;
-			break;
-
-			case LONG:
-			get().opcodeClicks += 6;
-			break;
-		}
-	}
-
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-
-	get().programCounter += src.PCadvance;
-	get().opcodeClicks += src.cycles;
-
-	dword dest;
-
-	if(opmode > 2) //CMPA
-	{
-		dest = get().registerAddress[reg];
-
-		if(size == WORD)
-		{
-			src.operand = get().SignExtendDWord((word)src.operand);
-			size = LONG;
-		}
-	}
-	else
-	{
-		dest = get().registerData[reg];
-	}
-
-	//C_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)dest & maxTypeSize;
-	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)dest - (signed_byte)src.operand;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)dest - (signed_word)src.operand;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)dest - (signed_dword)src.operand;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = dest - src.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const byte opmode = (opcode >> 6) & 7;
+    const bool address = opmode == 3 || opmode == 7;
+    const DATASIZE size = address ? (opmode == 3 ? WORD : LONG) : static_cast<DATASIZE>(opmode);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    const byte destination = (opcode >> 9) & 7;
+    if (!DataSourceValid(mode, reg, size, true)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, false, 0);
+    const dword source = address && size == WORD ? static_cast<dword>(static_cast<signed_dword>(static_cast<signed_word>(operand.operand))) : operand.operand;
+    const ArithmeticResult result = CalculateArithmetic(address ? get().registerAddress[destination] : get().registerData[destination],
+        source, address ? 32 : 8u << size, get().CCR, true, false, true);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (address || size == LONG ? 6 : 4) + operand.cycles;
 }
 
 void M68k::OpcodeCMPI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
-	get().programCounter += dest.PCadvance;
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 14 : 8;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 12 : 8;
-		break;
-	}
-
-	get().opcodeClicks += dest.cycles;
-
-	//C_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = dest.operand - src.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA source = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += source.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, false, 0);
+    const ArithmeticResult result = CalculateArithmetic(operand.operand, source.operand, 8u << size, get().CCR, true, false, true);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 14 : 8) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeCMPM(word opcode)
 {
-	byte ax = (opcode >> 9) & 0x7;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte ay = opcode & 0x7;
-
-	EA_DATA dest = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, ax, size, false, 0);
-	EA_DATA src = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, ay, size, false, 0);
-
-	switch(size)
-	{
-		case BYTE:
-		case WORD:
-		get().opcodeClicks += 12;
-		break;
-
-		case LONG:
-		get().opcodeClicks += 20;
-		break;
-	}
-
-	get().programCounter += dest.PCadvance;
-
-	//C_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = dest.operand - src.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const byte sourceReg = opcode & 7;
+    const byte destinationReg = (opcode >> 9) & 7;
+    dword source, destination;
+    if (size == BYTE)
+    {
+        source = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, sourceReg, BYTE, false, 0).operand;
+        destination = get().GetEAOperand(EA_ADDRESS_REG_INDIRECT_POST_INC, destinationReg, BYTE, false, 0).operand;
+    }
+    else
+    {
+        const dword sourceAddress = get().registerAddress[sourceReg];
+        get().faultCycles = 58;
+        get().faultSavedPC = get().instructionPC + 4;
+        get().faultProgram = false;
+        get().registerAddress[sourceReg] += 2;
+        const word high = Genesis::M68KReadMemoryWORD(sourceAddress);
+        source = high;
+        if (size == LONG)
+        {
+            get().registerAddress[sourceReg] += 2;
+            source = (dword(high) << 16) | Genesis::M68KReadMemoryWORD(sourceAddress + 2);
+        }
+        const dword destinationAddress = get().registerAddress[destinationReg];
+        get().faultCycles = size == LONG ? 66 : 62;
+        const word destinationHigh = Genesis::M68KReadMemoryWORD(destinationAddress);
+        destination = destinationHigh;
+        get().registerAddress[destinationReg] += 2;
+        if (size == LONG)
+        {
+            destination = (dword(destinationHigh) << 16) | Genesis::M68KReadMemoryWORD(destinationAddress + 2);
+            get().registerAddress[destinationReg] += 2;
+        }
+    }
+    const ArithmeticResult result = CalculateArithmetic(destination, source, 8u << size, get().CCR, true, false, true);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += size == LONG ? 20 : 12;
 }
 
 void M68k::OpcodeDBcc(word opcode)
 {
-	byte condition = (opcode >> 8) & 0xF;
-	byte reg = opcode & 0x7;
-
-	if(!get().ConditionTable(condition))
-	{
-		bool negOne = (word)(get().registerData[reg]) == 0;
-
-		word lo = (word)(get().registerData[reg]) - 1;
-		word hi = (word)(get().registerData[reg] >> 16);
-
-		get().registerData[reg] = (hi << 16) | lo;
-
-		if(negOne)
-		{
-			get().registerData[reg] &= 0xFFFF0000;
-			get().registerData[reg] |= 0xFFFF;
-
-			get().programCounter += 2; 
-
-			get().opcodeClicks += 14;
-		}
-		else
-		{
-			dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
-
-			get().programCounter += displacement;
-
-			get().opcodeClicks += 10;
-		}
-	}
-	else
-	{
-		get().programCounter += 2;
-
-		get().opcodeClicks += 12;
-	}
+    const unsigned reg = opcode & 7;
+    const dword displacement = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
+    if (get().ConditionTable((opcode >> 8) & 15))
+    {
+        get().programCounter += 2;
+        get().opcodeClicks += 12;
+        return;
+    }
+    const word count = word(get().registerData[reg]) - 1;
+    const dword target = get().programCounter + displacement;
+    if (count != 0xFFFF) get().CheckProgramAddress(target, 60, get().instructionPC + 4);
+    get().registerData[reg] = (get().registerData[reg] & 0xFFFF0000) | count;
+    if (count != 0xFFFF) get().prefetchValid = false;
+    get().programCounter = count == 0xFFFF ? get().programCounter + 2 : target;
+    get().opcodeClicks += count == 0xFFFF ? 14 : 10;
 }
 
 void M68k::OpcodeDIVS(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = (opcode & 0x7);
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	signed_dword signedReg = get().registerData[reg];
-
-	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
-	get().programCounter += src.PCadvance;
-
-	get().opcodeClicks += 158;
-	get().opcodeClicks += src.cycles;
-
-	if(((signed_word)src.operand) == 0)
-	{
-		printf("DIVISION PAR ZERO, INTERDIT BORDEL\n");
-		return;
-	}
-
-	bool overflow = false;
-	signed_dword div = signedReg / (signed_word)src.operand;
-	if(div > 0x7FFF)
-	{
-		overflow = true;
-	}
-
-	if(overflow)
-	{
-		BitSet(get().CCR, V_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, V_FLAG);
-	}
-
-	if(!overflow)
-	{
-		signed_word quotient = (signed_word)div;
-		signed_word remainder = (signed_word)(signedReg - (((signed_dword)quotient) * ((signed_dword)((signed_word)src.operand))));
-
-		if(TestBit(signedReg, 31))
-		{
-			BitSet(remainder, 15);
-		}
-		else
-		{
-			BitReset(remainder, 15);
-		}
-
-		get().registerData[reg] = (((dword)remainder) << 16) | (dword)quotient;
-
-		BitReset(get().CCR, C_FLAG);
-
-		if(TestBit(quotient, 15))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		if(quotient == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, WORD)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, WORD, false, 0);
+    get().programCounter += operand.PCadvance;
+    const int64_t divisor = static_cast<signed_word>(operand.operand);
+    const int64_t dividend = static_cast<signed_dword>(get().registerData[reg]);
+    get().CCR &= ~word(1); // C is cleared even when the quotient overflows.
+    if (divisor == 0)
+    {
+        get().RaiseException(5, get().programCounter, 38 + operand.cycles);
+        return;
+    }
+    const int64_t quotient = dividend / divisor;
+    const bool overflow = quotient < -32768 || quotient > 32767;
+    if (overflow) get().CCR |= 2;
+    else
+    {
+        const int64_t remainder = dividend % divisor;
+        get().registerData[reg] = (static_cast<dword>(static_cast<word>(remainder)) << 16) | static_cast<word>(quotient);
+        get().CCR = (get().CCR & ~word(0x0f)) | ((quotient & 0x8000) ? 8 : 0) | (quotient == 0 ? 4 : 0);
+    }
+    get().opcodeClicks += SignedDivisionCycles(dividend, divisor) + operand.cycles;
 }
 
 void M68k::OpcodeDIVU(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = (opcode & 0x7);
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	dword unsignedReg = get().registerData[reg];
-
-	EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
-	get().programCounter += src.PCadvance;
-
-	get().opcodeClicks += 140;
-	get().opcodeClicks += src.cycles;
-
-	if(((word)src.operand) == 0)
-	{
-		printf("DIVISION PAR ZERO, INTERDIT BORDEL\n");
-		return;
-	}
-
-	bool overflow = false;
-	dword div = unsignedReg / (word)src.operand;
-	if(div > 0xFFFF)
-	{
-		overflow = true;
-	}
-
-	if(overflow)
-	{
-		BitSet(get().CCR, V_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, V_FLAG);
-	}
-
-	BitReset(get().CCR, C_FLAG);
-
-	if(!overflow)
-	{
-		word quotient = (word)div;
-		word remainder = (word)(unsignedReg - (((dword)quotient) * ((dword)((word)src.operand))));
-
-		get().registerData[reg] = (((dword)remainder) << 16) | (dword)quotient;
-
-		BitReset(get().CCR, C_FLAG);
-
-		if(TestBit(quotient, 15))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		if(quotient == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, WORD)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, WORD, false, 0);
+    get().programCounter += operand.PCadvance;
+    const int64_t divisor = static_cast<word>(operand.operand);
+    const int64_t dividend = get().registerData[reg];
+    get().CCR &= ~word(1); // C is cleared even when the quotient overflows.
+    if (divisor == 0)
+    {
+        get().RaiseException(5, get().programCounter, 38 + operand.cycles);
+        return;
+    }
+    const int64_t quotient = dividend / divisor;
+    const bool overflow = quotient > 65535;
+    if (overflow) get().CCR |= 2;
+    else
+    {
+        const int64_t remainder = dividend % divisor;
+        get().registerData[reg] = (static_cast<dword>(static_cast<word>(remainder)) << 16) | static_cast<word>(quotient);
+        get().CCR = (get().CCR & ~word(0x0f)) | ((quotient & 0x8000) ? 8 : 0) | (quotient == 0 ? 4 : 0);
+    }
+    get().opcodeClicks += UnsignedDivisionCycles(static_cast<dword>(dividend), static_cast<word>(divisor)) + operand.cycles;
 }
 
 void M68k::OpcodeEOR(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	DATASIZE size = LONG;
-	switch(opmode)
-	{
-		case 4:
-		size = BYTE;
-		break;
-
-		case 5:
-		size = WORD;
-		break;
-
-		case 6:
-		size = LONG;
-		break;
-	}
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	dword src = get().registerData[reg];
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-	dword result = dest.operand ^ src;
-
-	if(type == EA_DATA_REG)
-	{
-		get().opcodeClicks += (size == LONG) ? 8 : 4;
-	}
-	else
-	{
-		get().opcodeClicks += (size == LONG) ? 12 : 8;
-		get().opcodeClicks += dest.cycles;
-	}
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const dword result = operand.operand ^ get().registerData[(opcode >> 9) & 7];
+    get().SetEAOperand(mode, reg, result, size, 0);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 8 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeEORI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-	dword result = dest.operand ^ src.operand;
-
-	if(type == EA_DATA_REG || type == EA_ADDRESS_REG)
-	{
-		get().opcodeClicks += (size == LONG) ? 16 : 8;
-	}
-	else
-	{
-		get().opcodeClicks += (size == LONG) ? 20 : 12;
-	}
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += dest.PCadvance;
-	get().opcodeClicks += dest.cycles;
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA immediate = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += immediate.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const dword result = operand.operand ^ immediate.operand;
+    get().SetEAOperand(mode, reg, result, size, 0);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 16 : 8) : (size == LONG ? 20 : 12)) + operand.cycles;
 }
 
 void M68k::OpcodeEORI_To_CCR()
 {
-	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-	get().programCounter += 2;
-
-	byte loCCR = (byte)get().CCR;
-	byte loImm = (byte)imm;
-
-	loCCR ^= loImm;
-
-	get().CCR &= 0xFF00;
-	get().CCR |= loCCR & conditionCodeMask;
-
-	get().opcodeClicks += 20;
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR & ~conditionCodeMask) | ((get().CCR ^ value) & conditionCodeMask);
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeEORI_To_SR()
 {
-	if(get().superVisorModeActivated)
-	{
-		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-		get().programCounter += 2;
-
-		get().CCR = (get().CCR ^ imm) & statusRegisterMask;
-
-		get().opcodeClicks += 20;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR ^ value) & statusRegisterMask;
+    get().CheckPrivilege();
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeEXG(word opcode)
@@ -113233,19 +111247,7 @@ void M68k::OpcodeEXT(word opcode)
 
 void M68k::OpcodeILLEGAL()
 {
-	// Illegal instructions are synchronous vector 4 exceptions. TRAP #4 uses
-	// vector 36 and must not be queued here or charged a second set of cycles.
-	const word savedStatus = get().CCR;
-	const dword faultingPC = get().programCounter - 2;
-	get().CCR = (get().CCR | 0x2000) & ~word(0x8000);
-	get().CheckPrivilege();
-	get().registerAddress[7] -= 4;
-	Genesis::M68KWriteMemoryLONG(get().registerAddress[7], faultingPC);
-	get().registerAddress[7] -= 2;
-	Genesis::M68KWriteMemoryWORD(get().registerAddress[7], savedStatus);
-	get().programCounter = Genesis::M68KReadMemoryLONG(4 * 4);
-	get().stop = false;
-	get().opcodeClicks += 34;
+    get().RaiseException(4, get().programCounter - 2, 34);
 }
 
 void M68k::OpcodeJMP(word opcode)
@@ -113255,8 +111257,14 @@ void M68k::OpcodeJMP(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	EA_DATA data = get().GetEAOperand(type, eaReg, LONG, false, 0);
-	get().programCounter = data.pointer;
+	EA_DATA data = get().GetControlAddress(type, eaReg);
+    unsigned refill = 8;
+    if (type == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT || (type == EA_MODE_7 && (eaReg == 0 || eaReg == 2))) refill = 10;
+    else if (type == EA_ADDRESS_REG_INDIRECT_INDEX || (type == EA_MODE_7 && eaReg == 3)) refill = 14;
+    else if (type == EA_MODE_7 && eaReg == 1) refill = 12;
+    get().CheckProgramAddress(data.pointer, 50 + refill, get().instructionPC + 2);
+	get().prefetchValid = false;
+    get().programCounter = data.pointer;
 
 	switch(data.eatype)
 	{
@@ -113300,11 +111308,17 @@ void M68k::OpcodeJSR(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	get().registerAddress[0x7] -= 4;
-	EA_DATA data = get().GetEAOperand(type, eaReg, LONG, false, 0);
+	EA_DATA data = get().GetControlAddress(type, eaReg);
+    unsigned refill = 8;
+    if (type == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT || (type == EA_MODE_7 && (eaReg == 0 || eaReg == 2))) refill = 10;
+    else if (type == EA_ADDRESS_REG_INDIRECT_INDEX || (type == EA_MODE_7 && eaReg == 3)) refill = 14;
+    else if (type == EA_MODE_7 && eaReg == 1) refill = 12;
+    get().CheckProgramAddress(data.pointer, 50 + refill, get().programCounter + data.PCadvance);
+    get().registerAddress[0x7] -= 4;
 	get().programCounter += data.PCadvance;
 	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().programCounter);
-	get().programCounter = data.pointer;
+	get().prefetchValid = false;
+    get().programCounter = data.pointer;
 
 	switch(data.eatype)
 	{
@@ -113349,7 +111363,7 @@ void M68k::OpcodeLEA(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	EA_DATA src = get().GetEAOperand(type, eaReg, LONG, false, 0);
+	EA_DATA src = get().GetControlAddress(type, eaReg);
 
 	get().registerAddress[reg] = src.pointer;
 
@@ -113394,11 +111408,12 @@ void M68k::OpcodeLINK(word opcode)
 {
 	byte reg = (opcode & 0x7);
 
-	get().registerAddress[0x7] -= 4;
-	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], get().registerAddress[reg]);
+	const dword oldFrame = get().registerAddress[reg];
+    get().registerAddress[0x7] -= 4;
+	Genesis::M68KWriteMemoryLONG(get().registerAddress[0x7], oldFrame);
 	get().registerAddress[reg] = get().registerAddress[0x7];
 
-	dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
+	dword displacement = get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
 
 	get().programCounter += 2;
 
@@ -113409,224 +111424,30 @@ void M68k::OpcodeLINK(word opcode)
 
 void M68k::OpcodeLSL_LSR_Register(word opcode)
 {
-	byte count_reg = (opcode >> 9) & 0x7;
-	byte dr = (opcode >> 8) & 0x1;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte ir = (opcode >> 5) & 0x1;
-	byte reg = opcode & 0x7;
-
-	int shift = 0;
-
-	if(ir)
-	{
-		shift = get().registerData[count_reg] % 64;
-	}
-	else
-	{
-		shift = (count_reg == 0) ? 8 : count_reg;
-	}
-
-	get().opcodeClicks += (6 + (2 * shift));
-
-	dword toShift = get().registerData[reg];
-
-	int bits = 0;
-	switch(size)
-	{
-		case BYTE:
-		bits = 8;
-		toShift &= 0xFF;
-		break;
-
-		case WORD:
-		bits = 16;
-		toShift &= 0xFFFF;
-		break;
-
-		case LONG:
-		bits = 32;
-		get().opcodeClicks += 2;
-		break;
-	}
-
-	dword newData = 0;
-
-	if(dr == 0) //shift right
-	{
-		if(shift == 0)
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-		else
-		{
-			if(TestBit(toShift, shift - 1))
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-		newData = toShift >> shift;
-	}
-	else //shift left
-	{
-		if(shift == 0)
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-		else
-		{
-			if(TestBit(toShift, bits - shift))
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-		newData = toShift << shift;
-	}
-
-	get().SetDataRegister(reg, newData, size);
-	
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const unsigned reg = opcode & 7;
+    const unsigned countReg = (opcode >> 9) & 7;
+    const unsigned count = (opcode & 0x20) ? (get().registerData[countReg] & 63) : (countReg ? countReg : 8);
+    const unsigned bits = 8u << size;
+    const ShiftResult result = ShiftOperand(get().registerData[reg], bits, count, (opcode & 0x100) != 0, 1, get().CCR);
+    get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += (size == LONG ? 8 : 6) + 2 * count;
 }
 
 void M68k::OpcodeLSL_LSR_Memory(word opcode)
 {
-	byte dr = (opcode >> 8) & 0x1;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
-
-	dword toShift = dest.operand;
-
-	dword newData = 0;
-
-	if(dr == 0) //shift right
-	{
-		if(TestBit(toShift, 0))
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-		newData = toShift >> 1;
-	}
-	else //shift left
-	{
-		if(TestBit(toShift, 15))
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-		newData = toShift << 1;
-	}
-
-	EA_DATA set = get().SetEAOperand(type, eaReg, newData, WORD, 0);
-
-	get().programCounter += set.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += dest.cycles;
-
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	
-	vectorman &= 0xFFFF;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 15))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode < EA_ADDRESS_REG_INDIRECT || (mode == EA_MODE_7 && reg > 1))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, WORD, true, 0);
+    const ShiftResult result = ShiftOperand(operand.operand, 16, 1, (opcode & 0x100) != 0, 1, get().CCR);
+    get().SetEAOperand(mode, reg, result.value, WORD, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += 8 + operand.cycles;
 }
 
 void M68k::OpcodeMOVE(word opcode)
@@ -113667,32 +111488,10 @@ void M68k::OpcodeMOVE(word opcode)
 		break;
 	}
 
-	EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
+	const word originalStatus = get().CCR;
+    EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
 	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().SetEAOperand(destType, destReg, src.operand, size, 0);
-	get().programCounter += dest.PCadvance;
-
-	int srcClicks = srcMode;
-	if(srcMode == EA_MODE_7)
-	{
-		srcClicks += srcReg;
-	}
-	int destClicks = destMode;
-	if(destMode == EA_MODE_7)
-	{
-		destClicks += destReg;
-	}
-
-	if(size == LONG)
-	{
-		get().opcodeClicks += get().clicksMoveL[srcClicks][destClicks];
-	}
-	else
-	{
-		get().opcodeClicks += get().clicksMoveBW[srcClicks][destClicks];
-	}
-
-	BitReset(get().CCR, C_FLAG);
+		BitReset(get().CCR, C_FLAG);
 	BitReset(get().CCR, V_FLAG);
 
 	dword vectorman = src.operand;
@@ -113747,6 +111546,39 @@ void M68k::OpcodeMOVE(word opcode)
 	{
 		BitReset(get().CCR, N_FLAG);
 	}
+
+	const word resultStatus = get().CCR;
+    const bool directSource = srcMode <= 1 || (srcMode == 7 && srcReg == 4);
+    if (size == LONG && (destMode == 2 || destMode == 3 || (destMode == 7 && destReg == 1 && !directSource)))
+        get().CCR = directSource ? originalStatus : word((resultStatus & ~8) | (src.operand & 0x8000 ? 8 : 0));
+    else if (size == LONG && directSource && (destMode == 5 || destMode == 6))
+        get().CCR = (resultStatus & ~word(3)) | (originalStatus & 3);
+    if (size == WORD && destMode == 4)
+        get().faultInstructionWord = get().ReadInstructionWord(get().programCounter);
+    EA_DATA dest = get().SetEAOperand(destType, destReg, src.operand, size, 0);
+	get().CCR = resultStatus;
+    get().programCounter += dest.PCadvance;
+
+	int srcClicks = srcMode;
+	if(srcMode == EA_MODE_7)
+	{
+		srcClicks += srcReg;
+	}
+	int destClicks = destMode;
+	if(destMode == EA_MODE_7)
+	{
+		destClicks += destReg;
+	}
+
+	if(size == LONG)
+	{
+		get().opcodeClicks += get().clicksMoveL[srcClicks][destClicks];
+	}
+	else
+	{
+		get().opcodeClicks += get().clicksMoveBW[srcClicks][destClicks];
+	}
+
 }
 
 void M68k::OpcodeMOVE_To_CCR(word opcode)
@@ -113769,28 +111601,16 @@ void M68k::OpcodeMOVE_To_CCR(word opcode)
 
 void M68k::OpcodeMOVE_To_SR(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = (opcode & 0x7);
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	if(get().superVisorModeActivated)
-	{
-		EA_DATA src = get().GetEAOperand(type, eaReg, WORD, false, 0);
-
-		get().CCR = src.operand & statusRegisterMask;
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += 12;
-		get().opcodeClicks += src.cycles;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const EA_DATA source = get().GetEAOperand(EA_TYPES((opcode >> 3) & 7), opcode & 7, WORD, false, 0);
+    get().programCounter += source.PCadvance;
+    get().CCR = source.operand & statusRegisterMask;
+    get().CheckPrivilege();
+    get().opcodeClicks += 12 + source.cycles;
 }
 
 void M68k::OpcodeMOVE_From_SR(word opcode)
@@ -113800,7 +111620,11 @@ void M68k::OpcodeMOVE_From_SR(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	// This instruction is unprivileged on the MC68000 used by the Genesis.
+	// The original MC68000 performs a destination read before writing SR.
+    // This bus cycle can fault before the write and commits word EA updates.
+    if (type != EA_DATA_REG) get().GetEAOperand(type, eaReg, WORD, true, 0);
+
+    // This instruction is unprivileged on the MC68000 used by the Genesis.
 	EA_DATA src = get().SetEAOperand(type, eaReg, get().CCR & statusRegisterMask, WORD, 0);
 	get().programCounter += src.PCadvance;
 
@@ -113810,22 +111634,15 @@ void M68k::OpcodeMOVE_From_SR(word opcode)
 
 void M68k::OpcodeMOVE_USP(word opcode)
 {
-	byte dr = (opcode >> 3) & 0x1;
-	byte reg = opcode & 0x7;
-
-	if(get().superVisorModeActivated)
-	{
-		if(dr == 0)
-		{
-			get().userStackPointer = get().registerAddress[reg];
-		}
-		else
-		{
-			get().registerAddress[reg] = get().userStackPointer;
-		}
-	}
-
-	get().opcodeClicks += 4;
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const unsigned reg = opcode & 7;
+    if (opcode & 8) get().registerAddress[reg] = get().userStackPointer;
+    else get().userStackPointer = get().registerAddress[reg];
+    get().opcodeClicks += 4;
 }
 
 void M68k::OpcodeMOVEA(word opcode)
@@ -113857,7 +111674,7 @@ void M68k::OpcodeMOVEA(word opcode)
 	}
 
 	EA_DATA src = get().GetEAOperand(srcType, srcReg, size, false, 0);
-	
+
 	if(size == WORD)
 	{
 		src.operand = get().SignExtendDWord((word)src.operand);
@@ -113885,257 +111702,78 @@ void M68k::OpcodeMOVEA(word opcode)
 
 void M68k::OpcodeMOVEM(word opcode)
 {
-	bool dr = (opcode >> 10) & 0x1;
-	byte tempSize = (opcode >> 6) & 0x1;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	DATASIZE size = LONG;
-	switch(tempSize)
-	{
-		case 0:
-		size = WORD;
-		break;
-
-		case 1:
-		size = LONG;
-		break;
-	}
-
-	if(dr)
-	{
-		switch(type)
-		{
-			case EA_ADDRESS_REG_INDIRECT:
-			get().opcodeClicks += 12;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_POST_INC:
-			get().opcodeClicks += 12;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_DISPLACEMENT:
-			get().opcodeClicks += 16;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_INDEX:
-			get().opcodeClicks += 18;
-			break;
-		}
-
-		if(type == EA_MODE_7)
-		{
-			switch(eaReg)
-			{
-				case EA_MODE_7_ABS_ADDRESS_WORD:
-				get().opcodeClicks += 16;
-				break;
-
-				case EA_MODE_7_ABS_ADDRESS_LONG:
-				get().opcodeClicks += 20;
-				break;
-
-				case EA_MODE_7_PC_WITH_DISPLACEMENT:
-				get().opcodeClicks += 16;
-				break;
-
-				case EA_MODE_7_PC_WITH_PREINDEX:
-				get().opcodeClicks += 18;
-				break;
-			}
-		}
-	}
-	else
-	{
-		switch(type)
-		{
-			case EA_ADDRESS_REG_INDIRECT:
-			get().opcodeClicks += 8;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_PRE_DEC:
-			get().opcodeClicks += 8;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_DISPLACEMENT:
-			get().opcodeClicks += 12;
-			break;
-
-			case EA_ADDRESS_REG_INDIRECT_INDEX:
-			get().opcodeClicks += 14;
-			break;
-		}
-
-		if(type == EA_MODE_7)
-		{
-			switch(eaReg)
-			{
-				case EA_MODE_7_ABS_ADDRESS_WORD:
-				get().opcodeClicks += 12;
-				break;
-
-				case EA_MODE_7_ABS_ADDRESS_LONG:
-				get().opcodeClicks += 16;
-				break;
-			}
-		}
-	}
-
-	word regListMask = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-	get().programCounter += 2;
-
-	word offset = 0;
-
-	bool isControlMode = (type == EA_ADDRESS_REG_INDIRECT) || (type == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT) || (type == EA_ADDRESS_REG_INDIRECT_INDEX) || (type == EA_MODE_7 && (eaReg == 0 || eaReg == 1 || eaReg == 2 || eaReg == 3));
-
-	bool preDecMode = (type == EA_ADDRESS_REG_INDIRECT_PRE_DEC) ? true : false;
-
-	bool regDir = !preDecMode;
-
-	int pcAdvance = 0;
-
-	for(int index = 0; index < 16; ++index)
-	{
-		int newIndex = index % 8; //D0-D7 & A0-A7
-
-		if(!dr)
-		{
-			newIndex = 7 - newIndex;
-		}
-
-		bool isAn = (regDir && (index > 7)) || (!regDir && (index < 8));
-
-		if(TestBit(regListMask, index))
-		{
-			if(dr == 0)
-			{
-				dword data = 0;
-
-				if(isAn)
-				{
-					data = get().registerAddress[newIndex];
-				}
-				else
-				{
-					data = get().registerData[newIndex];
-				}
-
-				if(size == WORD && type == EA_ADDRESS_REG)
-				{
-					data = get().SignExtendDWord((word)data);
-				}
-
-				EA_DATA set = get().SetEAOperand(type, eaReg, data, size, offset);
-
-				if(isControlMode)
-				{
-					offset += (size == WORD) ? 2 : 4;
-				}
-
-				pcAdvance = set.PCadvance;
-			}
-			else
-			{
-				EA_DATA src = get().GetEAOperand(type, eaReg, size, false, offset);
-
-				if(isControlMode)
-				{
-					offset += (size == WORD) ? 2 : 4;
-				}
-
-				pcAdvance = src.PCadvance;
-
-				if(size == WORD)
-				{
-					src.operand = get().SignExtendDWord((word)src.operand);
-				}
-
-				if(isAn)
-				{
-					get().registerAddress[newIndex] = src.operand;
-				}
-				else
-				{
-					get().registerData[newIndex] = src.operand;
-				}
-			}
-		}
-	}
-
-	get().programCounter += pcAdvance;
+    const bool load = (opcode & 0x0400) != 0;
+    const bool longSize = (opcode & 0x0040) != 0;
+    const EA_TYPES mode = EA_TYPES((opcode >> 3) & 7);
+    const unsigned reg = opcode & 7;
+    const word mask = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    const EA_DATA ea = get().GetControlAddress(mode, reg);
+    const unsigned size = longSize ? 4 : 2;
+    const bool decrement = mode == EA_ADDRESS_REG_INDIRECT_PRE_DEC;
+    dword address = ea.pointer;
+    const dword originalBase = get().registerAddress[reg];
+    unsigned penalty = mode == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT ? 4 :
+        mode == EA_ADDRESS_REG_INDIRECT_INDEX ? 6 : mode == EA_MODE_7 ? (reg == 1 ? 8 : (reg == 3 ? 6 : 4)) : 0;
+    get().faultCycles = 62 + penalty;
+    get().faultSavedPC = get().programCounter + ea.PCadvance + 2;
+    get().faultProgram = mode == EA_MODE_7 && (reg == 2 || reg == 3);
+    unsigned count = 0;
+    for (unsigned bit = 0; bit < 16; ++bit)
+    {
+        if (!(mask & (1u << bit))) continue;
+        const unsigned index = decrement ? 15 - bit : bit;
+        if (decrement) address -= size;
+        if (load)
+        {
+            const dword value = longSize ? Genesis::M68KReadMemoryLONG(address) :
+                get().SignExtendDWord(Genesis::M68KReadMemoryWORD(address));
+            if (index < 8) get().registerData[index] = value;
+            else get().registerAddress[index - 8] = value;
+        }
+        else
+        {
+            const dword value = index < 8 ? get().registerData[index] :
+                (decrement && index - 8 == reg ? originalBase : get().registerAddress[index - 8]);
+            if (longSize && decrement)
+            {
+                Genesis::M68KWriteMemoryWORD(address + 2, word(value));
+                Genesis::M68KWriteMemoryWORD(address, word(value >> 16));
+            }
+            else if (longSize) Genesis::M68KWriteMemoryLONG(address, value);
+            else Genesis::M68KWriteMemoryWORD(address, word(value));
+        }
+        if (!decrement) address += size;
+        ++count;
+    }
+    if (decrement || mode == EA_ADDRESS_REG_INDIRECT_POST_INC) get().registerAddress[reg] = address;
+    get().programCounter += ea.PCadvance;
+    unsigned extra = 0;
+    if (mode == EA_ADDRESS_REG_INDIRECT_DISPLACEMENT || (mode == EA_MODE_7 && (reg == 0 || reg == 2))) extra = 4;
+    else if (mode == EA_ADDRESS_REG_INDIRECT_INDEX || (mode == EA_MODE_7 && reg == 3)) extra = 6;
+    else if (mode == EA_MODE_7 && reg == 1) extra = 8;
+    get().opcodeClicks += (load ? 12 : 8) + extra + count * (longSize ? 8 : 4);
 }
 
 void M68k::OpcodeMOVEP(word opcode)
 {
-	byte dataReg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte addrReg = opcode & 0x7;
-
-	signed_dword displacement = get().SignExtendDWord(Genesis::M68KReadMemoryWORD(get().programCounter));
-	dword addr = get().registerAddress[addrReg] + displacement;
-
-	bool isWord = (opmode == 4 || opmode == 6);
-	bool isEven = ((addr % 2) == 0);
-
-	if(isWord)
-	{
-		get().opcodeClicks += 16;
-	}
-	else
-	{
-		get().opcodeClicks += 24;
-	}
-
-	if(opmode < 6)
-	{
-		word word1 = Genesis::M68KReadMemoryWORD(addr);
-		word word2 = Genesis::M68KReadMemoryWORD(addr + 2);
-		if(isWord)
-		{
-			get().registerData[dataReg] &= 0xFFFF0000;
-			if(isEven)
-			{
-				get().registerData[dataReg] |= (word1 & 0xFF00) | (word2 >> 8);
-			}
-			else
-			{
-				get().registerData[dataReg] |= ((word1 & 0xFF) << 8) | (word2 & 0xFF);
-			}
-		}
-		else
-		{
-			word word3 = Genesis::M68KReadMemoryWORD(addr + 4);
-			word word4 = Genesis::M68KReadMemoryWORD(addr + 6);
-			if(isEven)
-			{
-				get().registerData[dataReg] = ((word1 & 0xFF00) << 16) | ((word2 & 0xFF00) << 8) | (word3 & 0xFF00) | (word4 >> 8);				
-			}
-			else
-			{
-				get().registerData[dataReg] = ((word1 & 0xFF) << 24) | ((word2 & 0xFF) << 16) | (word3 & 0xFF << 8) | (word4 & 0xFF);
-			}
-		}
-	}
-	else
-	{
-		if(isWord)
-		{
-			Genesis::M68KWriteMemoryBYTE(addr, (byte)(get().registerData[dataReg] >> 8));
-			Genesis::M68KWriteMemoryBYTE(addr + 2, (byte)(get().registerData[dataReg]));
-		}
-		else
-		{
-			Genesis::M68KWriteMemoryBYTE(addr, (byte)(get().registerData[dataReg] >> 24));
-			Genesis::M68KWriteMemoryBYTE(addr + 2, (byte)(get().registerData[dataReg] >> 16));
-			Genesis::M68KWriteMemoryBYTE(addr + 4, (byte)(get().registerData[dataReg] >> 8));
-			Genesis::M68KWriteMemoryBYTE(addr + 6, (byte)(get().registerData[dataReg]));
-		}
-	}
-
-	get().programCounter += 2;
+    const unsigned dataReg = (opcode >> 9) & 7;
+    const bool store = (opcode & 0x0080) != 0;
+    const bool longSize = (opcode & 0x0040) != 0;
+    const dword address = get().registerAddress[opcode & 7] +
+        get().SignExtendDWord(get().ReadInstructionWord(get().programCounter));
+    const unsigned bytes = longSize ? 4 : 2;
+    if (store)
+        for (unsigned i = 0; i < bytes; ++i)
+            Genesis::M68KWriteMemoryBYTE(address + i * 2, byte(get().registerData[dataReg] >> ((bytes - i - 1) * 8)));
+    else
+    {
+        dword value = 0;
+        for (unsigned i = 0; i < bytes; ++i) value = (value << 8) | Genesis::M68KReadMemoryBYTE(address + i * 2);
+        get().registerData[dataReg] = longSize ? value : (get().registerData[dataReg] & 0xFFFF0000) | value;
+    }
+    get().programCounter += 2;
+    get().opcodeClicks += longSize ? 24 : 16;
 }
 
 void M68k::OpcodeMOVEQ(word opcode)
@@ -114177,437 +111815,83 @@ void M68k::OpcodeMOVEQ(word opcode)
 
 void M68k::OpcodeMULS(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, WORD, false, 0);
-	data.operand = (signed_word)data.operand;
-	signed_word dataReg = (signed_word)get().registerData[reg];
-	signed_dword result = (signed_word)dataReg * (signed_word)data.operand;
-	get().registerData[reg] = result;
-	get().programCounter += data.PCadvance;
-
-	get().opcodeClicks += 70;
-	get().opcodeClicks += data.cycles;
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-	vectorman &= 0xFFFF;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 15))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, WORD)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, WORD, false, 0);
+    const dword result = static_cast<dword>(static_cast<signed_dword>(static_cast<signed_word>(get().registerData[reg])) * static_cast<signed_dword>(static_cast<signed_word>(operand.operand)));
+    get().registerData[reg] = result;
+    get().programCounter += operand.PCadvance;
+    get().CCR = (get().CCR & ~word(0x0f)) | ((result & 0x80000000u) ? 8 : 0) | (result == 0 ? 4 : 0);
+    unsigned transitions = (operand.operand ^ (operand.operand << 1)) & 0xffff;
+    unsigned count = 0;
+    while (transitions) { count += transitions & 1; transitions >>= 1; }
+    get().opcodeClicks += 38 + 2 * count + operand.cycles;
 }
 
 void M68k::OpcodeMULU(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, WORD, false, 0);
-	data.operand = (word)data.operand;
-	dword dataReg = (word)get().registerData[reg];
-	dword result = dataReg * (dword)data.operand;
-	get().registerData[reg] = result;
-	get().programCounter += data.PCadvance;
-
-	get().opcodeClicks += 70;
-	get().opcodeClicks += data.cycles;
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 31))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}	
+    const byte reg = (opcode >> 9) & 7;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, WORD)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, WORD, false, 0);
+    const dword result = static_cast<dword>(static_cast<word>(get().registerData[reg])) * static_cast<word>(operand.operand);
+    get().registerData[reg] = result;
+    get().programCounter += operand.PCadvance;
+    get().CCR = (get().CCR & ~word(0x0f)) | ((result & 0x80000000u) ? 8 : 0) | (result == 0 ? 4 : 0);
+    unsigned transitions = operand.operand & 0xffff;
+    unsigned count = 0;
+    while (transitions) { count += transitions & 1; transitions >>= 1; }
+    get().opcodeClicks += 38 + 2 * count + operand.cycles;
 }
 
 void M68k::OpcodeNBCD(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	byte dest = (byte)get().GetEAOperand(type, eaReg, BYTE, true, 0).operand;
-
-	byte xflag = TestBit(get().CCR, X_FLAG);
-
-	dest += xflag;
-
-	word result = 0x9A - dest;
-
-	result = result & 0xFF;
-
-	if ((result & 0x0F) == 0xA)
-	{
-			result = (result & 0xF0) + 0x10;
-	}
-
-	if(result != 0x9A)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	EA_DATA set = SetEAOperand(type, eaReg, (byte)result, BYTE, 0);
-
-	if((result & 0xFF) != 0x9A)
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += 4;
-		break;
-
-		default:
-		get().opcodeClicks += 8;
-		get().opcodeClicks += set.cycles;
-		break;
-	}
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (!DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, BYTE, true, 0);
+    const unsigned source = operand.operand & 0xff;
+    const unsigned extend = (get().CCR >> 4) & 1;
+    int decimal = -static_cast<int>(source) - static_cast<int>(extend);
+    if ((source & 15) + extend) decimal -= 6;
+    const bool carry = decimal < 0;
+    if (source + extend) decimal -= 0x60;
+    const byte value = static_cast<byte>(decimal);
+    get().SetEAOperand(mode, reg, value, BYTE, 0);
+    get().CCR = (get().CCR & ~word(0x15)) | (carry ? 0x11 : 0) | ((value == 0 && (get().CCR & 4)) ? 4 : 0);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? 6 : 8) + operand.cycles;
 }
 
 void M68k::OpcodeNEG(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 6 : 4;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 8 : 12;
-		get().opcodeClicks += data.cycles;
-		break;
-	}
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)0 & maxTypeSize;
-	uint64_t tails = (uint64_t)data.operand & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)0 - (signed_byte)data.operand;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)0 - (signed_word)data.operand;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)0 - (signed_dword)data.operand;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	data.operand = 0 - data.operand;
-	get().SetEAOperand(type, eaReg, data.operand, size, 0);
-	get().programCounter += data.PCadvance;
-	
-	dword vectorman = data.operand;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(0, operand.operand, 8u << size, get().CCR, true, false);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 6 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeNEGX(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	dword xflag = TestBit(get().CCR, X_FLAG);
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)0 & maxTypeSize;
-	uint64_t tails = (uint64_t)(data.operand + xflag) & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)0 - (signed_byte)data.operand - (signed_byte)xflag;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)0 - (signed_word)data.operand - (signed_word)xflag;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)0 - (signed_dword)data.operand - (signed_dword)xflag;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	data.operand = 0 - data.operand - xflag;
-	EA_DATA set = get().SetEAOperand(type, eaReg, data.operand, size, 0);
-	get().programCounter += data.PCadvance;
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 6 : 4;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 8 : 12;
-		get().opcodeClicks += set.cycles;
-		break;
-	}
-	
-	dword vectorman = data.operand;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(0, operand.operand, 8u << size, get().CCR, true, true);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 6 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeNOP()
@@ -114617,457 +111901,74 @@ void M68k::OpcodeNOP()
 
 void M68k::OpcodeNOT(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 6 : 4;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 8 : 12;
-		get().opcodeClicks += data.cycles;
-		break;
-	}
-
-	dword newData = 0;
-	switch(size)
-	{
-		case BYTE:
-		{
-			byte tempData = (byte)data.operand;
-			tempData = ~tempData;
-			newData = tempData;
-		}
-		break;
-
-		case WORD:
-		{
-			word tempData = (word)data.operand;
-			tempData = ~tempData;
-			newData = tempData;
-		}
-		break;
-
-		case LONG:
-		{
-			dword tempData = data.operand;
-			tempData = ~tempData;
-			newData = tempData;
-		}
-		break;
-	}
-
-	get().SetEAOperand(type, eaReg, newData, size, 0);
-
-	get().programCounter += data.PCadvance;
-
-	//C_FLAG
-	BitReset(get().CCR, C_FLAG);
-	//V_FLAG
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const dword result = ~operand.operand;
+    get().SetEAOperand(mode, reg, result, size, 0);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 6 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeOR(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	if(!TestBit(opmode, 2))
-	{
-		//<EA> | DN -> DN
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 0:
-			size = BYTE;
-			break;
-
-			case 1:
-			size = WORD;
-			break;
-
-			case 2:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 4;
-			break;
-
-			case LONG:
-			{
-				if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-				{
-					get().opcodeClicks += 8;
-				}
-				else
-				{
-					get().opcodeClicks += 6;
-				}
-			}
-			break;
-		}
-
-		get().opcodeClicks += src.cycles;
-
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, V_FLAG);
-
-		dword result = src.operand | dest.operand;
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-	}
-	else
-	{
-		//DN | <EA> -> <EA>
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 4:
-			size = BYTE;
-			break;
-
-			case 5:
-			size = WORD;
-			break;
-
-			case 6:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 8;
-			break;
-
-			case LONG:
-			get().opcodeClicks += 12;
-			break;
-		}
-
-		get().opcodeClicks += src.cycles;
-
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, V_FLAG);
-
-		dword result = dest.operand | src.operand;
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if(vectorman == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(type, eaReg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    const bool toMemory = (opcode & 0x100) != 0;
+    if (size > LONG || (toMemory ? (mode < EA_ADDRESS_REG_INDIRECT || !DataDestinationValid(mode, eaReg))
+                                : !DataSourceValid(mode, eaReg, size)))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, toMemory, 0);
+    const dword result = get().registerData[reg] | operand.operand;
+    if (toMemory) get().SetEAOperand(mode, eaReg, result, size, 0);
+    else get().SetDataRegister(reg, result, size);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (toMemory ? (size == LONG ? 12 : 8)
+        : (size == LONG ? (mode == EA_DATA_REG || (mode == EA_MODE_7 && eaReg == 4) ? 8 : 6) : 4)) + operand.cycles;
 }
 
 void M68k::OpcodeORI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-	dword result = dest.operand | src.operand;
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += dest.PCadvance;
-
-	switch(type)
-	{
-		case EA_DATA_REG:
-		case EA_ADDRESS_REG:
-		get().opcodeClicks += (size == LONG) ? 16 : 8;
-		break;
-
-		default:
-		get().opcodeClicks += (size == LONG) ? 20 : 12;
-		break;
-	}
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA immediate = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += immediate.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const dword result = operand.operand | immediate.operand;
+    get().SetEAOperand(mode, reg, result, size, 0);
+    get().CCR = LogicalFlags(result, 8u << size, get().CCR);
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 16 : 8) : (size == LONG ? 20 : 12)) + operand.cycles;
 }
 
 void M68k::OpcodeORI_To_CCR()
 {
-	word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-	get().programCounter += 2;
-
-	byte loCCR = (byte)get().CCR;
-	byte loImm = (byte)imm;
-
-	loCCR |= loImm;
-
-	get().CCR &= 0xFF00;
-	get().CCR |= loCCR;
-
-	get().opcodeClicks += 20;
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR & ~conditionCodeMask) | ((get().CCR | value) & conditionCodeMask);
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeORI_To_SR()
 {
-	if(get().superVisorModeActivated)
-	{
-		word imm = Genesis::M68KReadMemoryWORD(get().programCounter);
-
-		get().programCounter += 2;
-
-		get().CCR |= imm;
-
-		get().opcodeClicks += 20;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const word value = get().ReadInstructionWord(get().programCounter);
+    get().programCounter += 2;
+    get().CCR = (get().CCR | value) & statusRegisterMask;
+    get().CheckPrivilege();
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodePEA(word opcode)
@@ -115077,7 +111978,7 @@ void M68k::OpcodePEA(word opcode)
 
 	EA_TYPES type = (EA_TYPES)eaMode;
 
-	EA_DATA data = get().GetEAOperand(type, eaReg, LONG, false, 0);
+	EA_DATA data = get().GetControlAddress(type, eaReg);
 
 	get().programCounter += data.PCadvance;
 
@@ -115122,633 +112023,132 @@ void M68k::OpcodePEA(word opcode)
 
 void M68k::OpcodeRESET()
 {
-	get().Init();
-
-	get().opcodeClicks += 132;
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    // RESET asserts the external reset pin; it does not reset this CPU.
+    if (get().resetHandler) get().resetHandler();
+    get().opcodeClicks += 132;
 }
 
 void M68k::OpcodeROL_ROR_Register(word opcode)
 {
-	byte count_reg = (opcode >> 9) & 0x7;
-	byte dr = (opcode >> 8) & 0x1;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte ir = (opcode >> 5) & 0x1;
-	byte reg = opcode & 0x7;
-
-	int rot = 0;
-
-	if(ir == 0)
-	{
-		rot = (count_reg == 0) ? 8 : count_reg;
-	}
-	else
-	{
-		rot = get().registerData[count_reg] % 64;
-	}
-
-	int bits = 0;
-	switch(size)
-	{
-		case BYTE:
-		bits = 8;
-		get().opcodeClicks += (6 + (2 * rot));
-		break;
-
-		case WORD:
-		bits = 16;
-		get().opcodeClicks += (6 + (2 * rot));
-		break;
-
-		case LONG:
-		bits = 32;
-		get().opcodeClicks += (8 + (2 * rot));
-		break;
-	}
-
-	dword newData = 0;
-
-	if(dr == 0) //rot right
-	{
-		switch(size)
-		{
-			case BYTE:
-			newData |= ROR((byte)(get().registerData[reg] & 0xFF), rot);
-			break;
-
-			case WORD:
-			newData |= ROR((word)(get().registerData[reg] & 0xFFFF), rot);
-			break;
-
-			case LONG:
-			newData |= ROR((dword)(get().registerData[reg] & 0xFFFFFFFF), rot);
-			break;
-		}
-
-		if(TestBit(newData, bits - 1))
-		{
-			BitSet(get().CCR, C_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-		
-	}
-	else //rot left
-	{
-		switch(size)
-		{
-			case BYTE:
-			newData |= ROL((byte)(get().registerData[reg] & 0xFF), rot);
-			break;
-
-			case WORD:
-			newData |= ROL((word)(get().registerData[reg] & 0xFFFF), rot);
-			break;
-
-			case LONG:
-			newData |= ROL((dword)(get().registerData[reg] & 0xFFFFFFFF), rot);
-			break;
-		}
-
-		if(TestBit(newData, 0))
-		{
-			BitSet(get().CCR, C_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-	}
-
-	get().SetDataRegister(reg, newData, size);
-	
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const unsigned reg = opcode & 7;
+    const unsigned countReg = (opcode >> 9) & 7;
+    const unsigned count = (opcode & 0x20) ? (get().registerData[countReg] & 63) : (countReg ? countReg : 8);
+    const unsigned bits = 8u << size;
+    const ShiftResult result = ShiftOperand(get().registerData[reg], bits, count, (opcode & 0x100) != 0, 3, get().CCR);
+    get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += (size == LONG ? 8 : 6) + 2 * count;
 }
 
 void M68k::OpcodeROL_ROR_Memory(word opcode)
 {
-	byte dr = (opcode >> 8) & 0x1;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int bits = 16;
-
-	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
-
-	dword toRot = 1;
-
-	dword newData = 0;
-
-	if(dr == 0) //rot right
-	{
-		
-		newData |= ROR((word)(dest.operand & 0xFFFF), toRot);
-
-		if(TestBit(newData, bits - 1))
-		{
-			BitSet(get().CCR, C_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-	}
-	else //rot left
-	{
-		
-		newData |= ROL((word)(dest.operand & 0xFFFF), toRot);
-
-		if(TestBit(toRot, 0))
-		{
-			BitSet(get().CCR, C_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-		}
-	}
-
-	get().SetEAOperand(type, eaReg, newData, WORD, 0);
-
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	
-	vectorman &= 0xFFFF;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 15))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += dest.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode < EA_ADDRESS_REG_INDIRECT || (mode == EA_MODE_7 && reg > 1))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, WORD, true, 0);
+    const ShiftResult result = ShiftOperand(operand.operand, 16, 1, (opcode & 0x100) != 0, 3, get().CCR);
+    get().SetEAOperand(mode, reg, result.value, WORD, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += 8 + operand.cycles;
 }
 
 void M68k::OpcodeROXL_ROXR_Register(word opcode)
 {
-	byte count_reg = (opcode >> 9) & 0x7;
-	byte dr = (opcode >> 8) & 0x1;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte ir = (opcode >> 5) & 0x1;
-	byte reg = opcode & 0x7;
-
-	int rot = 0;
-
-	if(ir == 0)
-	{
-		rot = (count_reg == 0) ? 8 : count_reg;
-	}
-	else
-	{
-		rot = get().registerData[count_reg] % 64;
-	}
-
-	dword toRot = get().registerData[reg];
-
-	int bits = 0;
-	switch(size)
-	{
-		case BYTE:
-		bits = 8;
-		toRot &= 0xFF;
-		get().opcodeClicks += (6 + (2 * rot));
-		break;
-
-		case WORD:
-		bits = 16;
-		toRot &= 0xFFFF;
-		get().opcodeClicks += (6 + (2 * rot));
-		break;
-
-		case LONG:
-		bits = 32;
-		get().opcodeClicks += (8 + (2 * rot));
-		break;
-	}
-
-	dword newData = 0;
-
-	if(dr == 0) //rot right
-	{
-		for(int i = 0; i < rot; ++i)
-		{
-			newData = toRot >> 1;
-
-			if(TestBit(get().CCR, X_FLAG))
-			{
-				BitSet(newData, bits - 1);
-			}
-			else
-			{
-				BitReset(newData, bits - 1);
-			}
-
-			if(TestBit(toRot, 0))
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-	}
-	else //rot left
-	{
-		for(int i = 0; i < rot; ++i)
-		{
-			newData = toRot << 1;
-
-			if(TestBit(get().CCR, X_FLAG))
-			{
-				BitSet(newData, 0);
-			}
-			else
-			{
-				BitReset(newData, 0);
-			}
-
-			if(TestBit(toRot, bits - 1))
-			{
-				BitSet(get().CCR, C_FLAG);
-				BitSet(get().CCR, X_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, C_FLAG);
-				BitReset(get().CCR, X_FLAG);
-			}
-		}
-	}
-
-	SetDataRegister(reg, newData, size);
-	
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const unsigned reg = opcode & 7;
+    const unsigned countReg = (opcode >> 9) & 7;
+    const unsigned count = (opcode & 0x20) ? (get().registerData[countReg] & 63) : (countReg ? countReg : 8);
+    const unsigned bits = 8u << size;
+    const ShiftResult result = ShiftOperand(get().registerData[reg], bits, count, (opcode & 0x100) != 0, 2, get().CCR);
+    get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += (size == LONG ? 8 : 6) + 2 * count;
 }
 
 void M68k::OpcodeROXL_ROXR_Memory(word opcode)
 {
-	byte dr = (opcode >> 8) & 0x1;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	int bits = 16;
-
-	EA_DATA dest = get().GetEAOperand(type, eaReg, WORD, true, 0);
-
-	dword toRot = dest.operand;
-
-	dword newData = 0;
-
-	if(dr == 0) //rot right
-	{
-		newData = toRot >> 1;
-
-		if(TestBit(get().CCR, X_FLAG))
-		{
-			BitSet(newData, bits - 1);
-		}
-		else
-		{
-			BitReset(newData, bits - 1);
-		}
-
-		if(TestBit(toRot, 0))
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-	}
-	else //rot left
-	{
-		newData = toRot << 1;
-
-		if(TestBit(get().CCR, X_FLAG))
-		{
-			BitSet(newData, 0);
-		}
-		else
-		{
-			BitReset(newData, 0);
-		}
-
-		if(TestBit(toRot, bits - 1))
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-	}
-
-	get().SetEAOperand(type, eaReg, newData, WORD, 0);
-
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = newData;
-	
-	vectorman &= 0xFFFF;
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	if(TestBit(vectorman, 15))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().programCounter += dest.PCadvance;
-
-	get().opcodeClicks += 8;
-	get().opcodeClicks += dest.cycles;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (mode < EA_ADDRESS_REG_INDIRECT || (mode == EA_MODE_7 && reg > 1))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, WORD, true, 0);
+    const ShiftResult result = ShiftOperand(operand.operand, 16, 1, (opcode & 0x100) != 0, 2, get().CCR);
+    get().SetEAOperand(mode, reg, result.value, WORD, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += 8 + operand.cycles;
 }
 
 void M68k::OpcodeRTE()
 {
-	if(get().superVisorModeActivated)
-	{
-		get().CCR = Genesis::M68KReadMemoryWORD(get().registerAddress[0x7]);
-		get().registerAddress[0x7] += 2;
-		get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
-		get().registerAddress[0x7] += 4;
-		get().servicingInt = false;
-
-		get().opcodeClicks += 20;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    const word status = Genesis::M68KReadMemoryWORD(get().registerAddress[7]);
+    const dword pc = Genesis::M68KReadMemoryLONG(get().registerAddress[7] + 2);
+    get().registerAddress[7] += 6;
+    get().CCR = status & statusRegisterMask;
+    get().CheckPrivilege();
+    get().CheckProgramAddress(pc, 70, get().instructionPC + 2);
+    get().programCounter = pc;
+    get().prefetchValid = false;
+    get().servicingInt = false;
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeRTR()
 {
-	word newCCR = Genesis::M68KReadMemoryWORD(get().registerAddress[0x7]);
-
-	get().CCR &= 0xFF00; //Supervisor status conservé
-	get().CCR |= (byte)(newCCR & 0xFF);
-	get().registerAddress[0x7] += 2;
-	get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
-	get().registerAddress[0x7] += 4;
-
-	get().opcodeClicks += 20;
+    const word status = Genesis::M68KReadMemoryWORD(get().registerAddress[7]);
+    const dword pc = Genesis::M68KReadMemoryLONG(get().registerAddress[7] + 2);
+    get().registerAddress[7] += 6;
+    get().CCR = (get().CCR & ~conditionCodeMask) | (status & conditionCodeMask);
+    get().CheckProgramAddress(pc, 70, get().instructionPC + 2);
+    get().programCounter = pc;
+    get().prefetchValid = false;
+    get().opcodeClicks += 20;
 }
 
 void M68k::OpcodeRTS()
 {
-	get().programCounter = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
-	get().registerAddress[0x7] += 4;
-
-	get().opcodeClicks += 16;
+    const dword pc = Genesis::M68KReadMemoryLONG(get().registerAddress[7]);
+    get().registerAddress[7] += 4;
+    get().CheckProgramAddress(pc, 66, get().instructionPC + 2);
+    get().prefetchValid = false;
+    get().programCounter = pc;
+    get().opcodeClicks += 16;
 }
 
 void M68k::OpcodeSBCD(word opcode)
 {
-	byte ry = (opcode >> 9) & 0x7;
-	byte rm = (opcode >> 3) & 0x1;
-	byte rx = opcode & 0x7;
-
-	byte src;
-	byte dest;
-
-	EA_TYPES type;
-
-	if(rm)
-	{
-		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
-	}
-	else
-	{
-		type = EA_DATA_REG;
-	}
-
-	
-	dest = (byte)get().GetEAOperand(type, ry, BYTE, true, 0).operand;
-	src = (byte)get().GetEAOperand(type, rx, BYTE, false, 0).operand;
-	
-
-	byte xflag = TestBit(get().CCR, X_FLAG);
-
-	src += xflag;
-
-
-	byte newSub;
-	byte result;
-
-	if(dest < src)
-	{
-		if(src != 0)
-		{
-			src--;
-		}
-
-		newSub = src - dest;
-
-		result = 0x99 - newSub;
-
-		//BCD OVERFLOW CORRECTION
-		if((0x9 - (newSub & 0xF)) < 0x0)
-		{
-			result -= 0x6;
-		}
-
-		if((result >> 4) > 0x9)
-		{
-			result -= 0x60;
-		}
-
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		result = dest - src;
-
-		//BCD OVERFLOW CORRECTION
-		if(((dest & 0xF) - (src & 0xF)) < 0x0)
-		{
-			result -= 0x6;
-		}
-
-		if((result >> 4) > 0x9)
-		{
-			result -= 0x60;
-		}
-
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	if((result & 0xFF) != 0)
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	
-	EA_DATA data = get().SetEAOperand(type, ry, (byte)result, BYTE, 0);
-	
-	if(rm)
-	{
-		get().opcodeClicks += 18;
-		get().opcodeClicks += data.cycles;
-	}
-	else
-	{
-		get().opcodeClicks += 6;
-	}
+    const byte sourceReg = opcode & 7;
+    const byte destReg = (opcode >> 9) & 7;
+    const bool memory = (opcode & 8) != 0;
+    const EA_TYPES mode = memory ? EA_ADDRESS_REG_INDIRECT_PRE_DEC : EA_DATA_REG;
+    const byte source = static_cast<byte>(get().GetEAOperand(mode, sourceReg, BYTE, false, 0).operand);
+    const byte destination = static_cast<byte>(get().GetEAOperand(mode, destReg, BYTE, true, 0).operand);
+    const unsigned extend = (get().CCR >> 4) & 1;
+    const int binary = int(destination) - int(source) - int(extend);
+    int decimal = binary;
+    if (int(destination & 15) - int(source & 15) - int(extend) < 0) decimal -= 6;
+    const bool carry = decimal < 0;
+    if (binary < 0) decimal -= 0x60;
+    const byte value = static_cast<byte>(decimal);
+    get().SetEAOperand(mode, destReg, value, BYTE, 0);
+    // BCD keeps Z sticky. N and V are architecturally undefined.
+    get().CCR = (get().CCR & ~word(0x15)) | (carry ? 0x11 : 0) | ((value == 0 && (get().CCR & 4)) ? 4 : 0);
+    get().opcodeClicks += memory ? 18 : 6;
 }
 
 void M68k::OpcodeScc(word opcode)
@@ -115776,910 +112176,138 @@ void M68k::OpcodeScc(word opcode)
 		break;
 
 		default:
-		get().opcodeClicks += 8;
+		get().opcodeClicks += 8 + set.cycles;
 		break;
 	}
 }
 
 void M68k::OpcodeSTOP()
 {
-	if(get().superVisorModeActivated)
-	{
-		get().CCR = Genesis::M68KReadMemoryWORD(get().programCounter);
-		get().programCounter += 4;
-		get().stop = true;
-
-		get().opcodeClicks += 4;
-	}
-	else
-	{
-		get().RequestInt(INT_PRIV_VIO, Genesis::M68KReadMemoryLONG(0x20));
-
-		get().opcodeClicks += 34;
-	}
+    if (!get().superVisorModeActivated)
+    {
+        get().RaiseException(8, get().programCounter - 2, 34);
+        return;
+    }
+    get().CCR = get().ReadInstructionWord(get().programCounter) & statusRegisterMask;
+    get().programCounter += 2;
+    get().CheckPrivilege();
+    get().stop = true;
+    get().opcodeClicks += 4;
 }
 
 void M68k::OpcodeSUB(word opcode)
 {
-
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	if(!TestBit(opmode, 2))
-	{
-		//DN - <EA> -> DN
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 0:
-			size = BYTE;
-			break;
-
-			case 1:
-			size = WORD;
-			break;
-
-			case 2:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(type, eaReg, size, false, 0);
-		EA_DATA dest = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-
-		switch(size)
-		{
-			case BYTE:
-			case WORD:
-			get().opcodeClicks += 4;
-			break;
-
-			case LONG:
-			{
-				if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-				{
-					get().opcodeClicks += 8;
-				}
-				else
-				{
-					get().opcodeClicks += 6;
-				}
-			}
-			break;
-		}
-
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-		uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-		if(sonic < tails)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
-
-				if(eggman < INT8_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
-
-				if(eggman < INT16_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
-
-				if(eggman < INT32_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-		dword result = dest.operand - src.operand;
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if((vectorman) == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(EA_DATA_REG, reg, result, size, 0);
-
-		get().programCounter += src.PCadvance;
-
-		get().opcodeClicks += src.cycles;
-
-	}
-	else
-	{
-		//<EA> - DN -> <EA>
-		DATASIZE size = LONG;
-		switch(opmode)
-		{
-			case 4:
-			size = BYTE;
-			break;
-
-			case 5:
-			size = WORD;
-			break;
-
-			case 6:
-			size = LONG;
-			break;
-		}
-
-		EA_TYPES type = (EA_TYPES)eaMode;
-
-		EA_DATA src = get().GetEAOperand(EA_DATA_REG, reg, size, true, 0);
-		EA_DATA dest = get().GetEAOperand(type, eaReg, size, false, 0);
-
-		if(size == WORD && type == EA_ADDRESS_REG)
-		{
-			switch(size)
-			{
-				case BYTE:
-				case WORD:
-				get().opcodeClicks += 8;
-				break;
-
-				case LONG:
-				{
-					if(src.eatype == EA_DATA_REG || src.eatype == EA_ADDRESS_REG || src.mode7Type == EA_MODE_7_IMMEDIATE)
-					{
-						get().opcodeClicks += 8;
-					}
-					else
-					{
-						get().opcodeClicks += 6;
-					}
-				}
-				break;
-			}
-		}
-		else
-		{
-			switch(size)
-			{
-				case BYTE:
-				case WORD:
-				get().opcodeClicks += 8;
-				break;
-
-				case LONG:
-				get().opcodeClicks += 12;
-				break;
-			}
-		}
-		
-		dword result = dest.operand - src.operand;
-		
-		if(size == WORD && type == EA_ADDRESS_REG)
-		{
-			result = get().SignExtendDWord((word)dest.operand) - get().SignExtendDWord((word)src.operand);
-			size = LONG;
-		}
-
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-		uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-		if(sonic < tails)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
-
-				if(eggman < INT8_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
-
-				if(eggman < INT16_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
-
-				if(eggman < INT32_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if((vectorman) == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-
-		get().SetEAOperand(type, eaReg, result, size, 0);
-
-		get().programCounter += dest.PCadvance;
-		get().opcodeClicks += dest.cycles;
-	}
+    const byte reg = (opcode >> 9) & 7;
+    const byte opmode = (opcode >> 6) & 7;
+    const DATASIZE size = static_cast<DATASIZE>(opmode & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    const bool toMemory = (opmode & 4) != 0;
+    if (size > LONG || (toMemory ? (mode < EA_ADDRESS_REG_INDIRECT || !DataDestinationValid(mode, eaReg))
+                                : !DataSourceValid(mode, eaReg, size, true)))
+    { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, toMemory, 0);
+    const dword destination = toMemory ? operand.operand : get().registerData[reg];
+    const dword source = toMemory ? get().registerData[reg] : operand.operand;
+    const ArithmeticResult result = CalculateArithmetic(destination, source, 8u << size, get().CCR, true);
+    if (toMemory) get().SetEAOperand(mode, eaReg, result.value, size, 0);
+    else get().SetDataRegister(reg, result.value, size);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    if (toMemory) get().opcodeClicks += (size == LONG ? 12 : 8) + operand.cycles;
+    else get().opcodeClicks += (size == LONG ? ((mode <= EA_ADDRESS_REG || (mode == EA_MODE_7 && eaReg == 4)) ? 8 : 6) : 4) + operand.cycles;
 }
 
 void M68k::OpcodeSUBA(word opcode)
 {
-	byte reg = (opcode >> 9) & 0x7;
-	byte opmode = (opcode >> 6) & 0x7;
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	DATASIZE size = LONG;
-	switch(opmode)
-	{
-		case 3:
-		size = WORD;
-		break;
-
-		case 7:
-		size = LONG;
-		break;
-	}
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, size, false, 0);
-
-	switch(size)
-	{
-		case BYTE:
-		case WORD:
-		get().opcodeClicks += 8;
-		break;
-
-		case LONG:
-		{
-			if(data.eatype == EA_DATA_REG || data.eatype == EA_ADDRESS_REG || data.mode7Type == EA_MODE_7_IMMEDIATE)
-			{
-				get().opcodeClicks += 8;
-			}
-			else
-			{
-				get().opcodeClicks += 6;
-			}
-		}
-	}
-
-	dword result = get().registerAddress[reg] - data.operand;
-
-	SetAddressRegister(reg, result, size);
-
-	get().programCounter += data.PCadvance;
-
-	get().opcodeClicks += data.cycles;
+    const byte reg = (opcode >> 9) & 7;
+    const DATASIZE size = (opcode & 0x100) ? LONG : WORD;
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte eaReg = opcode & 7;
+    if (!DataSourceValid(mode, eaReg, size, true)) { OpcodeILLEGAL(); return; }
+    const EA_DATA operand = get().GetEAOperand(mode, eaReg, size, false, 0);
+    const dword source = size == WORD ? static_cast<dword>(static_cast<signed_dword>(static_cast<signed_word>(operand.operand))) : operand.operand;
+    get().registerAddress[reg] -= source;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (size == WORD || mode <= EA_ADDRESS_REG || (mode == EA_MODE_7 && eaReg == 4) ? 8 : 6) + operand.cycles;
 }
 
 void M68k::OpcodeSUBI(word opcode)
 {
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-
-	byte eaMode = (opcode >> 3) & 0x7;
-
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA src = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
-	get().programCounter += src.PCadvance;
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	if(type == EA_DATA_REG || type == EA_ADDRESS_REG)
-	{
-		get().opcodeClicks += (size == LONG) ? 16 : 8;
-	}
-	else
-	{
-		get().opcodeClicks += (size == LONG) ? 20 : 12;
-	}
-
-	get().opcodeClicks += dest.cycles;
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-	uint64_t tails = (uint64_t)src.operand & maxTypeSize;
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = dest.operand - src.operand;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if(vectorman == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	get().programCounter += dest.PCadvance;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    if (size > LONG || !DataDestinationValid(mode, reg)) { OpcodeILLEGAL(); return; }
+    const EA_DATA immediate = get().GetEAOperand(EA_MODE_7, EA_MODE_7_IMMEDIATE, size, false, 0);
+    get().programCounter += immediate.PCadvance;
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(operand.operand, immediate.operand, 8u << size, get().CCR, true);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 16 : 8) : (size == LONG ? 20 : 12)) + operand.cycles;
 }
 
 void M68k::OpcodeSUBQ(word opcode)
 {
-	byte data = (opcode >> 9) & 0x7;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	dword sub = (data == 0) ? 8 : data;
-
-	bool signExtend = (type == EA_ADDRESS_REG && size == WORD);
-
-	if(signExtend)
-	{
-		sub = get().SignExtendDWord((word)sub);
-	}
-
-	EA_DATA dest = get().GetEAOperand(type, eaReg, size, true, 0);
-
-	dword result = dest.operand - sub;
-
-	get().SetEAOperand(type, eaReg, result, size, 0);
-
-	if(type == EA_DATA_REG)
-	{
-		get().opcodeClicks += (size == LONG) ? 8 : 4;
-	}
-	else if(type == EA_ADDRESS_REG)
-	{
-		get().opcodeClicks += (size == BYTE) ? 4 : 8; 
-	}
-	else
-	{
-		get().opcodeClicks += (size == LONG) ? 12 : 8;
-	}
-
-	get().opcodeClicks += dest.cycles;
-
-	if(signExtend)
-	{
-		size = LONG;
-	}
-
-	if(type != EA_ADDRESS_REG)
-	{
-		//C_FLAG & X_FLAG
-		uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-		uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-		uint64_t tails = (uint64_t)sub & maxTypeSize;
-		if(sonic < tails)
-		{
-			BitSet(get().CCR, C_FLAG);
-			BitSet(get().CCR, X_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, C_FLAG);
-			BitReset(get().CCR, X_FLAG);
-		}
-
-		//V_FLAG
-		switch(size)
-		{
-			case BYTE:
-			{
-				signed_word eggman = (signed_byte)dest.operand - (signed_byte)sub;
-
-				if(eggman < INT8_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case WORD:
-			{
-				signed_dword eggman = (signed_word)dest.operand - (signed_word)sub;
-
-				if(eggman < INT16_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-
-			case LONG:
-			{
-				int64_t eggman = (signed_dword)dest.operand - (signed_dword)sub;
-
-				if(eggman < INT32_MIN)
-				{
-					BitSet(get().CCR, V_FLAG);
-				}
-				else
-				{
-					BitReset(get().CCR, V_FLAG);
-				}
-			}
-			break;
-		}
-
-		dword vectorman = result;
-		switch(size)
-		{
-			case BYTE:
-			vectorman &= 0xFF;
-			break;
-
-			case WORD:
-			vectorman &= 0xFFFF;
-			break;
-
-			case LONG:
-			vectorman &= 0xFFFFFFFF;
-			break;
-		}
-
-		//Z_FLAG
-		if((vectorman) == 0)
-		{
-			BitSet(get().CCR, Z_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, Z_FLAG);
-		}
-
-		//N_FLAG
-		int bit = 0;
-
-		switch(size)
-		{
-			case BYTE:
-			bit = 7;
-			break;
-
-			case WORD:
-			bit = 15;
-			break;
-
-			case LONG:
-			bit = 31;
-			break;
-		}
-
-		if(TestBit(vectorman, bit))
-		{
-			BitSet(get().CCR, N_FLAG);
-		}
-		else
-		{
-			BitReset(get().CCR, N_FLAG);
-		}
-	}	
-
-	get().programCounter += dest.PCadvance;
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    const EA_TYPES mode = static_cast<EA_TYPES>((opcode >> 3) & 7);
+    const byte reg = opcode & 7;
+    const unsigned immediate = ((opcode >> 9) & 7) ? ((opcode >> 9) & 7) : 8;
+    if (size > LONG || (mode == EA_ADDRESS_REG ? size == BYTE : !DataDestinationValid(mode, reg)))
+    { OpcodeILLEGAL(); return; }
+    if (mode == EA_ADDRESS_REG)
+    {
+        get().registerAddress[reg] -= immediate;
+        get().opcodeClicks += 8;
+        return;
+    }
+    const EA_DATA operand = get().GetEAOperand(mode, reg, size, true, 0);
+    const ArithmeticResult result = CalculateArithmetic(operand.operand, immediate, 8u << size, get().CCR, true);
+    get().SetEAOperand(mode, reg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().programCounter += operand.PCadvance;
+    get().opcodeClicks += (mode == EA_DATA_REG ? (size == LONG ? 8 : 4) : (size == LONG ? 12 : 8)) + operand.cycles;
 }
 
 void M68k::OpcodeSUBX(word opcode)
 {
-	byte ry = (opcode >> 9) & 0x7;
-	DATASIZE size = (DATASIZE)((opcode >> 6) & 0x3);
-	byte rm = (opcode >> 3) & 0x1;
-	byte rx = opcode & 0x7;
-
-	dword xflag = TestBit(get().CCR, X_FLAG);
-
-	EA_TYPES type;
-
-	if(rm)
-	{
-		type = EA_ADDRESS_REG_INDIRECT_PRE_DEC;
-		get().opcodeClicks += (size == LONG) ? 30 : 18;
-	}
-	else
-	{
-		type = EA_DATA_REG;
-		get().opcodeClicks += (size == LONG) ? 8 : 4;
-	}
-
-	
-	EA_DATA dest = get().GetEAOperand(type, ry, BYTE, true, 0);
-	EA_DATA src = get().GetEAOperand(type, rx, BYTE, false, 0);
-
-	//C_FLAG & X_FLAG
-	uint64_t maxTypeSize = get().GetTypeMaxSize(size);
-	uint64_t sonic = (uint64_t)dest.operand & maxTypeSize;
-	uint64_t tails = (uint64_t)((src.operand + xflag) & maxTypeSize);
-	if(sonic < tails)
-	{
-		BitSet(get().CCR, C_FLAG);
-		BitSet(get().CCR, X_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, C_FLAG);
-		BitReset(get().CCR, X_FLAG);
-	}
-
-	//V_FLAG
-	switch(size)
-	{
-		case BYTE:
-		{
-			signed_word eggman = (signed_byte)dest.operand - (signed_byte)src.operand - (signed_byte)xflag;
-
-			if(eggman < INT8_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case WORD:
-		{
-			signed_dword eggman = (signed_word)dest.operand - (signed_word)src.operand - (signed_word)xflag;
-
-			if(eggman < INT16_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-
-		case LONG:
-		{
-			int64_t eggman = (signed_dword)dest.operand - (signed_dword)src.operand - (signed_dword)xflag;
-
-			if(eggman < INT32_MIN)
-			{
-				BitSet(get().CCR, V_FLAG);
-			}
-			else
-			{
-				BitReset(get().CCR, V_FLAG);
-			}
-		}
-		break;
-	}
-
-	dword result = dest.operand - src.operand - xflag;
-
-	dword vectorman = result;
-	switch(size)
-	{
-		case BYTE:
-		vectorman &= 0xFF;
-		break;
-
-		case WORD:
-		vectorman &= 0xFFFF;
-		break;
-
-		case LONG:
-		vectorman &= 0xFFFFFFFF;
-		break;
-	}
-
-	//Z_FLAG
-	if(vectorman != 0)
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-	int bit = 0;
-
-	switch(size)
-	{
-		case BYTE:
-		bit = 7;
-		break;
-
-		case WORD:
-		bit = 15;
-		break;
-
-		case LONG:
-		bit = 31;
-		break;
-	}
-
-	if(TestBit(vectorman, bit))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	get().SetEAOperand(type, ry, result, size, 0);
+    const DATASIZE size = static_cast<DATASIZE>((opcode >> 6) & 3);
+    if (size > LONG) { OpcodeILLEGAL(); return; }
+    const byte sourceReg = opcode & 7;
+    const byte destReg = (opcode >> 9) & 7;
+    const bool memory = (opcode & 8) != 0;
+    const EA_TYPES mode = memory ? EA_ADDRESS_REG_INDIRECT_PRE_DEC : EA_DATA_REG;
+    // Source is decremented first when both operands share the same An.
+    EA_DATA source, destination;
+    if (memory && size == LONG)
+    {
+        // The paired-long microsequence reads each low word first and only
+        // then commits An. A failed first word leaves that register unchanged.
+        const dword sourceAddress = get().registerAddress[sourceReg];
+        get().faultCycles = 60;
+        get().faultSavedPC = get().instructionPC + 4;
+        get().faultProgram = false;
+        const word sourceLow = Genesis::M68KReadMemoryWORD(sourceAddress - 2);
+        const word sourceHigh = Genesis::M68KReadMemoryWORD(sourceAddress - 4);
+        get().registerAddress[sourceReg] -= 4;
+        source.operand = (dword(sourceHigh) << 16) | sourceLow;
+        const dword destinationAddress = get().registerAddress[destReg];
+        get().faultCycles = 68;
+        const word destinationLow = Genesis::M68KReadMemoryWORD(destinationAddress - 2);
+        const word destinationHigh = Genesis::M68KReadMemoryWORD(destinationAddress - 4);
+        destination.operand = (dword(destinationHigh) << 16) | destinationLow;
+    }
+    else
+    {
+        source = get().GetEAOperand(mode, sourceReg, size, false, 0);
+        try { destination = get().GetEAOperand(mode, destReg, size, true, 0); }
+        catch (const AddressFault&) { if (memory) get().faultCycles += 4; throw; }
+    }
+    const ArithmeticResult result = CalculateArithmetic(destination.operand, source.operand, 8u << size, get().CCR, true, true);
+    get().SetEAOperand(mode, destReg, result.value, size, 0);
+    get().CCR = (get().CCR & ~word(0x1f)) | result.flags;
+    get().opcodeClicks += memory ? (size == LONG ? 30 : 18) : (size == LONG ? 8 : 4);
 }
 
 void M68k::OpcodeSWAP(word opcode)
@@ -116719,73 +112347,25 @@ void M68k::OpcodeSWAP(word opcode)
 
 void M68k::OpcodeTAS(word opcode)
 {
-	byte eaMode = (opcode >> 3) & 0x7;
-	byte eaReg = opcode & 0x7;
-
-	EA_TYPES type = (EA_TYPES)eaMode;
-
-	EA_DATA data = get().GetEAOperand(type, eaReg, BYTE, false, 0);
-
-	BitReset(get().CCR, C_FLAG);
-	BitReset(get().CCR, V_FLAG);
-
-	dword vectorman = data.operand;
-	
-	vectorman &= 0xFF;	
-
-	//Z_FLAG
-	if((vectorman) == 0)
-	{
-		BitSet(get().CCR, Z_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, Z_FLAG);
-	}
-
-	//N_FLAG
-
-	if(TestBit(vectorman, 7))
-	{
-		BitSet(get().CCR, N_FLAG);
-	}
-	else
-	{
-		BitReset(get().CCR, N_FLAG);
-	}
-
-	BitSet(data.operand, 7);
-
-	get().programCounter += data.PCadvance;
-
-	if(type == EA_ADDRESS_REG || type == EA_DATA_REG)
-	{
-		get().opcodeClicks += 4;
-	}
-	else
-	{
-		get().opcodeClicks += 10;
-	}
-
+    const EA_TYPES mode = EA_TYPES((opcode >> 3) & 7);
+    const unsigned reg = opcode & 7;
+    const EA_DATA source = get().GetEAOperand(mode, reg, BYTE, true, 0);
+    const byte value = byte(source.operand);
+    get().CCR = (get().CCR & ~word(15)) | (value == 0 ? 4 : 0) | (value & 0x80 ? 8 : 0);
+    get().SetEAOperand(mode, reg, value | 0x80, BYTE, 0);
+    get().programCounter += source.PCadvance;
+    get().opcodeClicks += mode == EA_DATA_REG ? 4 : 14 + source.cycles;
 }
 
 void M68k::OpcodeTRAP(word opcode)
 {
-	byte vector = opcode & 0xF;
-
-	get().RequestInt(INT_TRAP, Genesis::M68KReadMemoryLONG((32 + vector) * 4));
-
-	get().opcodeClicks += 38;
+    get().RaiseException(32 + (opcode & 15), get().programCounter, 34);
 }
 
 void M68k::OpcodeTRAPV()
 {
-	if(TestBit(get().CCR, V_FLAG))
-	{
-		get().OpcodeTRAP(4);
-	}
-
-	get().opcodeClicks += 4;
+    if (get().CCR & (1 << V_FLAG)) get().RaiseException(7, get().programCounter, 34);
+    else get().opcodeClicks += 4;
 }
 
 void M68k::OpcodeTST(word opcode)
@@ -116862,11 +112442,14 @@ void M68k::OpcodeTST(word opcode)
 
 void M68k::OpcodeUNLK(word opcode)
 {
-	byte reg = opcode & 0x7;
-
-	get().registerAddress[0x7] = get().registerAddress[reg];
-	get().registerAddress[reg] = Genesis::M68KReadMemoryLONG(get().registerAddress[0x7]);
-	get().registerAddress[0x7] += 4;
-
-	get().opcodeClicks += 12;
+    const unsigned reg = opcode & 7;
+    const dword address = get().registerAddress[reg];
+    // A fault in the frame read must leave the original stack bank intact.
+    get().faultCycles = 58;
+    get().faultSavedPC = get().instructionPC + 4;
+    get().faultProgram = false;
+    const dword value = Genesis::M68KReadMemoryLONG(address);
+    get().registerAddress[7] = address + 4;
+    get().registerAddress[reg] = value;
+    get().opcodeClicks += 12;
 }

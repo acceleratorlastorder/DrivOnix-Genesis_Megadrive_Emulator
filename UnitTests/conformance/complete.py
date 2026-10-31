@@ -127,7 +127,7 @@ def run(args):
               "known_failure_gate": {"used": bool(args.baseline), "regressions": regressions, "resolved_bits": resolved},
               "examples": examples, "crash_examples": crash_examples, "failing_assertion_categories": failure_categories,
               "not_observed": ["electrical bus pins, wait states and bus arbitration", "external RESET device effects",
-                               "final internal prefetch queue", "Z80 CPU; absent from DrivOnix"]}
+                               "final internal prefetch queue", "Z80 CPU; validated separately from this 68000 worker"]}
     args.report_dir.mkdir(parents=True, exist_ok=True)
     (args.report_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     columns = ("group_and_dispatch", "executed", "passed", "failed", "crashed", "state_passed", "state_failed", "timing_failed", "timing_unchecked")

@@ -1,77 +1,91 @@
-Expanded CPU test coverage, 2026-10-17
-====================================
+CPU validation coverage, 2026-10-31
+=================================
 
-CPU base: e013d2e6a896a817bcdc7f3aad5d5e39ecb2b4d6 (PR #2 master), plus the narrow
-MOVE/MOVEA legality and synchronous ILLEGAL exception fix in this PR. Invalid
-forms previously read outside the cycle table, producing process-dependent timing.
-The fix raises vector 4 with the fault PC, saved SR and 34 cycles. Other opcode
-implementations are unchanged. Linux x86-64, GCC 14.2, Debug, Python 3.13.
-Sources, scope, masks and runnable commands are documented in COMPLETE.txt.
+The original DrivOnix 68000 core is repaired in place. An optional independently
+pinned Musashi worker supplies differential expectations only; it is never linked
+into the emulator. Both production and legacy decode paths are exercised. Correct
+hardware expectations are preserved; CTest/CI no longer accept known failures
+through baseline arguments. Historical snapshots remain available as audit history.
 
-All 84 original instruction groups have real specifications. The 67 unasserted
-C++ templates are replaced, while 17 asserted original groups remain as an extra
-regression layer. The expanded suite contains 8,089 instruction cases and 40
-sequence cases. It exercises all shift counts and X states, CCR conditions,
-immediate bit numbers, effective address modes and control/exception sequences.
+Current independently measured layers
+------------------------------------
 
-Readability/specification layer, PER decoder:
+Readable MC68000 specifications:
+  Original instruction groups covered                     84/84
+  Instruction cases per decoder                          8,155
+  Multi-instruction sequences per decoder                    42
+  Total evaluations across both decoders                 16,394
+  Passed all supplied state/timing assertions            16,394
+  Failed or crashed                                          0
 
-Executed                                      8,129
-Passed all checked assertions                  6,195
-Failed an assertion                            1,933
-Crashed                                            1
+Independent pinned MAME corpus, strict full active run:
+  Active instruction groups                                125
+  Cases per active group per decoder                      2,500
+  Handwritten JSON cases per decoder                         28
+  Executed across both decoders                         625,056
+  Passed                                               625,056
+  Failed/crashed/decoder divergences                         0
+  Handwritten evaluations without cycle expectations        50
 
-One-pattern complete decode regression run, PER decoder (includes those cases):
+External TAS/TRAPV data has 5,000 unreliable cases per decoder, explicitly
+excluded and reported by --active-only, never counted as passing. Readable cases
+and the all-word sweep independently execute those instructions. The comparison
+checks state, address-fault frames and supplied cycle totals, including
+operand-dependent MUL/DIV timing. Undefined flags/SSW bits are masked within their
+hardware scope. The CHK mask was tightened to assert live N on a taken bounds
+trap as well as saved N; all 5,000 CHK evaluations were rerun and passed after
+that change, with other groups unchanged. Successful CHK retains undefined NZVC.
+Adapter corruption guards detect wrong live/saved trap N while permitting only
+undefined C/V/Z changes. See README.txt for masks and execution profiles.
 
-Executed                                     73,665
-Passed all checked assertions                 48,567
-Failed an assertion                           25,097
-Crashed                                            1
-Distinct opcode words                         65,536 / 65,536
-Catalogue legal encodings plus 0x4AFC         45,816 / 45,816
-Other opcode words tested                     19,720 / 19,720
+Independent complete decode sweep, strict eight-pattern run:
+  Distinct opcode words                                65,536
+  Catalogue legal encodings plus explicit ILLEGAL        45,816
+  Other words checked for correct exception behavior     19,720
+  Operand/extension/status patterns in full command           8
+  Differential inputs per decoder                      524,288
+  Executed including readables                        1,064,970
+  Passed                                             1,064,970
+  Failed or crashed                                          0
 
-The full eight-pattern command defines 532,417 cases per decoder (1,064,834
-evaluations across both), including readable specifications. The corrected local
-full audit report is under build/complete-cpu-corrected/report.json; use the
-commands in COMPLETE.txt to reproduce it. The quick CI run covers every opcode
-word with one fixed pattern, and reports all remaining failures explicitly.
+The full strict run completed all eight patterns on both decoders, including
+all reserved/illegal words and all readable specifications. It used independent
+expected outputs, with the bounded reference corrections documented in
+ORACLE-CORRECTIONS.txt. The strict --quick command uses one pattern plus all
+readables: 147,466 evaluations across both decoders. See COMPLETE.txt for commands.
 
-After the legality/exception correction, all readable and quick-sweep expected
-outputs had the exact same digest as before it. The reviewed snapshots only
-removed resolved wrong bits: zero new wrong-bit cases were accepted. In
-particular, nondeterministic invalid-MOVE cycles were fixed at their source,
-not accepted by broadening timing masks or disabling illegal-word assertions.
+The latest readable cases add precise guards for dummy-read address faults in
+CLR and MOVE SR, LINK A7 capture order, CHK trap timing and odd JMP/JSR targets.
+Four additional MOVE.L fault guards distinguish retained C/V and immediate-source
+flags at the failed write boundary. Sequences observe next-instruction prefetch
+after writes through absolute-word and absolute-long destination extensions. They complement the original
+source/destination/flags/addressing tests and broad independent random vectors.
 
-The differential expectations come from pinned Musashi, checked against every
-readable specification with exactly three documented independent-reference
-disagreements. Correct manual expectations are retained. The unreliable external
-TAS/TRAPV data remains quarantined in the MAME layer, but both operations now have
-active readable and complete-decode tests, including both TRAPV outcomes.
+The optional oracle is itself validated against the readable cases. Three exact
+pre-existing divide-state discrepancies are retained in reference-limitations.json;
+all other changes fail closed for review. ORACLE-CORRECTIONS.txt documents precise
+reference defects and hardware evidence. MUL/DIV differential timing is omitted
+because that oracle uses unsuitable fixed counts; MAME checks their timing.
 
-Expanded readable cases with ASan/UBSan, PER decoder:
+The production Z80 backend strictly executed all 1,604,000 pinned cases across
+1,604 base/prefix groups: 1,604,000 passes and zero failures. Its core wrapper is
+shared by production and z80_worker. Comparison includes documented/undocumented
+state, RAM, I/O transactions and total T-states. It does not emit pin traces.
+See ../../Z80/README.txt and COMPLETE.txt for commands and integration scope.
 
-Executed                                      8,129
-Passed all checked assertions                  5,671
-Failed an assertion                              914
-Crashed/stopped on undefined behavior           1,544
+Sanitizer policy and hardware limits
+-----------------------------------
 
-These are failing CPU cases, not 1,544 distinct source bugs. Examples include
-signed 32-bit addition/subtraction overflow, shift exponents >=32, and signed
-division INT_MIN/-1. Crashes remain failures with diagnostics. Infrastructure and
-known-failure regression gates passing do not certify CPU correctness or safety.
+The final readable suite also passed strictly with ASan/UBSan: 16,394 executed,
+16,394 passed and zero failures/crashes. The three original opcode/legacy CTest
+targets passed in that sanitizer build as well. All seven CPU CTest targets use
+strict acceptance; old unsafe-case baselines do not exempt failures. These
+observations cover the executed cases, not every possible production input.
 
-Z80: every downloaded case was hash checked and schema validated: 1,604 groups,
-1,604,000 cases, including base/CB/ED/DD/FD/indexed-CB forms. Execution remains
-BLOCKED for all those cases because DrivOnix has no Z80 CPU backend. The runner
-and worker contract check registers/flags/internal state, RAM, ports, cycle totals
-and optional bus-pin traces; an absent backend can never produce a strict pass.
-
-The independent MAME layer from BASELINE.txt remains available: 312,500 active
-external cases plus the original 28 examples through each decoder, with 5,000
-unreliable external TAS/TRAPV cases explicitly quarantined per decoder.
-
-Every opcode word having cases does not mean all operand values, bus pins, wait
-states, fault combinations or console behavior have been verified. Remaining
-interface boundaries are listed in COMPLETE.txt. These counts are not an emulator
-accuracy percentage; state/timing coverage and case distributions differ.
+Opcode coverage is not exhaustive operand coverage or an emulator accuracy
+percentage. Electrical pins, byte strobes, wait states, arbitration, externally
+injected bus errors/double-fault halt, vectored/spurious interrupt acknowledge and
+the final internal prefetch queue remain outside these CPU fixtures. Separate
+console tests exercise hardware integration. Diagnostic ROM boot/render/input
+and CPU vector success do not establish complete commercial-game compatibility
+or measured real-game performance.
