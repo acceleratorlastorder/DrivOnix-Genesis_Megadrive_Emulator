@@ -1,8 +1,17 @@
 #include "romloader.hpp"
+#include "../../platform/archive.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <memory>
 #include <stdexcept>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace
 {
@@ -56,15 +65,24 @@ byte SelectRegion(const byte* field)
 
 std::vector<byte> ReadRom(const std::string& path)
 {
-    std::ifstream input(path, std::ios::binary | std::ios::ate);
-    if (!input)
+    if(path.find('\0')!=std::string::npos)throw std::runtime_error("Invalid NUL in ROM path");
+#ifdef _WIN32
+    const int count=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path.data(),int(path.size()),nullptr,0);
+    if(!count)throw std::runtime_error("Invalid UTF-8 ROM path");
+    std::wstring wide(count,L'\0');
+    MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path.data(),int(path.size()),&wide[0],count);
+    std::unique_ptr<std::FILE,int(*)(std::FILE*)> input(_wfopen(wide.c_str(),L"rb"),std::fclose);
+#else
+    std::unique_ptr<std::FILE,int(*)(std::FILE*)> input(std::fopen(path.c_str(),"rb"),std::fclose);
+#endif
+    if(!input)
         throw std::runtime_error("Cannot open ROM: " + path);
-    const std::streamoff size = input.tellg();
-    if (size < 0x200 || size > 0x800000 + SMD_HEADER_SIZE)
+    if(std::fseek(input.get(),0,SEEK_END)!=0)throw std::runtime_error("Cannot size ROM: "+path);
+    const long size=std::ftell(input.get());
+    if(size<0x200||size>0x800000+SMD_HEADER_SIZE)
         throw std::runtime_error("ROM must contain a complete header and fit in the 8 MiB cartridge image limit: " + path);
     std::vector<byte> bytes(static_cast<std::size_t>(size));
-    input.seekg(0);
-    if (!input.read(reinterpret_cast<char*>(bytes.data()), size))
+    if(std::fseek(input.get(),0,SEEK_SET)!=0||std::fread(bytes.data(),1,bytes.size(),input.get())!=bytes.size())
         throw std::runtime_error("Cannot read ROM: " + path);
     return bytes;
 }
@@ -114,56 +132,59 @@ byte RomLoader::GetCountry()
 
 byte RomLoader::GetHardwareRegion() { return get().hardwareRegion; }
 
-void RomLoader::LoadRomFile(std::string romName)
+void RomLoader::LoadRomFile(std::string romName,const std::string& member)
 {
     Init();
-    const auto dot = romName.find_last_of('.');
-    if (dot == std::string::npos)
-        throw std::runtime_error("Unsupported ROM extension: " + romName);
-	std::string extension = romName.substr(dot);
+    std::vector<byte> bytes;
+    std::string cartridgeName=romName;
+    if(Archive::IsArchive(romName))
+    {
+        auto selected=member;
+        if(selected.empty())
+        {
+            const auto entries=Archive::List(romName);
+            if(entries.size()!=1)throw std::runtime_error("Archive contains multiple games; select an exact archive member");
+            selected=entries.front().name;
+        }
+        bytes=Archive::Read(romName,selected);cartridgeName=selected;
+    }
+    else
+    {
+        if(!member.empty())throw std::runtime_error("Archive member can only be used with a ZIP or 7z game");
+    }
+    const auto dot = cartridgeName.find_last_of('.');
+    if(dot==std::string::npos)
+        throw std::runtime_error("Unsupported ROM extension: "+cartridgeName);
+    std::string extension=cartridgeName.substr(dot);
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
 
-	if(extension == ".bin")
-	{
-		get().LoadBINMDGEN(romName);
-	}
-	else if(extension == ".md")
-	{
-		get().LoadBINMDGEN(romName);
-	}
-	else if(extension == ".gen")
-	{
-		get().LoadBINMDGEN(romName);
-	}
-	else if(extension == ".smd")
-	{
-		get().LoadSMD(romName);
-	}
-	else if(extension == ".bios")
-	{
-		get().LoadBINMDGEN(romName);
-	}
-	else
-	{
-		throw std::runtime_error("Unsupported ROM extension: " + romName);
-	}
+    if(extension!=".bin"&&extension!=".md"&&extension!=".gen"&&extension!=".smd"&&extension!=".bios")
+        throw std::runtime_error("Unsupported ROM extension: "+cartridgeName);
+    if(bytes.empty())bytes=ReadRom(romName);
+    if(extension==".smd") get().LoadSMD(bytes,cartridgeName);
+    else
+    {
+        if(bytes.size()>0x800000)throw std::runtime_error("ROM exceeds the 8 MiB cartridge image limit: "+cartridgeName);
+        get().cartridgeMemory=std::move(bytes);
+        get().cartridgeSize=static_cast<long>(get().cartridgeMemory.size());
+    }
 
 	get().LoadHeader();
 	get().Checksum();
 }
 
-void RomLoader::LoadBINMDGEN(std::string romName)
+void RomLoader::LoadImage(std::vector<byte> bytes)
 {
-    get().cartridgeMemory = ReadRom(romName);
-    if (get().cartridgeMemory.size() > 0x800000)
-        throw std::runtime_error("ROM exceeds the 8 MiB cartridge image limit: " + romName);
-    get().cartridgeSize = static_cast<long>(get().cartridgeMemory.size());
+    if(bytes.size()<0x200||bytes.size()>0x800000)
+        throw std::runtime_error("Decoded ROM must contain a complete header and fit in the 8 MiB cartridge image limit");
+    Init();get().cartridgeMemory=std::move(bytes);
+    get().cartridgeSize=static_cast<long>(get().cartridgeMemory.size());
+    get().LoadHeader();get().Checksum();
 }
 
-void RomLoader::LoadSMD(std::string romName)
+void RomLoader::LoadSMD(const std::vector<byte>& romSMD,const std::string& romName)
 {
-    const std::vector<byte> romSMD = ReadRom(romName);
     const std::size_t size = romSMD.size() - SMD_HEADER_SIZE;
     if (size == 0 || size % SMD_BLOCK_SIZE != 0)
         throw std::runtime_error("SMD ROM must contain complete 16 KiB blocks after its 512-byte header: " + romName);

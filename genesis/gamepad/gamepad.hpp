@@ -19,8 +19,11 @@ public:
 	static void Init();
 	#ifndef DRIVONIX_HEADLESS
 	static bool Update(sfEvent event);
+    static void PollControllers(bool focused);
 #endif
     static void SetButton(int gamepad, int button, bool pressed);
+    static void SetControllerState(int gamepad, word buttons);
+    static void SetFocus(bool focused);
     static void Advance(unsigned masterCycles);
     static void SetSixButton(int gamepad, bool enabled);
 	static void Write(int gamepad, int data, bool control);
@@ -51,6 +54,7 @@ private:
     unsigned idle[2];
 	word buttonState[2];
 	word gamepadState[2];
+    bool focused;
 
 	byte dataReg[2];
 	byte controlReg[2];

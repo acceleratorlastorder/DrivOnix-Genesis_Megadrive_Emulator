@@ -150,7 +150,8 @@ void ParserTests() {
     Need(Document::Parse(canonical).Get().volume == 100, "Default INI cannot be read back");
     const std::string original = "\xef\xbb\xbf; user comment\r\n[DiSpLaY] ; heading\r\n"
         " Scale = 02 ; keep scale comment\r\nFullScreen=OFF\r\n[future]\r\n"
-        "quoted = \"value; # with comments\"\r\n[audio]\r\nEnabled=YES # retain style\r\n volume = 31 ; level";
+        "quoted = \"value; # with comments\"\r\n[input]\r\nenabled=ON\r\ndeadzone=25\r\nplayer1=0\r\nplayer2=1\r\n"
+        "[audio]\r\nEnabled=YES # retain style\r\n volume = 31 ; level";
     auto document = Document::Parse(original);
     Need(document.Get().scale == 2 && !document.Get().fullscreen && document.Get().audioEnabled && document.Get().volume == 31,
          "INI case/whitespace/boolean/CRLF handling failed");
@@ -188,6 +189,22 @@ void ParserTests() {
         Need(Document::Parse(std::string("[audio]\nenabled=") + value).Get().audioEnabled, "True boolean alias failed");
     for (const auto& value : {"false", "no", "off", "0"})
         Need(!Document::Parse(std::string("[audio]\nenabled=") + value).Get().audioEnabled, "False boolean alias failed");
+    auto input = Document::Parse("; input settings\n[input]\nenabled=no\ndeadzone=31 ; drift\nplayer1=3\nplayer2=-1\nextra=keep\n");
+    Need(!input.Get().controllersEnabled && input.Get().controllerDeadzone == 31 &&
+         input.Get().controller1 == 3 && input.Get().controller2 == -1, "Controller INI settings did not parse");
+    auto inputValues = input.Get();inputValues.controller1 = 7;inputValues.controller2 = 0;
+    inputValues.controllerDeadzone = 12;inputValues.controllersEnabled = true;input.Apply(inputValues);
+    const auto updatedInput = input.Serialize();
+    Need(updatedInput.find("deadzone=12 ; drift") != std::string::npos && updatedInput.find("extra=keep") != std::string::npos,
+         "Controller editing dropped comments or unknown keys");
+    Need(Document::Parse(updatedInput).Get().controller1 == 7 && Document::Parse(updatedInput).Get().controller2 == 0,
+         "Controller settings failed save/read round trip");
+    for(const auto& bad : {"deadzone=0", "deadzone=96", "player1=-2", "player1=8", "player2=10000000000", "enabled=maybe", "player1=0\nPLAYER1=1"})
+        Throws([&] {Document::Parse(std::string("[input]\n")+bad);}, "input.");
+    inputValues.controller1 = -2;Throws([&] {input.Apply(inputValues);}, "input.player1");
+    Need(input.Get().controller1 == 7, "Invalid controller Apply changed active values");
+    Need(Document::Parse("[audio]\nvolume=14\n").Get().controllersEnabled,
+         "Existing settings did not receive controller defaults");
 }
 
 #ifndef _WIN32

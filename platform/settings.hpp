@@ -13,6 +13,10 @@ struct Values {
     bool fullscreen = false;
     bool audioEnabled = true;
     unsigned volume = 100;
+    bool controllersEnabled = true;
+    unsigned controllerDeadzone = 25;
+    int controller1 = 0;
+    int controller2 = 1;
 };
 
 void Validate(const Values& values);
@@ -49,7 +53,7 @@ private:
     Values values_;
     Values original_;
     std::vector<Line> lines_;
-    std::array<bool, 4> present_;
+    std::array<bool, 8> present_;
     std::string newline_;
     bool bom_;
     std::string path_;

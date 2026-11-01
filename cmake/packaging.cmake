@@ -51,6 +51,7 @@ else()
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "DrivOnix contributors")
     set(CPACK_DEBIAN_PACKAGE_SECTION "games")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "7zip | p7zip-full")
     # Debian prereleases must sort before their corresponding stable version.
     string(REGEX REPLACE "^([0-9]+\\.[0-9]+\\.[0-9]+)-" "\\1~"
         CPACK_DEBIAN_PACKAGE_VERSION "${DRIVONIX_PACKAGE_VERSION}")

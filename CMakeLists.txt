@@ -31,7 +31,8 @@ set(DRIVONIX_MACHINE_SOURCES
     genesis/genesis.cpp genesis/romloader/romloader.cpp genesis/gamepad/gamepad.cpp genesis/cartridge/cartridge.cpp genesis/cartridge/eeprom.cpp
     bits/bitsutils.cpp m68k/m68k.cpp ym7101/ym7101.cpp cathoderaytube/crt.cpp
     z80/z80.cpp z80/core.c audio/audio.cpp thirdparty/ymfm/ymfm_opn.cpp
-    thirdparty/ymfm/ymfm_ssg.cpp thirdparty/ymfm/ymfm_adpcm.cpp platform/settings.cpp)
+    thirdparty/ymfm/ymfm_ssg.cpp thirdparty/ymfm/ymfm_adpcm.cpp platform/settings.cpp
+    platform/controller.cpp platform/archive.cpp platform/process.cpp)
 add_library(drivonix_console STATIC ${DRIVONIX_MACHINE_SOURCES} platform/platform.cpp platform/audiooutput.cpp)
 target_compile_features(drivonix_console PUBLIC cxx_std_14)
 set_target_properties(drivonix_console PROPERTIES CXX_EXTENSIONS OFF C_STANDARD 11)
@@ -99,6 +100,27 @@ if(BUILD_TESTING)
     add_test(NAME settings_paths COMMAND platform_settings_tests "${CMAKE_CURRENT_BINARY_DIR}/settings-fixtures")
     add_executable(display_settings_tests unittests/frontend/displaysettingstests.cpp)
     target_link_libraries(display_settings_tests PRIVATE drivonix_console)
+    add_executable(controller_tests unittests/frontend/controllertests.cpp)
+    target_link_libraries(controller_tests PRIVATE drivonix_headless)
+    add_test(NAME controllers COMMAND controller_tests)
+    add_executable(archive_tests unittests/frontend/archivetests.cpp)
+    target_link_libraries(archive_tests PRIVATE drivonix_console)
+    if(MSVC)
+        target_compile_options(archive_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME archives COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/unittests/frontend/test_archives.py --probe $<TARGET_FILE:archive_tests>)
+    set_tests_properties(archives PROPERTIES TIMEOUT 120)
+    add_test(NAME archive_cli COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/unittests/frontend/test_archive_cli.py --emulator $<TARGET_FILE:DrivOnix>)
+    set_tests_properties(archive_cli PROPERTIES TIMEOUT 60)
+    if(WIN32)
+        add_test(NAME archive_chooser COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/unittests/frontend/test_windows_archives.py
+            --emulator $<TARGET_FILE:DrivOnix> --probe $<TARGET_FILE:archive_tests>
+            --report-dir ${CMAKE_CURRENT_BINARY_DIR}/windows-archive-report)
+        set_tests_properties(archive_chooser PROPERTIES TIMEOUT 60)
+    endif()
     if(DRIVONIX_SANITIZERS AND NOT MSVC)
         target_compile_options(settings_tests PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         target_link_options(settings_tests PRIVATE -fsanitize=address,undefined)

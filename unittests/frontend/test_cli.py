@@ -24,6 +24,9 @@ def assert_defaults(path):
     assert not values.getboolean("display", "fullscreen"), "New settings must default to windowed"
     assert values.getboolean("audio", "enabled"), "New settings must enable audio"
     assert values.getint("audio", "volume") == 100, "New settings must default to full volume"
+    assert values.getboolean("input", "enabled"), "New settings must enable controllers"
+    assert values.getint("input", "deadzone") == 25, "New settings must default to 25 percent stick deadzone"
+    assert values.getint("input", "player1") == 0 and values.getint("input", "player2") == 1
 
 
 def main():
@@ -57,6 +60,9 @@ def main():
         check(["one.bin", "two.bin"], 2, "Usage:")
         check(["--unknown"], 2, "Usage:")
         check(["--config"], 2, "Usage:")
+        check(["--archive-member"], 2, "Usage:")
+        check(["--list-archive"], 2, "Usage:")
+        check(["--archive-member", "one.bin", "--archive-member", "two.bin", "file.zip"], 2, "Usage:")
         never_written = directory / "must-not-create/drivonix.ini"
         check(["--config", str(never_written), "--help"], 0, "Usage:")
         check(["--config", str(never_written), "--unknown"], 2, "Usage:")
@@ -118,7 +124,7 @@ def main():
         check([""], 1, "ROM path is empty")
         check(["missing.bin"], 1, "Cannot open ROM")
         check(["no-extension"], 1, "Unsupported ROM extension")
-        check(["unsupported.zip"], 1, "Unsupported ROM extension")
+        check(["unsupported.txt"], 1, "Unsupported ROM extension")
         (directory / "truncated.bin").write_bytes(b"short")
         check(["truncated.bin"], 1, "complete header")
         (directory / "partial.smd").write_bytes(bytes(513))

@@ -3,7 +3,9 @@
 
 #include <cerrno>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
+#include <cstddef>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -25,22 +27,16 @@
 
 namespace
 {
+#ifndef _WIN32
 std::string ExecutableDirectory()
 {
     std::vector<char> path(256);
     for (;;)
     {
-#ifdef _WIN32
-        const DWORD length = GetModuleFileNameA(nullptr, path.data(), static_cast<DWORD>(path.size()));
-        if (length == 0)
-            throw std::runtime_error("Cannot find the executable directory");
-        if (length < path.size())
-#else
         const ssize_t length = readlink("/proc/self/exe", path.data(), path.size());
         if (length < 0)
             throw std::runtime_error("Cannot find the executable directory");
         if (static_cast<std::size_t>(length) < path.size())
-#endif
         {
             const std::string executable(path.data(), length);
             return executable.substr(0, executable.find_last_of("/\\"));
@@ -48,6 +44,7 @@ std::string ExecutableDirectory()
         path.resize(path.size() * 2);
     }
 }
+#endif
 
 void CheckPath(const std::string& path)
 {
@@ -298,16 +295,16 @@ unsigned LegacyScreen(const std::string& text,const std::string& path)
 std::string Platform::SelectRom()
 {
 #ifdef _WIN32
-    char path[32768] = {};
-    OPENFILENAMEA dialog = {};
+    wchar_t path[32768] = {};
+    OPENFILENAMEW dialog = {};
     dialog.lStructSize = sizeof(dialog);
-    dialog.lpstrFilter = "Genesis/Megadrive ROMs\0*.bin;*.md;*.gen;*.smd\0All files\0*.*\0";
+    dialog.lpstrFilter = L"Genesis/Megadrive ROMs and archives\0*.bin;*.md;*.gen;*.smd;*.zip;*.7z\0All files\0*.*\0";
     dialog.lpstrFile = path;
-    dialog.nMaxFile = sizeof(path);
-    dialog.lpstrTitle = "Select a ROM";
+    dialog.nMaxFile = DWORD(sizeof(path)/sizeof(path[0]));
+    dialog.lpstrTitle = L"Select a ROM";
     dialog.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-    if (GetOpenFileNameA(&dialog))
-        return path;
+    if (GetOpenFileNameW(&dialog))
+        return Utf8(path);
     if (CommDlgExtendedError() != 0)
         throw std::runtime_error("Cannot open the ROM file dialog");
     return {};
@@ -318,8 +315,8 @@ std::string Platform::SelectRom()
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL,
         "_Open", GTK_RESPONSE_ACCEPT, nullptr);
     GtkFileFilter* filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "Genesis/Megadrive ROMs");
-    for (const char* pattern : {"*.[bB][iI][nN]", "*.[mM][dD]", "*.[gG][eE][nN]", "*.[sS][mM][dD]"})
+    gtk_file_filter_set_name(filter, "Genesis/Megadrive ROMs and archives");
+    for (const char* pattern : {"*.[bB][iI][nN]", "*.[mM][dD]", "*.[gG][eE][nN]", "*.[sS][mM][dD]", "*.[zZ][iI][pP]", "*.7[zZ]"})
         gtk_file_filter_add_pattern(filter, pattern);
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
     GtkFileFilter* allFiles = gtk_file_filter_new();
@@ -343,9 +340,123 @@ std::string Platform::SelectRom()
 #endif
 }
 
+namespace {
+#ifdef _WIN32
+struct MemberDialog {
+    const std::vector<std::wstring>& names;
+    const std::wstring& archive;
+    int selected = -1;
+};
+INT_PTR CALLBACK ArchiveDialog(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    auto* state = reinterpret_cast<MemberDialog*>(GetWindowLongPtrW(window, DWLP_USER));
+    if(message == WM_INITDIALOG) {
+        state = reinterpret_cast<MemberDialog*>(lparam);
+        SetWindowLongPtrW(window, DWLP_USER, lparam);
+        SetWindowTextW(window, L"Select a game from archive");
+        RECT area;GetClientRect(window, &area);
+        const auto font = GetStockObject(DEFAULT_GUI_FONT);
+        const auto instance = GetModuleHandleW(nullptr);
+        const auto label = CreateWindowExW(0, L"STATIC", state->archive.c_str(), WS_CHILD|WS_VISIBLE,
+            10, 8, area.right-20, 32, window, nullptr, instance, nullptr);
+        const auto list = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD|WS_VISIBLE|WS_TABSTOP|
+            WS_VSCROLL|WS_HSCROLL|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT, 10, 42, area.right-20, area.bottom-86,
+            window, reinterpret_cast<HMENU>(100), instance, nullptr);
+        if(!label || !list) {EndDialog(window, -2);return TRUE;}
+        SendMessageW(label, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        SendMessageW(list, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        for(const auto& name: state->names)
+            if(SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name.c_str()))<0) {EndDialog(window, -2);return TRUE;}
+        SendMessageW(list, LB_SETCURSEL, 0, 0);
+        const auto okay = CreateWindowExW(0, L"BUTTON", L"Open", WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_DEFPUSHBUTTON,
+            area.right-190, area.bottom-34, 80, 25, window, reinterpret_cast<HMENU>(IDOK), instance, nullptr);
+        const auto cancel = CreateWindowExW(0, L"BUTTON", L"Cancel", WS_CHILD|WS_VISIBLE|WS_TABSTOP,
+            area.right-100, area.bottom-34, 90, 25, window, reinterpret_cast<HMENU>(IDCANCEL), instance, nullptr);
+        if(!okay || !cancel) {EndDialog(window, -2);return TRUE;}
+        SendMessageW(okay, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        SendMessageW(cancel, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        SetFocus(list);return FALSE;
+    }
+    if(message == WM_COMMAND && state) {
+        if(LOWORD(wparam) == IDCANCEL) { EndDialog(window, IDCANCEL);return TRUE; }
+        if(LOWORD(wparam) == IDOK || (LOWORD(wparam) == 100 && HIWORD(wparam) == LBN_DBLCLK)) {
+            const auto index = SendDlgItemMessageW(window, 100, LB_GETCURSEL, 0, 0);
+            if(index != LB_ERR) {state->selected = int(index);EndDialog(window, IDOK);}
+            return TRUE;
+        }
+    }
+    if(message == WM_CLOSE) {EndDialog(window, IDCANCEL);return TRUE;}
+    return FALSE;
+}
+#else
+gboolean SearchMember(GtkTreeModel* model, gint column, const gchar* query, GtkTreeIter* iter, gpointer)
+{
+    gchar* name=nullptr;gtk_tree_model_get(model, iter, column, &name, -1);
+    gchar* foldedName=g_utf8_casefold(name ? name:"", -1);
+    gchar* foldedQuery=g_utf8_casefold(query, -1);
+    const bool absent=std::strstr(foldedName, foldedQuery)==nullptr;
+    g_free(name);g_free(foldedName);g_free(foldedQuery);return absent;
+}
+#endif
+}
+
+std::string Platform::SelectArchiveMember(const std::string& archive, const std::vector<std::string>& members)
+{
+    if(members.empty()) throw std::runtime_error("Archive contains no supported ROMs: "+archive);
+    if(members.size()==1) return members.front();
+#ifdef _WIN32
+    // A resource-free native dialog keeps the release independent of a UI toolkit.
+    struct alignas(DWORD) Template { DLGTEMPLATE dialog; WORD menu=0, windowClass=0, title=0; } layout{};
+    static_assert(offsetof(Template,menu)==sizeof(DLGTEMPLATE), "Dialog template words must follow its header");
+    layout.dialog.style=WS_POPUP|WS_CAPTION|WS_SYSMENU|DS_MODALFRAME|DS_CENTER;
+    layout.dialog.cx=410;layout.dialog.cy=245;
+    std::vector<std::wstring> names;for(const auto& name: members) names.push_back(Wide(name));
+    const auto wideArchive=Wide(archive);
+    MemberDialog state{names, wideArchive, -1};
+    const auto result=DialogBoxIndirectParamW(GetModuleHandleW(nullptr), &layout.dialog, nullptr,
+        ArchiveDialog, reinterpret_cast<LPARAM>(&state));
+    if(result<0) throw std::runtime_error("Cannot open the archive game chooser");
+    return result==IDOK && state.selected>=0 ? members.at(std::size_t(state.selected)):std::string();
+#else
+    if(!gtk_init_check(nullptr, nullptr))
+        throw std::runtime_error("Archive has multiple games; use --list-archive and --archive-member NAME, or open it on a desktop");
+    auto* dialog=gtk_dialog_new_with_buttons("Select a game from archive", nullptr, GTK_DIALOG_MODAL,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 460);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    auto* content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    auto* label=gtk_label_new(archive.c_str());gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 6);
+    auto* model=gtk_list_store_new(1, G_TYPE_STRING);
+    for(const auto& name: members) {
+        GtkTreeIter iter;gtk_list_store_append(model, &iter);gtk_list_store_set(model, &iter, 0, name.c_str(), -1);
+    }
+    auto* tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1, "Game (type to search)", gtk_cell_renderer_text_new(), "text", 0, nullptr);
+    gtk_tree_view_set_search_column(GTK_TREE_VIEW(tree), 0);
+    gtk_tree_view_set_search_equal_func(GTK_TREE_VIEW(tree), SearchMember, nullptr, nullptr);
+    auto* first=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree), first, nullptr, FALSE);gtk_tree_path_free(first);
+    g_signal_connect(tree, "row-activated", G_CALLBACK(+[](GtkTreeView*, GtkTreePath*, GtkTreeViewColumn*, gpointer data) {
+        gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT);
+    }), dialog);
+    auto* scroll=gtk_scrolled_window_new(nullptr, nullptr);
+    gtk_container_add(GTK_CONTAINER(scroll), tree);gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 6);
+    gtk_widget_show_all(dialog);gtk_widget_grab_focus(tree);
+    std::string selection;
+    if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+        GtkTreeIter iter;
+        if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), nullptr, &iter)) {
+            gchar* name=nullptr;gtk_tree_model_get(GTK_TREE_MODEL(model), &iter, 0, &name, -1);
+            if(name) {selection=name;g_free(name);}
+        }
+    }
+    gtk_widget_destroy(dialog);g_object_unref(model);gdk_display_flush(gdk_display_get_default());return selection;
+#endif
+}
+
 std::string Platform::DataFile(const std::string& relativePath)
 {
-    const std::string directory = ExecutableDirectory();
+    const std::string directory = SettingsExecutableDirectory();
     // Preserve local configuration overrides and support both build and install trees.
     const std::vector<std::string> candidates = {
         relativePath,
@@ -355,9 +466,14 @@ std::string Platform::DataFile(const std::string& relativePath)
         std::string(DRIVONIX_INSTALL_DATA_DIR) + "/" + relativePath,
 #endif
     };
-    for (const auto& candidate : candidates)
-        if (std::ifstream(candidate, std::ios::binary).good())
-            return candidate;
+    for (const auto& candidate : candidates) {
+#ifdef _WIN32
+        auto* file = _wfopen(Wide(candidate).c_str(), L"rb");
+#else
+        auto* file = std::fopen(candidate.c_str(), "rb");
+#endif
+        if(file) {std::fclose(file);return candidate;}
+    }
     throw std::runtime_error("Cannot find " + relativePath + ". Keep the bios and config directories with drivonix.");
 }
 
