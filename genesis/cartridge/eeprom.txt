@@ -1,0 +1,43 @@
+Serial EEPROM cartridge support
+================================
+
+The original eeprom.cpp implementation handles X24C01 7-bit addressing and
+24C02/04/08/16/65-style device/word addressing (including 16-bit addresses for
+8 KiB devices). It models open-drain SDA, START/repeated START/STOP, slave ACK
+and invalid-device NACK, master ACK/NACK, random/current/sequential reads,
+page wrapping and a 5 ms write-cycle busy interval. Writes commit at STOP;
+Dirty reports changes to persistent bytes. Advance takes master-clock ticks;
+SetMasterClock must follow the console's PAL/NTSC clock selection.
+
+Primary protocol references:
+https://www.st.com/resource/en/datasheet/m24c02-w.pdf
+https://www.st.com/resource/en/datasheet/m24c64-w.pdf
+
+Documented board pinouts/product identities were cross-checked against:
+https://github.com/ekeeke/Genesis-Plus-GX/blob/master/core/cart_hw/eeprom_i2c.c
+No code from that project is copied. Device protocols, state transitions and
+storage implementation here are original DrivOnix code.
+
+Supported board profiles include Sega (SCL D1/SDA D0), EA (SCL D6/SDA D7),
+Acclaim 16 Mbit (SDA output D1), Acclaim 32 Mbit (byte-addressed SCL/SDA plus
+word-strobe ROM/EEPROM mux), and Codemasters (separate read/write windows,
+SDA output D7). Known product IDs select the correct capacity/page geometry.
+An explicit RA serial-memory header can select the default Sega X24C01 board;
+an ordinary SRAM range is never silently reinterpreted as EEPROM. Known
+SRAM-patched Sega cartridges are guarded. J-Cart extra controller hardware,
+SPI/Microwire chips and unknown boards are outside these I2C profiles.
+
+The parent cartridge layer owns atomic file persistence and should reload
+Bytes() only at the exact configured capacity. It routes byte and word strobes
+to Write8/Write16 separately so the Acclaim PAL sees the real bus access width.
+Bits not connected to SDA are supplied by Read8's underlyingBus parameter.
+
+Standalone test command:
+  c++ -std=c++14 genesis/cartridge/eeprom.cpp genesis/cartridge/eepromtests.cpp -o eeprom_tests
+  ./eeprom_tests
+
+The tests cover every configured geometry, high address/bank bits, page wrap,
+ACK polling until the write-cycle boundary, repeated-start reads, sequential
+reads, persistence, malformed save sizes, explicit/known board detection,
+SRAM-hack guarding and the Acclaim word-strobe read mux. They also pass under
+ASan/UBSan.

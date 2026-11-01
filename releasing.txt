@@ -1,0 +1,112 @@
+DrivOnix packages and releases
+==============================
+
+The Build, test and release workflow runs on pull requests, pushes to master,
+version-tag pushes and manual Actions runs. It calls the same CPU and native
+emulator workflows; release builds do not bypass ordinary conformance, hardware,
+GUI, sanitizer or installed-package checks. Standard GitHub-hosted Linux and
+Windows runners are used; no paid larger runner or external service is required.
+
+Automatic downloads
+--------------------
+
+Every successful push/merge to master publishes a development prerelease at:
+
+  https://github.com/acceleratorlastorder/DrivOnix-Genesis_Megadrive_Emulator/releases
+
+Expand Assets and download the Windows ZIP or Linux tar.gz/.deb. No tag or manual
+command is required. The version/tag includes the source commit, for example
+v0.0.0-dev.g0123456789ab. These are prereleases, so use the Releases list rather
+than /releases/latest (which lists stable releases only). Existing stable
+releases keep their Latest status. Rerunning a complete same-source release
+reuses its download without replacing its published assets.
+
+Actions -> Build, test and release -> Run workflow on master also publishes by
+default. Leave version blank for a development build, or provide a new version
+without the leading v for a numbered release. Uncheck publish for a preview.
+Runs on other branches and pull requests never publish. Publication is serialized
+by version so simultaneous manual and automatic builds do not race.
+
+Publishing a version
+--------------------
+
+After the workflow is present on master, choose an unused version. For example:
+
+  git switch master
+  git pull --ff-only
+  git tag v0.1.0
+  git push origin v0.1.0
+
+Use vMAJOR.MINOR.PATCH, optionally with a lowercase suffix such as v0.1.0-rc.1. A suffix
+creates a GitHub prerelease and is not marked Latest. Manually pushed tags trigger
+the workflow. Branch/manual publication creates its matching tag inside the
+already-tested workflow; this CI-created tag does not need a second workflow run.
+No PAT or release secret is needed: the publish job uses its scoped GITHUB_TOKEN.
+
+Both operating-system builds, CPU conformance and package checks must succeed
+before publication. A draft is created, all assets and checksums are uploaded,
+asset sizes/digests and the tag's source commit are checked, then it is published.
+An incomplete upload leaves a draft that a rerun can resume. Published releases
+are never overwritten; use a new version for changed binaries. Same-source
+complete releases are reused on retries. Do not move tags. A newer master push
+may cancel an older build and leave a draft; rerunning that original run resumes it.
+
+Release assets:
+
+  drivonix-VERSION-windows-x86_64.zip
+  drivonix-VERSION-linux-x86_64.tar.gz
+  drivonix-VERSION-linux-x86_64.deb
+  sha256sums
+
+Windows ZIP includes SFML/CSFML/OpenAL DLLs, the MSVC redistributable runtime,
+BIOS, configuration and dependency license notices. Extract the entire ZIP and
+run bin/drivonix.exe. A source-build toolchain is not required to use it.
+
+Linux packages are built on Ubuntu 24.04 x86_64. The .deb declares runtime
+dependencies discovered from the real executable; install with:
+
+  sudo apt install ./drivonix-VERSION-linux-x86_64.deb
+  drivonix
+
+The tarball is a relocatable bin/ + share/ tree. On Ubuntu 24.04, install its
+runtime prerequisites with `sudo apt install libcsfml-graphics2.6 libcsfml-window2.6
+libcsfml-system2.6 libcsfml-audio2.6 libgtk-3-0t64`, extract it, and run bin/drivonix.
+It is dynamically linked, not a universal Linux bundle; older glibc systems or
+other distributions may need a source build. The normal README covers building.
+
+On Linux, verify downloads in the directory containing all four release assets:
+
+  sha256sum --check sha256sums
+
+On Windows, compare `Get-FileHash .\drivonix-VERSION-windows-x86_64.zip -Algorithm SHA256`
+with its entry in sha256sums. Each archive also records version, full commit,
+platform and build OS in share/drivonix/build-info.json. No game ROM is bundled.
+
+Preview packages without publishing
+-----------------------------------
+
+Open Actions -> Build, test and release -> Run workflow. Select a branch and
+optionally enter a version without the leading v, and uncheck publish. This
+creates package artifacts and runs all checks without a tag or public release.
+Without a version, previews use 0.0.0-dev.gSHORTSHA. All builds also retain their
+packages as Actions artifacts for 14 days.
+
+Local packaging
+---------------
+
+Configure/build normally, optionally adding these CMake values:
+
+  -DDRIVONIX_PACKAGE_VERSION=0.1.0
+  -DDRIVONIX_PACKAGE_COMMIT=FULL_COMMIT_SHA
+
+Run `cpack --config build/linux/CPackConfig.cmake -B build/packages` on Linux
+(dpkg-dev is required for the .deb), or use build/windows/CPackConfig.cmake with
+`-C Release` on Windows. Windows CMake needs CSFML_ROOT pointing to the native
+dependency prefix generated by .github/scripts/build_windows_csfml.py.
+
+The package verifier extracts every actual archive, checks assets/licenses/source
+metadata and Linux executable permissions, and runs the packaged executable's
+startup/error-path tests from another working directory. Linux also validates
+Debian architecture, version and generated GTK/CSFML/libc dependency fields,
+installs the actual .deb and exercises its installed BIOS/render/input/region
+behavior under Xvfb.

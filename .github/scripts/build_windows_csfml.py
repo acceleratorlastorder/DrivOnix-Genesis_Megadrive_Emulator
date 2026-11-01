@@ -18,7 +18,7 @@ SOURCES = (
 def copy_dependency_licenses(source, licenses):
     # SFML 2.6.2 does not contain extlibs/licenses. Preserve the full upstream
     # terms and the original header notices from the pinned source instead.
-    bundle = Path(__file__).resolve().parents[2] / "ThirdParty/windows-notices"
+    bundle = Path(__file__).resolve().parents[2] / "thirdparty/windows-notices"
     manifest = json.loads((bundle / "manifest.json").read_text())
     digest = next(digest for name, _, digest in SOURCES if name == "SFML")
     if manifest["sfml_archive_sha256"] != digest:
@@ -31,7 +31,7 @@ def copy_dependency_licenses(source, licenses):
             original = (source / entry["sfml_path"]).read_bytes()
             if hashlib.sha256(original).hexdigest() != entry["sfml_sha256"]:
                 raise RuntimeError("SFML header differs from its retained notice: " + entry["sfml_path"])
-    shutil.copytree(bundle, licenses / "SFML-dependencies", dirs_exist_ok=True)
+    shutil.copytree(bundle, licenses / "sfml-dependencies", dirs_exist_ok=True)
 
 
 def main():
@@ -65,10 +65,10 @@ def main():
         subprocess.run(["cmake", "--install", str(build), "--config", "Release"], check=True)
         if name == "SFML":
             for dll in (source / "extlibs/bin/x64").glob("*.dll"):
-                shutil.copyfile(dll, prefix / "bin" / dll.name)
+                shutil.copyfile(dll, prefix / "bin" / dll.name.lower())
             copy_dependency_licenses(source, licenses)
         for license_file in source.glob("license.*"):
-            shutil.copyfile(license_file, licenses / f"{name}-{license_file.name}")
+            shutil.copyfile(license_file, licenses / f"{name.lower()}-{license_file.name.lower()}")
 
 
 if __name__ == "__main__":

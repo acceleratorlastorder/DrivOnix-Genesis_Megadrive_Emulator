@@ -19,21 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Fetch pinned independent reference sources
-        run: python UnitTests/conformance/prepare_reference.py
+        run: python unittests/conformance/prepare_reference.py
       - name: Configure
-        run: cmake -S UnitTests -B build/cpu -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_REFERENCE_DIR="${{ github.workspace }}/build/conformance-data/reference"
+        run: cmake -S unittests -B build/cpu -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_REFERENCE_DIR="${{ github.workspace }}/build/conformance-data/reference"
       - name: Build
         run: cmake --build build/cpu --config Debug --parallel 2
       - name: Test reference, optimized, and legacy CPU paths
         run: ctest --test-dir build/cpu -C Debug --output-on-failure
       - name: Fetch pinned external CPU specifications
-        run: python UnitTests/conformance/fetch.py --cache build/conformance-data
+        run: python unittests/conformance/fetch.py --cache build/conformance-data
       - name: Require strict external CPU conformance
         shell: bash
         run: |
           worker=build/cpu/vector_worker
           if [ "$RUNNER_OS" = "Windows" ]; then worker=build/cpu/Debug/vector_worker.exe; fi
-          python UnitTests/conformance/run.py --worker "$worker" --limit-per-group 8 --active-only --report-dir build/conformance-report
+          python unittests/conformance/run.py --worker "$worker" --limit-per-group 8 --active-only --report-dir build/conformance-report
       - name: Check all 65536 opcode words against the independent reference
         shell: bash
         run: |
@@ -43,10 +43,10 @@ jobs:
             worker=build/cpu/Debug/vector_worker.exe
             oracle=build/cpu/Debug/reference_worker.exe
           fi
-          python UnitTests/conformance/complete.py --worker "$worker" --oracle "$oracle" --quick --report-dir build/complete-cpu-report
+          python unittests/conformance/complete.py --worker "$worker" --oracle "$oracle" --quick --report-dir build/complete-cpu-report
       - name: Configure sanitizers
         if: runner.os == 'Linux'
-        run: cmake -S UnitTests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
+        run: cmake -S unittests -B build/cpu-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
       - name: Build with sanitizers
         if: runner.os == 'Linux'
         run: cmake --build build/cpu-sanitized --parallel 2
@@ -57,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cpu-conformance-${{ runner.os }}
+          name: cpu-conformance-${{ matrix.os }}
           path: |
             build/conformance-report/
             build/cpu/handwritten-report/

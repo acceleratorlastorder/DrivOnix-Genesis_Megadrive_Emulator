@@ -1,0 +1,100 @@
+DrivOnix settings
+=================
+
+INI is a text format with named sections and key/value pairs. It suits the
+current small set of scalar options and can be edited with an ordinary text
+editor. A future settings UI will use the same typed values, validation and
+save code; it must not implement a separate parser or own configuration format.
+There is no settings UI or physical gamepad backend in this change.
+
+Finding the active file
+-----------------------
+
+  drivonix --print-config-path
+
+Default writable locations:
+
+  Linux:   $XDG_CONFIG_HOME/drivonix/drivonix.ini
+           or $HOME/.config/drivonix/drivonix.ini
+  Windows: %LOCALAPPDATA%/drivonix/drivonix.ini
+
+Relative XDG_CONFIG_HOME values are ignored. The application-owned components
+are lowercase; system/user parent directories such as Windows AppData keep their
+real names. --print-config-path only reports a path: it never creates files or
+opens the ROM picker. If no usable profile root is available, use --config or
+--portable. Missing directories beneath a usable root are created automatically.
+
+  drivonix --config /my/settings/drivonix.ini game.bin
+  drivonix --portable game.bin
+
+--config selects an explicit file; a relative path is resolved once against the
+startup working directory. --portable uses config/drivonix.ini directly beside
+the executable, including bin/config/drivonix.ini in an extracted release. These
+options cannot be combined. New parent directories are created privately on
+Linux; existing directory permissions are not altered. Windows paths support
+Unicode. The installed share/drivonix/config/drivonix.ini is a reference template;
+the application never uses it as an automatically writable settings target.
+
+Supported settings
+-------------------
+
+  [display]
+  scale=1
+  fullscreen=false
+
+  [audio]
+  enabled=true
+  volume=100
+
+scale is an integer1..8 for the window. Fullscreen automatically fits the desktop
+using integer scaling. volume is host playback gain0..100. Disabling host audio
+does not disable emulated sound-chip execution. --no-audio is a temporary override
+and is never written into the file.
+
+Sections and keys are case-insensitive. Boolean values accept true/false,
+yes/no, on/off or1/0. Semicolon/hash comments, UTF-8 BOM and CRLF/LF files are
+supported. Duplicate known options, malformed syntax and invalid known values
+produce path/line/key errors and leave the file unchanged. Unknown sections and
+keys are retained, along with comments and formatting, when saving.
+
+Edit the INI while the emulator is closed and restart. The running application
+does not monitor the file continuously and does not autosave it at exit. The
+current keyboard bindings remain compiled in; no unused controller settings
+are exposed.
+
+Migration and saving
+---------------------
+
+When the active INI is genuinely missing, defaults are created. For the default
+and portable locations, an existing legacy Config/config.txt or config/config.txt
+may supply ScreenSize=1/2/3 once: these map to native scale, double scale or
+fullscreen. The old file is retained. An existing INI always takes precedence;
+an unreadable or invalid file is reported rather than treated as missing.
+
+Saving uses a unique sibling temporary file, flush and atomic replacement.
+Changes made on disk after loading are detected before save and require reload;
+they are not silently discarded. Failed writes retain the previous file and
+the changed in-memory values for retry. A directory-sync error can occur after
+replacement; the document then records the new baseline so retry is meaningful.
+
+Shared API for the later UI
+---------------------------
+
+  auto document = Settings::Document::Load(activePath);
+  auto values = document.Get();
+  values.scale = 2;
+  document.Apply(values);   // validates before changing the document
+  document.Save();          // explicit, atomic, preserves unrelated text
+
+The frontend already feeds these typed settings to CRT::Init and
+AudioOutput::ApplySettings. A UI can edit/apply the same values and save through
+Document; no UI framework or second configuration store is required. Creating
+a new document's parent directory is a separate platform operation.
+
+Source layout
+--------------
+
+Repository-owned source, runtime asset, executable and release-file paths are
+lowercase. CMakeLists.txt is the required CMake entrypoint filename and is the
+only tracked filename exception. Upstream URLs, SDK includes and archive member
+references retain their original spelling because they are external resources.

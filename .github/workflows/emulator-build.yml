@@ -40,7 +40,7 @@ jobs:
       - name: Test the installed layout from another working directory
         run: |
           cmake --install build/emulator --prefix build/package
-          python3 UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix
+          python3 unittests/frontend/test_cli.py --emulator build/package/bin/drivonix
       - name: Generate and verify Linux tarball and Debian package
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
@@ -50,15 +50,17 @@ jobs:
       - name: Install and test the generated Debian package
         run: |
           sudo apt-get install -y ./build/packages/*.deb
-          python3 UnitTests/frontend/test_cli.py --emulator /usr/bin/DrivOnix
+          python3 unittests/frontend/test_cli.py --emulator /usr/bin/drivonix
       - name: Require all 1604000 Z80 cases to pass
-        run: python3 UnitTests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
+        run: python3 unittests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
       - name: Exercise native picker, BIOS, rendering and joypad input
         env:
           ALSOFT_DRIVERS: "null"
         run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_gui.py --emulator /usr/bin/DrivOnix
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 UnitTests/frontend/test_linux_regions.py --emulator /usr/bin/DrivOnix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_gui.py --emulator /usr/bin/drivonix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_regions.py --emulator /usr/bin/drivonix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_settings.py --emulator /usr/bin/drivonix
+          xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/display_settings_tests
       - name: Check console hardware, saves and startup paths with sanitizers
         run: |
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
@@ -81,6 +83,7 @@ jobs:
           path: |
             build/linux-gui-report/
             build/linux-region-report/
+            build/linux-settings-report/
             build/z80-report/
           if-no-files-found: error
           retention-days: 14
@@ -110,7 +113,7 @@ jobs:
       - name: Assemble and test the installed layout
         run: |
           cmake --install build/emulator --prefix build/package --config Release
-          python UnitTests/frontend/test_cli.py --emulator build/package/bin/DrivOnix.exe
+          python unittests/frontend/test_cli.py --emulator build/package/bin/drivonix.exe
       - name: Generate and verify Windows ZIP package
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}

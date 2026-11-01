@@ -65,16 +65,16 @@ def complete_existing(record, commit, names):
 def publish(directory, repo, ref, commit, requested, event="push", enabled=False):
     version = publication_version(event, ref, commit, requested, enabled)
     tag = "v" + version
-    names = [f"DrivOnix-{version}-linux-x86_64.tar.gz",
-             f"DrivOnix-{version}-linux-x86_64.deb",
-             f"DrivOnix-{version}-windows-x86_64.zip"]
+    names = [f"drivonix-{version}-linux-x86_64.tar.gz",
+             f"drivonix-{version}-linux-x86_64.deb",
+             f"drivonix-{version}-windows-x86_64.zip"]
     found = {p.name for p in directory.iterdir() if p.is_file()}
-    if found - {"SHA256SUMS"} != set(names):
+    if found - {"sha256sums"} != set(names):
         raise ValueError("A release requires exactly the verified Linux tarball/deb and Windows zip")
     hashes = {name: hashlib.sha256((directory / name).read_bytes()).hexdigest() for name in names}
-    (directory / "SHA256SUMS").write_text("".join(f"{hashes[name]}  {name}\n" for name in sorted(names)), encoding="utf-8")
-    names.append("SHA256SUMS")
-    hashes["SHA256SUMS"] = hashlib.sha256((directory / "SHA256SUMS").read_bytes()).hexdigest()
+    (directory / "sha256sums").write_text("".join(f"{hashes[name]}  {name}\n" for name in sorted(names)), encoding="utf-8")
+    names.append("sha256sums")
+    hashes["sha256sums"] = hashlib.sha256((directory / "sha256sums").read_bytes()).hexdigest()
 
     if ref == "refs/heads/master":
         ensure_tag(repo, tag, commit)
@@ -90,10 +90,10 @@ def publish(directory, repo, ref, commit, requested, event="push", enabled=False
     if existing and existing["target_commitish"] != commit:
         raise ValueError("Refusing to overwrite a published release or another source's draft")
     if not existing:
-        notes = ("Windows x64: extract the ZIP and run bin/DrivOnix.exe.\n\n"
-                 "Ubuntu 24.04 x64: install the .deb with sudo apt install ./DrivOnix-*.deb. "
+        notes = ("Windows x64: extract the ZIP and run bin/drivonix.exe.\n\n"
+                 "Ubuntu 24.04 x64: install the .deb with sudo apt install ./drivonix-*.deb. "
                  "The Linux tarball requires CSFML 2 and GTK 3 runtime libraries.\n\n"
-                 "SHA256SUMS covers all three packages. Source commit: " + commit)
+                 "sha256sums covers all three packages. Source commit: " + commit)
         args = ["release", "create", tag, "--repo", repo, "--verify-tag", "--target", commit,
                 "--draft", "--generate-notes", "--title", "DrivOnix " + tag, "--notes", notes]
         if "-" in version:

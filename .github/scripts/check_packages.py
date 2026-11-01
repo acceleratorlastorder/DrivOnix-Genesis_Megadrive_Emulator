@@ -30,6 +30,7 @@ def require(condition, message):
 def archive_target(directory, name, top):
     path = PurePosixPath(name)
     require(name and "\\" not in name and ":" not in name
+            and name == name.lower()
             and not path.is_absolute() and ".." not in path.parts
             and path.parts and path.parts[0] == top,
             f"Unexpected archive path: {name!r}")
@@ -72,7 +73,7 @@ def same_file(installed, source):
 
 
 def check_dependency_notices(installed_notices):
-    notice_source = REPOSITORY / "ThirdParty/windows-notices"
+    notice_source = REPOSITORY / "thirdparty/windows-notices"
     same_file(installed_notices / "manifest.json", notice_source / "manifest.json")
     manifest = json.loads((notice_source / "manifest.json").read_text())
     for entry in manifest["files"]:
@@ -83,17 +84,18 @@ def check_dependency_notices(installed_notices):
 
 
 def check_layout(root, platform, version, commit):
-    binary = root / "bin" / ("DrivOnix.exe" if platform == "windows" else "DrivOnix")
+    binary = root / "bin" / ("drivonix.exe" if platform == "windows" else "drivonix")
     require(binary.is_file() and binary.stat().st_size > 0, f"Missing packaged executable: {binary}")
     if platform == "linux":
         require(binary.stat().st_mode & 0o111, "Packaged Linux executable lost its execute permission")
     data = root / DATA
-    for relative, original in (("Bios/DrivOnix.bios", "Bios/DrivOnix.bios"),
-                               ("Config/config.txt", "Config/config.txt"),
-                               ("README.md", "README.md"),
-                               ("RELEASING.txt", "RELEASING.txt"),
-                               ("third-party/NOTICE.txt", "ThirdParty/NOTICE.txt"),
-                               ("third-party/sound-z80.lock.json", "ThirdParty/sound-z80.lock.json")):
+    for relative, original in (("bios/drivonix.bios", "bios/drivonix.bios"),
+                               ("config/drivonix.ini", "config/drivonix.ini"),
+                               ("readme.md", "readme.md"),
+                               ("releasing.txt", "releasing.txt"),
+                               ("settings.txt", "settings.txt"),
+                               ("third-party/notice.txt", "thirdparty/notice.txt"),
+                               ("third-party/sound-z80.lock.json", "thirdparty/sound-z80.lock.json")):
         same_file(data / relative, REPOSITORY / original)
     metadata_path = data / "build-info.json"
     require(metadata_path.is_file(), "Missing packaged build-info.json")
@@ -102,9 +104,9 @@ def check_layout(root, platform, version, commit):
                 "build_os": "ubuntu-24.04" if platform == "linux" else "windows-2022"}
     for key, value in expected.items():
         require(metadata.get(key) == value, f"Packaged metadata {key} differs: {metadata.get(key)!r} != {value!r}")
-    lock = json.loads((REPOSITORY / "ThirdParty/sound-z80.lock.json").read_text())
+    lock = json.loads((REPOSITORY / "thirdparty/sound-z80.lock.json").read_text())
     for entry in lock["files"]:
-        relative = Path(entry["path"]).relative_to("ThirdParty")
+        relative = Path(entry["path"]).relative_to("thirdparty")
         installed = data / "third-party" / relative
         require(installed.is_file(), f"Missing packaged dependency source/license: {relative}")
         require(hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"],
@@ -116,11 +118,11 @@ def check_layout(root, platform, version, commit):
         required.update(("openal32.dll", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"))
         require(not required - dlls, "Missing Windows runtime DLLs: " + ", ".join(sorted(required - dlls)))
         licenses = data / "licenses"
-        for dependency in ("SFML", "CSFML"):
+        for dependency in ("sfml", "csfml"):
             require(any(path.is_file() and path.stat().st_size for path in licenses.glob(dependency + "-license.*")),
                     f"Missing {dependency} distribution license")
-        check_dependency_notices(licenses / "SFML-dependencies")
-    subprocess.run([sys.executable, str(REPOSITORY / "UnitTests/frontend/test_cli.py"),
+        check_dependency_notices(licenses / "sfml-dependencies")
+    subprocess.run([sys.executable, str(REPOSITORY / "unittests/frontend/test_cli.py"),
                     "--emulator", str(binary)], check=True, timeout=180)
 
 
@@ -150,7 +152,7 @@ def main():
     require(re.fullmatch(r"[0-9][0-9A-Za-z.+-]*", args.version), "Unsafe package version")
     require(re.fullmatch(r"[0-9a-f]{40}", args.commit), "Expected full lowercase Git commit SHA")
     require(args.directory.is_dir(), "Package directory does not exist")
-    stem = f"DrivOnix-{args.version}-{args.platform}-x86_64"
+    stem = f"drivonix-{args.version}-{args.platform}-x86_64"
     suffixes = (".tar.gz", ".deb") if args.platform == "linux" else (".zip",)
     expected = {stem + suffix for suffix in suffixes}
     actual = {path.name for path in args.directory.iterdir()
