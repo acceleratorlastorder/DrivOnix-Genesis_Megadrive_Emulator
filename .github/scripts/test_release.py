@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import publish_release
 from release_version import select_version, validate_version
+from publish_release import publication_version
 
 
 COMMIT = "0123456789abcdef" * 2 + "01234567"
@@ -29,6 +30,18 @@ class Versions(unittest.TestCase):
             select_version("refs/tags/v1.2.3", COMMIT, "1.2.4")
         with self.assertRaises(ValueError):
             select_version("refs/tags/v1.2.3", "bad")
+
+    def test_master_auto_and_explicit_manual_publication(self):
+        dev = select_version("refs/heads/master", COMMIT)
+        self.assertEqual(publication_version("push", "refs/heads/master", COMMIT, dev, False), dev)
+        self.assertEqual(publication_version("workflow_dispatch", "refs/heads/master", COMMIT, "1.2.3", True), "1.2.3")
+        for event, ref, version, enabled in (
+                ("push", "refs/heads/master", "1.2.3", False),
+                ("workflow_dispatch", "refs/heads/master", dev, False),
+                ("workflow_dispatch", "refs/heads/feature", dev, True),
+                ("pull_request", "refs/pull/7/merge", dev, True)):
+            with self.subTest(event=event, ref=ref), self.assertRaises(ValueError):
+                publication_version(event, ref, COMMIT, version, enabled)
 
 
 class Publication(unittest.TestCase):
@@ -90,6 +103,38 @@ class Publication(unittest.TestCase):
                 self.publish()
         gh.assert_not_called()
 
+    def test_complete_same_source_release_is_a_successful_noop(self):
+        names = [p.name for p in self.directory.iterdir()] + ["SHA256SUMS"]
+        existing = {"draft": False, "target_commitish": COMMIT,
+                    "assets": [{"name": name, "state": "uploaded", "size": 10,
+                                "digest": "sha256:" + "a" * 64} for name in names]}
+        # Fresh CPack timestamps can change bytes. Never replace the original
+        # complete published release when rebuilding the same source.
+        with patch.object(publish_release, "release", return_value=existing), patch.object(publish_release, "gh") as gh:
+            self.publish()
+        gh.assert_not_called()
+
+    def test_master_manual_run_creates_tag_after_validating_source_and_packages(self):
+        with patch.object(publish_release, "ensure_tag") as ensure, \
+             patch.object(publish_release, "release", side_effect=lambda *args: None if not gh.called else self.upload_record()), \
+             patch.object(publish_release, "gh") as gh:
+            publish_release.publish(self.directory, "owner/repo", "refs/heads/master", COMMIT,
+                                    self.version, event="workflow_dispatch", enabled=True)
+        ensure.assert_called_once_with("owner/repo", "v1.2.3", COMMIT)
+        self.assertIn("--draft=false", gh.call_args.args)
+
+    def test_successful_master_push_publishes_its_development_build(self):
+        self.version = select_version("refs/heads/master", COMMIT)
+        for path in list(self.directory.iterdir()):
+            path.rename(path.with_name(path.name.replace("1.2.3", self.version)))
+        with patch.object(publish_release, "ensure_tag") as ensure, \
+             patch.object(publish_release, "release", side_effect=lambda *args: None if not gh.called else self.upload_record()), \
+             patch.object(publish_release, "gh") as gh:
+            publish_release.publish(self.directory, "owner/repo", "refs/heads/master", COMMIT, self.version)
+        ensure.assert_called_once_with("owner/repo", "v" + self.version, COMMIT)
+        self.assertIn("--prerelease", gh.call_args_list[0].args)
+        self.assertIn("--latest=false", gh.call_args.args)
+
     def test_tag_moved_during_upload_never_publishes(self):
         self.verify_tag.side_effect = [None, ValueError("tag moved")]
         with patch.object(publish_release, "release", side_effect=lambda *args: None if not gh.called else self.upload_record()), \
@@ -122,6 +167,31 @@ class Publication(unittest.TestCase):
 
 
 class RemoteIdentity(unittest.TestCase):
+    def test_missing_auto_tag_is_created_at_the_tested_commit(self):
+        missing = subprocess.CalledProcessError(1, "gh", stderr="gh: Not Found (HTTP 404)")
+        with patch.object(publish_release, "gh", side_effect=[missing, "created"]) as gh, \
+             patch.object(publish_release, "verify_tag") as verify:
+            publish_release.ensure_tag("owner/repo", "v1.2.3", COMMIT)
+        self.assertIn("--method", gh.call_args.args)
+        self.assertIn("POST", gh.call_args.args)
+        self.assertIn("ref=refs/tags/v1.2.3", gh.call_args.args)
+        self.assertIn("sha=" + COMMIT, gh.call_args.args)
+        verify.assert_called_once_with("owner/repo", "v1.2.3", COMMIT)
+
+    def test_existing_auto_tag_is_verified_and_never_moved(self):
+        with patch.object(publish_release, "gh", return_value="exists") as gh, \
+             patch.object(publish_release, "verify_tag", side_effect=ValueError("wrong commit")):
+            with self.assertRaises(ValueError):
+                publish_release.ensure_tag("owner/repo", "v1.2.3", COMMIT)
+        self.assertEqual(gh.call_count, 1)
+
+    def test_authentication_failure_is_not_a_missing_tag(self):
+        forbidden = subprocess.CalledProcessError(1, "gh", stderr="gh: Forbidden (HTTP 403)")
+        with patch.object(publish_release, "gh", side_effect=forbidden) as gh:
+            with self.assertRaises(subprocess.CalledProcessError):
+                publish_release.ensure_tag("owner/repo", "v1.2.3", COMMIT)
+        self.assertEqual(gh.call_count, 1)
+
     def test_draft_lookup_includes_all_authenticated_pages(self):
         draft = {"tag_name": "v1.2.3", "draft": True, "target_commitish": COMMIT}
         with patch.object(publish_release, "gh", return_value=json.dumps([[{"tag_name": "v9.0.0"}], [draft]])) as gh:

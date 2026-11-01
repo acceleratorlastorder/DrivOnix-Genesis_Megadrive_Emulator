@@ -23,10 +23,13 @@ The current implementation includes the 68000, Z80, VDP, FM/PSG audio, cartridge
 ## Installation
 
 The [release workflow](.github/workflows/releases.yml) generates Windows x64
-ZIP, Linux x86_64 tar.gz and Ubuntu 24.04 amd64 `.deb` packages. Version tags
-publish these to [GitHub Releases](https://github.com/acceleratorlastorder/DrivOnix-Genesis_Megadrive_Emulator/releases)
-with SHA-256 checksums after both platforms and CPU tests pass. Ordinary CI and
-manual preview runs keep downloadable packages as Actions artifacts for 14 days.
+ZIP, Linux x86_64 tar.gz and Ubuntu 24.04 amd64 `.deb` packages. Successful builds
+on `master` automatically publish development builds to
+[GitHub Releases](https://github.com/acceleratorlastorder/DrivOnix-Genesis_Megadrive_Emulator/releases),
+with SHA-256 checksums after both platforms and CPU tests pass. No version tag
+is needed for these downloads. Explicit version tags publish numbered releases.
+Manual runs on `master` also publish by default; uncheck **publish** for a preview.
+PRs and other branches keep preview artifacts for 14 days and never publish.
 
 Extract the Windows ZIP and run `bin/DrivOnix.exe`; its dependency DLLs and MSVC
 runtimes are included. On Ubuntu 24.04 or a compatible newer system, install a

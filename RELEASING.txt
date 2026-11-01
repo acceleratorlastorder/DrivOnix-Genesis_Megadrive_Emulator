@@ -7,6 +7,26 @@ emulator workflows; release builds do not bypass ordinary conformance, hardware,
 GUI, sanitizer or installed-package checks. Standard GitHub-hosted Linux and
 Windows runners are used; no paid larger runner or external service is required.
 
+Automatic downloads
+--------------------
+
+Every successful push/merge to master publishes a development prerelease at:
+
+  https://github.com/acceleratorlastorder/DrivOnix-Genesis_Megadrive_Emulator/releases
+
+Expand Assets and download the Windows ZIP or Linux tar.gz/.deb. No tag or manual
+command is required. The version/tag includes the source commit, for example
+v0.0.0-dev.g0123456789ab. These are prereleases, so use the Releases list rather
+than /releases/latest (which lists stable releases only). Existing stable
+releases keep their Latest status. Rerunning a complete same-source release
+reuses its download without replacing its published assets.
+
+Actions -> Build, test and release -> Run workflow on master also publishes by
+default. Leave version blank for a development build, or provide a new version
+without the leading v for a numbered release. Uncheck publish for a preview.
+Runs on other branches and pull requests never publish. Publication is serialized
+by version so simultaneous manual and automatic builds do not race.
+
 Publishing a version
 --------------------
 
@@ -18,16 +38,18 @@ After the workflow is present on master, choose an unused version. For example:
   git push origin v0.1.0
 
 Use vMAJOR.MINOR.PATCH, optionally with a suffix such as v0.1.0-rc.1. A suffix
-creates a GitHub prerelease and is not marked Latest. Tags must be pushed using
-your normal authenticated Git client; a tag created by another workflow using
-only GITHUB_TOKEN may not trigger a new workflow run. No PAT or release secret
-is needed by this workflow: the publish job uses its scoped GITHUB_TOKEN.
+creates a GitHub prerelease and is not marked Latest. Manually pushed tags trigger
+the workflow. Branch/manual publication creates its matching tag inside the
+already-tested workflow; this CI-created tag does not need a second workflow run.
+No PAT or release secret is needed: the publish job uses its scoped GITHUB_TOKEN.
 
 Both operating-system builds, CPU conformance and package checks must succeed
 before publication. A draft is created, all assets and checksums are uploaded,
 asset sizes/digests and the tag's source commit are checked, then it is published.
 An incomplete upload leaves a draft that a rerun can resume. Published releases
-are never overwritten; use a new version for changed binaries. Do not move tags.
+are never overwritten; use a new version for changed binaries. Same-source
+complete releases are reused on retries. Do not move tags. A newer master push
+may cancel an older build and leave a draft; rerunning that original run resumes it.
 
 Release assets:
 
@@ -64,10 +86,10 @@ Preview packages without publishing
 -----------------------------------
 
 Open Actions -> Build, test and release -> Run workflow. Select a branch and
-optionally enter a version without the leading v. This creates package artifacts
-and runs all checks, but does not create a tag or publish a release. Without a
-version, previews use 0.0.0-dev.gSHORTSHA. Ordinary PR/master builds also produce
-these preview packages, retained as Actions artifacts for 14 days.
+optionally enter a version without the leading v, and uncheck publish. This
+creates package artifacts and runs all checks without a tag or public release.
+Without a version, previews use 0.0.0-dev.gSHORTSHA. All builds also retain their
+packages as Actions artifacts for 14 days.
 
 Local packaging
 ---------------
