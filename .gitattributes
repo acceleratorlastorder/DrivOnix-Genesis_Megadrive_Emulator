@@ -1,5 +1,5 @@
 # Preserve the exact pinned upstream bytes on Windows as well as Unix.
-ThirdParty/** -text
+thirdparty/** -text
 # Preserve upstream notice whitespace as part of the pinned source bytes.
-ThirdParty/windows-notices/** -whitespace
-Bios/*.bios binary
+thirdparty/windows-notices/** -whitespace
+bios/*.bios binary

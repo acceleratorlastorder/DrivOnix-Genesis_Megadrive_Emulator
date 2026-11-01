@@ -1,0 +1,37 @@
+DrivOnix CPU and sound dependencies
+===================================
+
+The exact upstream commits, source paths and SHA-256 hashes are recorded in
+sound-z80.lock.json. verify_sources.py checks the vendored bytes offline.
+No build-time download is necessary.
+
+chips/z80.h
+  Andre Weissflog's cycle-stepped Z80, floooh/chips commit
+  9e88298ce56319953ac7a43213a1120359f7a3a6.
+  Copyright (c) 2021 Andre Weissflog. zlib/libpng license, retained in the
+  source header and chips/license.
+  The file is unchanged. DrivOnix's separately maintained z80/core.c wrapper
+  adds the NMOS Q/P/EI latches and SCF/CCF undocumented-flag behavior, shared by
+  the console and its instruction-vector worker.
+
+ymfm/
+  Aaron Giles's YM2612 FM/DAC/timer engine, aaronsgiles/ymfm commit
+  81aec25ccbb98f4873a255f7551ac4dadac59b4a.
+  Copyright (c) 2021 Aaron Giles. BSD 3-Clause license in ymfm/license.
+  OPN's shared source also requires the ADPCM and SSG support files; the
+  DrivOnix console instantiates the YM2612 only.
+
+json/
+  sheredom/json.h commit 2312d33bfd4e68a749fa7833353a78c21308ce8e.
+  Public-domain dedication / Unlicense in json/license.
+  Used only by the Z80 instruction-vector worker, not the console's hot path.
+
+The Sega-compatible PSG and console master-clock/mixing integration in audio/
+are original DrivOnix code. Other vendor files above retain their own notices.
+Binary distributions must include this notice and the accompanying licenses.
+
+Windows packages also include the native SFML/CSFML libraries and their external
+dependency notices. windows-notices/manifest.json records the exact source
+versions, upstream notice URLs and SHA-256 hashes used by the Windows build
+helper. That helper checks these files before copying them into the package's
+share/drivonix/licenses/sfml-dependencies directory.

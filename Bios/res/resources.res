@@ -1,1 +1,0 @@
-IMAGE BiosBackground "BiosBackground.bmp" 0

@@ -9,5 +9,5 @@
 *.eep.tmp.*
 output.txt
 /build/
-/UnitTests/conformance/__pycache__/
+/unittests/conformance/__pycache__/
 __pycache__/

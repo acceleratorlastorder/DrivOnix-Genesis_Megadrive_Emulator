@@ -23,7 +23,7 @@ class Versions(unittest.TestCase):
         self.assertEqual(select_version("refs/heads/master", COMMIT, "2.0.0"), "2.0.0")
 
     def test_invalid_or_mismatched_tags_fail_closed(self):
-        for version in ("v1.2.3", "1.2", "01.2.3", "1.2.3-01", "1.2.3/evil", "1.2.3\nnext=bad"):
+        for version in ("v1.2.3", "1.2", "01.2.3", "1.2.3-01", "1.2.3-RC.1", "1.2.3/evil", "1.2.3\nnext=bad"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 validate_version(version)
         with self.assertRaises(ValueError):
@@ -54,7 +54,7 @@ class Publication(unittest.TestCase):
         self.directory = Path(self.temp.name)
         self.version = "1.2.3"
         for platform, suffix in (("linux", ".tar.gz"), ("linux", ".deb"), ("windows", ".zip")):
-            (self.directory / f"DrivOnix-{self.version}-{platform}-x86_64{suffix}").write_bytes(suffix.encode())
+            (self.directory / f"drivonix-{self.version}-{platform}-x86_64{suffix}").write_bytes(suffix.encode())
 
     def upload_record(self):
         return {"assets": [{"name": p.name, "size": p.stat().st_size, "state": "uploaded",
@@ -75,7 +75,7 @@ class Publication(unittest.TestCase):
         self.assertIn("--draft=false", calls[-1])
         self.assertIn("--latest=true", calls[-1])
         self.assertEqual(self.verify_tag.call_count, 2)
-        self.assertEqual(len((self.directory / "SHA256SUMS").read_text().splitlines()), 3)
+        self.assertEqual(len((self.directory / "sha256sums").read_text().splitlines()), 3)
 
     def test_failed_upload_leaves_draft_unpublished(self):
         def command(*args):
@@ -104,7 +104,7 @@ class Publication(unittest.TestCase):
         gh.assert_not_called()
 
     def test_complete_same_source_release_is_a_successful_noop(self):
-        names = [p.name for p in self.directory.iterdir()] + ["SHA256SUMS"]
+        names = [p.name for p in self.directory.iterdir()] + ["sha256sums"]
         existing = {"draft": False, "target_commitish": COMMIT,
                     "assets": [{"name": name, "state": "uploaded", "size": 10,
                                 "digest": "sha256:" + "a" * 64} for name in names]}

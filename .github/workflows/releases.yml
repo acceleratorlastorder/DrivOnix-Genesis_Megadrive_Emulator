@@ -32,6 +32,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check lowercase repository paths
+        run: python3 .github/scripts/check_paths.py
       - name: Validate version and source identity
         id: version
         env:
