@@ -118,8 +118,8 @@ int main(int argc,char** argv)
                 const auto region=RomLoader::GetHardwareRegion();
                 RomLoader::LoadRomFile(args[2],args[3]);Require(RomLoader::Bytes()==expected,"Archived ROM decoding differs from raw ROM");
                 Require(RomLoader::GetHardwareRegion()==region,"Archived ROM region changed");
-                RomLoader::LoadImage(expected);Require(RomLoader::Bytes()==expected&&RomLoader::GetHardwareRegion()==region,"Cached image restore changed cartridge bytes or region");
-                bool rejected=false;try{RomLoader::LoadImage(std::vector<byte>(128));}catch(const std::runtime_error&){rejected=true;}
+                RomLoader::LoadCartridgeImage(expected);Require(RomLoader::Bytes()==expected&&RomLoader::GetHardwareRegion()==region,"Cached image restore changed cartridge bytes or region");
+                bool rejected=false;try{RomLoader::LoadCartridgeImage(std::vector<byte>(128));}catch(const std::runtime_error&){rejected=true;}
                 Require(rejected,"Cached image accepted an incomplete header");
             }
         }

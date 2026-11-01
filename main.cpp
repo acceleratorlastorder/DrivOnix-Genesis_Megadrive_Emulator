@@ -130,7 +130,7 @@ int main(int argc,char* argv[]) {
         Genesis::InsertCartridge(RomLoader::Bytes(),biosPath);
         Genesis::Init();GamePad::Init();M68k::Init();YM7101::Init();
         if(Genesis::Bios(hardwareRegion)) {
-            RomLoader::LoadImage(cartridgeBytes);
+            RomLoader::LoadCartridgeImage(cartridgeBytes);
             Genesis::SetHardwareRegion(hardwareRegion);RomLoader::PrintRomHeader();
             Genesis::ResetM68kMemory();Genesis::InsertCartridge();
             Genesis::Init();GamePad::Init();M68k::Init();YM7101::Init();Genesis::Run();

@@ -40,7 +40,7 @@ public:
 	static void LoadRomFile(std::string romName,const std::string& member = "");
     // Restore an already decoded cartridge after the BIOS handoff without
     // re-reading or decompressing its source archive.
-    static void LoadImage(std::vector<byte> bytes);
+    static void LoadCartridgeImage(std::vector<byte> bytes);
 	static void PrintRomHeader();
 	static byte GetCountry();
     // Header-selected J/U/E hardware region; GetCountry preserves raw input.

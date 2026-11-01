@@ -145,7 +145,7 @@ bool Drain(int pipe,std::vector<unsigned char>& output,std::string& error,bool s
 #endif
 }
 
-std::string Process::FindExecutable(const std::string& name)
+std::string Process::FindProgram(const std::string& name)
 {
     if(name.empty()||name.find_first_of("/\\\0",0,3)!=std::string::npos) return {};
 #ifdef _WIN32

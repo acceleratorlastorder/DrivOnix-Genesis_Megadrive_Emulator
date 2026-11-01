@@ -71,7 +71,7 @@ std::string SevenZip()
 #ifdef _WIN32
     for(const auto& name:{"7zz.exe","7z.exe","7za.exe"})
     {
-        const auto found=Process::FindExecutable(name);if(!found.empty()) return found;
+        const auto found=Process::FindProgram(name);if(!found.empty()) return found;
     }
     for(const auto* variable:{L"ProgramW6432",L"ProgramFiles",L"ProgramFiles(x86)"})
     {
@@ -89,7 +89,7 @@ std::string SevenZip()
 #else
     for(const auto& name:{"7zz","7z","7za"})
     {
-        const auto found=Process::FindExecutable(name);if(!found.empty()) return found;
+        const auto found=Process::FindProgram(name);if(!found.empty()) return found;
     }
 #endif
     throw std::runtime_error("ZIP/7z games require installed 7-Zip (7zz, 7z or 7za). Install 7-Zip and retry; no decompressor is bundled with DrivOnix.");

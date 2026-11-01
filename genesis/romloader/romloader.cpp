@@ -174,7 +174,7 @@ void RomLoader::LoadRomFile(std::string romName,const std::string& member)
 	get().Checksum();
 }
 
-void RomLoader::LoadImage(std::vector<byte> bytes)
+void RomLoader::LoadCartridgeImage(std::vector<byte> bytes)
 {
     if(bytes.size()<0x200||bytes.size()>0x800000)
         throw std::runtime_error("Decoded ROM must contain a complete header and fit in the 8 MiB cartridge image limit");
