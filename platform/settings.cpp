@@ -22,8 +22,9 @@
 
 namespace {
 constexpr std::size_t Limit = 1024 * 1024;
-const char* const Sections[] = {"display", "audio"};
-const char* const Keys[] = {"scale", "fullscreen", "enabled", "volume"};
+const char* const Sections[] = {"display", "audio", "input"};
+const char* const Keys[] = {"scale", "fullscreen", "enabled", "volume", "enabled", "deadzone", "player1", "player2"};
+const unsigned KeySections[] = {0, 0, 1, 1, 2, 2, 2, 2};
 
 bool Space(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v'; }
 std::string Trim(const std::string& text) {
@@ -60,7 +61,11 @@ std::string Value(const Settings::Values& values, int key) {
     case 0: return std::to_string(values.scale);
     case 1: return values.fullscreen ? "true": "false";
     case 2: return values.audioEnabled ? "true": "false";
-    default: return std::to_string(values.volume);
+    case 3: return std::to_string(values.volume);
+    case 4: return values.controllersEnabled ? "true": "false";
+    case 5: return std::to_string(values.controllerDeadzone);
+    case 6: return std::to_string(values.controller1);
+    default: return std::to_string(values.controller2);
     }
 }
 
@@ -204,9 +209,13 @@ namespace Settings {
 void Validate(const Values& values) {
     if (values.scale < 1 || values.scale > 8) throw std::invalid_argument("display.scale must be between 1 and 8");
     if (values.volume > 100) throw std::invalid_argument("audio.volume must be between 0 and 100");
+    if (values.controllerDeadzone < 1 || values.controllerDeadzone > 95)
+        throw std::invalid_argument("input.deadzone must be between 1 and 95");
+    if (values.controller1 < -1 || values.controller1 > 7 || values.controller2 < -1 || values.controller2 > 7)
+        throw std::invalid_argument("input.player1 and input.player2 must be between -1 and 7");
 }
 
-Document::Document() : present_{{false, false, false, false}}, newline_("\n"), bom_(false), exists_(false) {}
+Document::Document() : present_{}, newline_("\n"), bom_(false), exists_(false) {}
 
 Document Document::Parse(const std::string& text) {
     if (text.size() > Limit) throw std::runtime_error("Settings file exceeds 1 MiB");
@@ -255,6 +264,10 @@ Document Document::Parse(const std::string& text) {
                 else if (section == "display" && key == "fullscreen") line.key = 1;
                 else if (section == "audio" && key == "enabled") line.key = 2;
                 else if (section == "audio" && key == "volume") line.key = 3;
+                else if (section == "input" && key == "enabled") line.key = 4;
+                else if (section == "input" && key == "deadzone") line.key = 5;
+                else if (section == "input" && key == "player1") line.key = 6;
+                else if (section == "input" && key == "player2") line.key = 7;
                 if (line.key >= 0) {
                     const auto index = std::size_t(line.key);
                     const std::string fullKey = section + "." + key;
@@ -278,6 +291,18 @@ Document Document::Parse(const std::string& text) {
                         result.values_.volume = Number(value, number, fullKey);
                         if (result.values_.volume > 100) ParseError(number, fullKey, "must be between 0 and 100");
                         break;
+                    case 4: result.values_.controllersEnabled = Boolean(value, number, fullKey); break;
+                    case 5:
+                        result.values_.controllerDeadzone = Number(value, number, fullKey);
+                        if (result.values_.controllerDeadzone < 1 || result.values_.controllerDeadzone > 95)
+                            ParseError(number, fullKey, "must be between 1 and 95");
+                        break;
+                    case 6: case 7: {
+                        const unsigned device = value == "-1" ? 0:Number(value, number, fullKey) + 1;
+                        if (device > 8) ParseError(number, fullKey, "must be between -1 and 7");
+                        (line.key == 6 ? result.values_.controller1:result.values_.controller2) = int(device) - 1;
+                        break;
+                    }
                     }
                 }
             }
@@ -310,20 +335,20 @@ std::string Document::Serialize() const {
     Validate(values_);
     std::string output = bom_ ? "\xef\xbb\xbf":"";
     const std::size_t missing = std::size_t(-1);
-    std::array<std::size_t, 2> last{{missing, missing}};
+    std::array<std::size_t, 3> last{{missing, missing, missing}};
     for (std::size_t i = 0; i < lines_.size(); ++i)
         if (lines_[i].header)
-            for (unsigned section = 0; section < 2; ++section)
+            for (unsigned section = 0; section < 3; ++section)
                 if (lines_[i].section == Sections[section]) last[section] = i;
     auto separate = [&]() { if (!output.empty() && output.back() != '\n') output += newline_; };
     auto appendMissing = [&](unsigned section) {
-        for (unsigned key = section * 2; key < section * 2 + 2; ++key)
-            if (!present_[key]) { separate(); output += std::string(Keys[key]) + "=" + Value(values_, int(key)) + newline_; }
+        for (unsigned key = 0; key < 8; ++key)
+            if (KeySections[key] == section && !present_[key]) { separate(); output += std::string(Keys[key]) + "=" + Value(values_, int(key)) + newline_; }
     };
     std::size_t current = missing;
     for (std::size_t i = 0; i <= lines_.size(); ++i) {
         if (i == lines_.size() || lines_[i].header) {
-            for (unsigned section = 0; section < 2; ++section)
+            for (unsigned section = 0; section < 3; ++section)
                 if (current != missing && current == last[section]) appendMissing(section);
             if (i == lines_.size()) break;
             current = i;
@@ -337,7 +362,7 @@ std::string Document::Serialize() const {
     }
     if (lines_.empty()) output += "; drivonix settings. Changes take effect on restart.\n"
                                  "; booleans: true/false, yes/no, on/off or 1/0.\n";
-    for (unsigned section = 0; section < 2; ++section) {
+    for (unsigned section = 0; section < 3; ++section) {
         if (last[section] != missing) continue;
         separate();
         if (!output.empty() && output.back() == '\n') output += newline_;

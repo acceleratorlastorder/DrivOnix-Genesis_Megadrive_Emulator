@@ -1,5 +1,8 @@
 #include "gamepad.hpp"
 #include <algorithm>
+#ifndef DRIVONIX_HEADLESS
+#include "../../platform/controller.hpp"
+#endif
 
 GamePad::GamePad()
 {
@@ -25,12 +28,16 @@ void GamePad::Init()
 
 	get().gamepadState[0] = 0x0;
 	get().gamepadState[1] = 0x0;
+    get().focused = true;
     for (unsigned i=0; i<2; ++i) { get().sixButton[i]=true; get().phase[i]=0; get().idle[i]=0; }
 }
 
 #ifndef DRIVONIX_HEADLESS
 bool GamePad::Update(sfEvent event)
 {
+    if (event.type == sfEvtLostFocus) { SetFocus(false); return false; }
+    if (event.type == sfEvtGainedFocus) { SetFocus(true); return false; }
+	if (event.type == sfEvtKeyPressed && !get().focused) return false;
 	if(event.type == sfEvtKeyPressed)
   	{   
   		switch(event.key.code)
@@ -112,6 +119,7 @@ bool GamePad::Update(sfEvent event)
   			case sfKeyEscape:
   			return true;
   			break;
+            default: break;
   		}
   	}
   	else if(event.type == sfEvtKeyReleased)
@@ -195,17 +203,23 @@ bool GamePad::Update(sfEvent event)
   			case sfKeyEscape:
   			return true;
   			break;
+            default: break;
   		}
   	}
 
   	return false;
 }
 
+void GamePad::PollControllers(bool focused) {
+    SetFocus(focused);
+    const auto pads = Controller::Poll(focused);
+    for (unsigned pad = 0; pad < pads.size(); ++pad) SetControllerState(int(pad), pads[pad]);
+}
 #endif
 
 void GamePad::ButtonPressed(int gamepad, int button)
 {
-	BitSet(get().buttonState[gamepad], button);
+	if (get().focused) BitSet(get().buttonState[gamepad], button);
 }
 
 void GamePad::ButtonReleased(int gamepad, int button)
@@ -216,6 +230,16 @@ void GamePad::ButtonReleased(int gamepad, int button)
 void GamePad::SetButton(int pad, int button, bool pressed) {
     if (pad < 0 || pad > 1 || button < 0 || button > MD_MODE) return;
     if (pressed) get().ButtonPressed(pad, button); else get().ButtonReleased(pad, button);
+}
+void GamePad::SetControllerState(int pad, word buttons) {
+    if (pad < 0 || pad > 1) return;
+    get().gamepadState[pad] = get().focused ? word(buttons & 0x0fff) : 0;
+}
+void GamePad::SetFocus(bool focused) {
+    auto& state = get();
+    state.focused = focused;
+    if (!focused) for (unsigned pad = 0; pad < 2; ++pad)
+        state.buttonState[pad] = state.gamepadState[pad] = 0;
 }
 void GamePad::SetSixButton(int pad, bool enabled) {
     if (pad >= 0 && pad < 2) { get().sixButton[pad]=enabled; get().phase[pad]=0; }
@@ -238,7 +262,7 @@ byte GamePad::ReadData(int pad) {
     if (pad < 0 || pad > 1) return 0x7f;
     auto& s=get();
     const bool th=(s.controlReg[pad]&0x40) ? (s.dataReg[pad]&0x40)!=0 : true;
-    const unsigned buttons=s.buttonState[pad];
+    const unsigned buttons=s.buttonState[pad] | s.gamepadState[pad];
     byte data=0x3f;
     if (th) {
         if (s.sixButton[pad] && s.phase[pad]==3) {

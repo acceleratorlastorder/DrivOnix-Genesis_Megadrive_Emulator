@@ -2,6 +2,7 @@
 #define DRIVONIX_PLATFORM_HPP
 
 #include <string>
+#include <vector>
 
 namespace Settings { struct Values; }
 
@@ -9,6 +10,7 @@ namespace Platform
 {
 // An empty selection means the user cancelled the dialog.
 std::string SelectRom();
+std::string SelectArchiveMember(const std::string& archive, const std::vector<std::string>& members);
 std::string DataFile(const std::string& relativePath);
 void CheckDisplay();
 // Explicit and portable paths are mutually exclusive. Returned paths are

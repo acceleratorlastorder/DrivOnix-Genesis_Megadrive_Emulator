@@ -54,7 +54,7 @@ cd drivonix
 
 ```sh
 sudo apt-get update
-sudo apt-get install build-essential cmake pkg-config python3 libcsfml-dev libgtk-3-dev
+sudo apt-get install build-essential cmake pkg-config python3 libcsfml-dev libgtk-3-dev 7zip
 cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
 cmake --build build/linux --parallel 2
 ./build/linux/drivonix
@@ -193,6 +193,33 @@ and the shared settings API intended for the later UI.
 
 ## Joypad/Input
 
+Xbox controllers use the system XInput DLL on Windows and the existing CSFML
+joystick backend on Linux. No controller runtime is bundled. Two ports are
+enabled by default; keyboard input remains available alongside controllers.
+
+| Xbox control | Mega Drive control |
+| --- | --- |
+| D-pad / left stick | Directions |
+| X / A / B | A / B / C |
+| Y / LB / RB | X / Y / Z |
+| Menu / Start | Start |
+| View / Back | Mode |
+
+```ini
+[input]
+enabled=true
+deadzone=25
+player1=0
+player2=1
+```
+
+`deadzone` is 1 through 95 percent. Player values are native device indices
+(Windows 0 through 3; Linux 0 through 7), or -1 to disable a port. Controllers
+can reconnect while running. Losing window focus releases input. Linux expects
+the usual Xbox button order; other controllers can have different layouts.
+
+Keyboard bindings:
+
 -Player 1<br/>
 <kbd>Z</kbd> - Up<br/>
 <kbd>Q</kbd> - Left<br/>
@@ -229,6 +256,28 @@ previous save; a directory-sync failure can be reported after replacement.
 Failed writes retain the changed memory for retry. Existing unreadable saves
 are reported instead of being treated as empty memory. The ROM directory must
 be writable. Save states are not implemented.
+
+### ZIP and 7z games
+
+Open `.zip` and `.7z` files in the normal ROM picker or pass them on the command
+line. Install [7-Zip](https://www.7-zip.org/download.html) separately (Linux:
+`sudo apt install 7zip`, or `p7zip-full` on older distributions). DrivOnix finds
+`7zz`, `7z` or `7za` in PATH, plus the usual 7-Zip installation on Windows.
+It streams the selected ROM into memory; no decompressor is bundled and no ROM
+files are extracted into your collection.
+
+Single-game archives open directly. Merged collections such as GenMerge show a
+native chooser for the exact variant. The command line also supports:
+
+```sh
+drivonix --list-archive "/path/to/Sonic The Hedgehog 3.7z"
+drivonix --archive-member "Sonic The Hedgehog 3 (U) [!].bin" "/path/to/Sonic The Hedgehog 3.7z"
+```
+
+Each member has a stable sidecar save beside the archive, named
+`archive.7z.member-HASH.srm` (or `.eep`). Different variants keep separate saves.
+Encrypted, malformed, oversized and unsafe archives report an error. Game ROMs
+are not included in the repository or release packages.
 
 SRAM supports byte lanes, enable/write-protect controls, and persistent storage.
 Known Sega, EA, Acclaim and Codemasters serial boards select their documented

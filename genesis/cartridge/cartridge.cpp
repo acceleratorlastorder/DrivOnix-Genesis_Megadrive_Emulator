@@ -18,6 +18,25 @@
 #include <unistd.h>
 #endif
 namespace {
+#ifdef _WIN32
+std::wstring WidePath(const std::string& path)
+{
+    if(path.find('\0')!=std::string::npos)throw std::runtime_error("Invalid NUL in cartridge save path");
+    const int count=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path.data(),int(path.size()),nullptr,0);
+    if(!count)throw std::runtime_error("Invalid UTF-8 cartridge save path");
+    std::wstring result(count,L'\0');
+    MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,path.data(),int(path.size()),&result[0],count);
+    return result;
+}
+#endif
+void RemoveTemporary(const std::string& path)
+{
+#ifdef _WIN32
+    DeleteFileW(WidePath(path).c_str());
+#else
+    std::remove(path.c_str());
+#endif
+}
 std::vector<byte> image, ram;
 std::array<unsigned, 8> banks;
 dword ramStart=0, ramEnd=0;
@@ -31,7 +50,12 @@ bool Contains(dword address) {
 std::vector<byte> ReadSave(const std::string& path,unsigned size)
 {
     errno=0;
+#ifdef _WIN32
+    const auto wide=WidePath(path);
+    std::unique_ptr<std::FILE,int(*)(std::FILE*)> input(_wfopen(wide.c_str(),L"rb"),std::fclose);
+#else
     std::unique_ptr<std::FILE,int(*)(std::FILE*)> input(std::fopen(path.c_str(),"rb"),std::fclose);
+#endif
     if(!input)
     {
         if(errno==ENOENT) return {};
@@ -104,7 +128,7 @@ void Cartridge::Save() {
     if (!(serial ? EEPROM::Dirty():dirty) || bytes.empty()) return;
     const std::string temporary=savePath+".tmp."+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 #ifdef _WIN32
-    HANDLE file=CreateFileA(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_WRITE_THROUGH,nullptr);
+    HANDLE file=CreateFileW(WidePath(temporary).c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_WRITE_THROUGH,nullptr);
     if(file==INVALID_HANDLE_VALUE) throw std::runtime_error("Cannot create save-RAM temporary file: "+savePath);
     DWORD written=0;
     const bool complete=WriteFile(file,bytes.data(),DWORD(bytes.size()),&written,nullptr)!=0 && written==bytes.size() && FlushFileBuffers(file)!=0;
@@ -121,13 +145,13 @@ void Cartridge::Save() {
     const bool complete=offset==bytes.size() && fsync(file)==0;
     const bool closed=close(file)==0;
 #endif
-    if(!complete || !closed) {std::remove(temporary.c_str());throw std::runtime_error("Cannot flush save-RAM: "+savePath);}
+    if(!complete || !closed) {RemoveTemporary(temporary);throw std::runtime_error("Cannot flush save-RAM: "+savePath);}
 #ifdef _WIN32
-    const bool replaced=MoveFileExA(temporary.c_str(),savePath.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
+    const bool replaced=MoveFileExW(WidePath(temporary).c_str(),WidePath(savePath).c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
 #else
     const bool replaced=std::rename(temporary.c_str(),savePath.c_str())==0;
 #endif
-    if (!replaced) { std::remove(temporary.c_str()); throw std::runtime_error("Cannot replace save-RAM: "+savePath); }
+    if (!replaced) { RemoveTemporary(temporary); throw std::runtime_error("Cannot replace save-RAM: "+savePath); }
 #ifndef _WIN32
     const auto slash=savePath.find_last_of('/');
     const std::string directory=slash==std::string::npos ? ".":(slash==0 ? "/":savePath.substr(0,slash));

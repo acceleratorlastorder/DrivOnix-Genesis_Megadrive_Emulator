@@ -91,10 +91,10 @@ bool Genesis::Loop(bool bios,byte country) {
         sfEvent event;
         while (sfRenderWindow_pollEvent(CRT::GetWindow(),&event)) {
             if (event.type==sfEvtClosed) sfRenderWindow_close(CRT::GetWindow());
-            if (event.type==sfEvtLostFocus) for (int p=0;p<2;++p) for (int b=0;b<=GamePad::MD_MODE;++b) GamePad::SetButton(p,b,false);
             s.powerOff=s.powerOff || GamePad::Update(event);
         }
         if (!sfRenderWindow_isOpen(CRT::GetWindow()) || s.powerOff) break;
+        GamePad::PollControllers(sfRenderWindow_hasFocus(CRT::GetWindow()) != sfFalse);
         if (bios) M68KWriteMemoryBYTE(0xff00fe,country);
         RunFrame();
         AudioOutput::Submit(Audio::DrainSamples());
