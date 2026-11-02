@@ -99,10 +99,13 @@ unsigned CRT::Height() { return get().height; }
 unsigned CRT::Width() { return get().width; }
 #ifndef DRIVONIX_HEADLESS
 void CRT::Attach(sfRenderWindow* window) {
-    Shutdown();auto& s=get();s.window=window;s.externalWindow=true;
-    s.texture=sfTexture_create(320,480);s.sprite=sfSprite_create();
-    if(!s.texture||!s.sprite) throw std::runtime_error("Cannot create the game framebuffer");
-    sfSprite_setTexture(s.sprite,s.texture,sfTrue);
+    // Allocate before releasing the old display: a failed graphics allocation
+    // must leave the paused game's framebuffer available for recovery.
+    auto* texture=sfTexture_create(320,480);auto* sprite=sfSprite_create();
+    if(!texture||!sprite){if(texture)sfTexture_destroy(texture);if(sprite)sfSprite_destroy(sprite);
+        throw std::runtime_error("Cannot create the game framebuffer");}
+    sfSprite_setTexture(sprite,texture,sfTrue);
+    Shutdown();auto& s=get();s.window=window;s.externalWindow=true;s.texture=texture;s.sprite=sprite;
 }
 void CRT::Draw(sfFloatRect viewport,bool integerFit,unsigned fixedScale) {
     auto& s=get();if(!s.window||!s.texture||!s.sprite) return;

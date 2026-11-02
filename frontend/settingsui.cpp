@@ -418,7 +418,7 @@ bool Application::DispatchSettings(const std::string& action) {
         else if(action=="match.refresh"){if(metadata_)metadata_->RefreshCatalog();notice_="CATALOG REFRESH REQUESTED";}
         else if(action=="match.previous"){if(listOffset_>=6)listOffset_-=6;ui_.ClearFocus();}
         else if(action=="match.next"){if(listOffset_+6<matches_.size())listOffset_+=6;ui_.ClearFocus();}
-        else if(action=="match.auto"){Library::Metadata automatic;automatic.artworkPath=selected_.metadata.artworkPath;if(index_)index_->ApplyMetadata(selected_.id,automatic,false);selected_.metadata=automatic;selected_.manualOverride=false;matched_.erase(selected_.id);coverViewport_.clear();listOffset_=(variant_/9)*9;SetPage(Page::Details);RefreshQuery(false);}
+        else if(action=="match.auto"){Library::Metadata automatic;automatic.artworkPath=selected_.metadata.artworkPath;if(index_)index_->ResetManualMetadata(selected_.id);selected_.metadata=automatic;selected_.manualOverride=false;matched_.erase(selected_.id);coverViewport_.clear();listOffset_=(variant_/9)*9;SetPage(Page::Details);RefreshQuery(false);}
         else if(Starts(action,"match.choose.")){const auto index=SuffixIndex(action,"match.choose.");if(index<matches_.size()){ApplyMetadata(matches_[index],true);selected_.manualOverride=true;listOffset_=(variant_/9)*9;SetPage(Page::Details);RefreshQuery(false);}}
         return true;
     }

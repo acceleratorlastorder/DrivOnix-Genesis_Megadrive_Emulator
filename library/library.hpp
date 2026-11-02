@@ -79,6 +79,7 @@ public:
     void SetPreferredCopy(Id variantId,Id copyId);
     void SetPreferredVariant(Id gameId,Id variantId);
     void ApplyMetadata(Id gameId,Metadata metadata,bool manual=false);
+    void ResetManualMetadata(Id gameId);
     void ApplyCatalog(std::vector<CatalogRecord> records);
     void RecordSession(Id copyId,uint64_t activeSeconds,const std::string& outcome="completed");
     void RecordLoaded(Id copyId,const RomInfo::Prepared&);

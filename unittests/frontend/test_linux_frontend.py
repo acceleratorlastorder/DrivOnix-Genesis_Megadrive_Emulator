@@ -69,8 +69,10 @@ class Acceptance:
     def __init__(self, emulator, report, root):
         self.emulator, self.report, self.root = emulator, report, root
         self.screen = gui.Screen()
+        self.desktop = tuple(map(int, gui.xdo("getdisplaygeometry").split()))
         self.process = self.log = self.window = None
-        self.events = []
+        report_file = self.report / "report.json"
+        self.events = json.loads(report_file.read_text()) if report_file.exists() else []
         self.environment = dict(gui.isolated_settings_environment(root),
                                 XDG_DATA_HOME=str(root / "data"), XDG_CACHE_HOME=str(root / "cache"),
                                 LIBGL_ALWAYS_SOFTWARE="1", ALSOFT_DRIVERS="null",
@@ -272,6 +274,8 @@ class Acceptance:
         self.key("Escape")
         self.click(320, 220)
         self.click(250, 109)  # Broken ROM outside the configured library root.
+        self.wait(lambda: "Cannot open ROM" in (self.report / "frontend-reopen.log").read_text(),
+                  "failed switch reports the malformed ROM")
         self.shot("14-failed-switch")
         self.key("Escape")
         self.click(320, 121)
@@ -285,7 +289,7 @@ class Acceptance:
         self.wait(lambda: not self.values().getboolean("display", "integer_fit"), "fixed scale setting")
         self.click(500, 318)
         self.click(320, 121)
-        self.wait(lambda: self.pixel() == BLUE and self.edge_pixel() == (0, 0, 0), "fixed 1x rendering with black border")
+        self.wait(lambda: self.pixel() == BLUE and self.edge_pixel() == (6, 8, 15), "fixed 1x rendering with dark border")
         self.shot("15-fixed-scale")
         self.key("Escape")
         self.click(320, 187)
@@ -296,7 +300,7 @@ class Acceptance:
         self.wait(lambda: self.edge_pixel() == BLUE, "integer fit restored")
         self.key("F11")
         self.window = gui.window(self.process, "^DrivOnix ")
-        self.wait(lambda: geometry(self.window) == (1280, 720) and self.pixel() == BLUE, "fullscreen retains cartridge")
+        self.wait(lambda: geometry(self.window) == self.desktop and self.pixel() == BLUE, "fullscreen retains cartridge")
         self.shot("16-fullscreen")
         self.key("F11")
         self.window = gui.window(self.process, "^DrivOnix ")
@@ -327,6 +331,7 @@ class Acceptance:
         self.click(310, 155)
         self.wait(lambda: "INPUT TEST" in self.title() and "[Paused]" not in self.title(), "optional BIOS starts", 30)
         assert self.pixel() != BLUE, "BIOS preference was ignored"
+        time.sleep(0.75)  # Let the original BIOS draw before capturing its boot screen.
         self.shot("19-original-bios")
         self.click(320, 330)
         self.wait(lambda: self.pixel() == BLUE, "optional BIOS skip enters saved cartridge", 30)
@@ -354,6 +359,8 @@ class Acceptance:
             self.click(166, 60)
             self.click(110, 225)
             self.click(140, 318)
+            self.wait(lambda: "temporary" in (self.report / "readonly-settings.log").read_text().lower(),
+                      "read-only settings save reports an error")
             self.shot("readonly-settings-error")
             assert self.config.read_bytes() == original, "Failed UI save replaced read-only settings"
             self.config.parent.chmod(0o700)
@@ -397,6 +404,7 @@ def main():
     args = parser.parse_args()
     report = args.report_dir.resolve()
     report.mkdir(parents=True, exist_ok=True)
+    (report / "report.json").unlink(missing_ok=True)
     with tempfile.TemporaryDirectory(prefix="drivonix frontend acceptance ") as temporary:
         acceptance = Acceptance(str(args.emulator.resolve()), report, Path(temporary))
         try:

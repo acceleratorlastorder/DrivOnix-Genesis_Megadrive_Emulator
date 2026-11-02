@@ -87,12 +87,13 @@ private:
     void BeginLoad(const std::string& path,const std::string& member,Id copy=0);
     void ResumeGame();void ReturnLibrary();void RequestQuit();void RecordEnd(const std::string& outcome);
     std::function<void()> CaptureEnd(const std::string& outcome);
-    void Error(const std::string& title,const std::string& message,Page back);
+    void Error(const std::string& title,const std::string& message,Page back,std::function<void()> retry={});
     void SelectGame(Id id);
     void SetTitle();
     void ApplyMetadata(const Metadata::Game& match,bool manual);
     void UpdateMetadata();
     bool DraftDirty() const;
+    bool EditingSettings() const;
     void FinishCapture(const Input::CaptureResult& result);
 
     Options options_;

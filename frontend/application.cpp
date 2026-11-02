@@ -39,10 +39,11 @@ void Application::RecreateWindow(bool initial){
     const auto mode=settings_.fullscreen?desktop:sfVideoMode{width,height,32};
     auto* replacement=sfRenderWindow_create(mode,"DrivOnix",settings_.fullscreen?sfFullscreen:(sfTitlebar|sfResize|sfClose),nullptr);
     if(!replacement)throw std::runtime_error("Cannot create the DrivOnix window");
-    if(window_){CRT::Shutdown();sfRenderWindow_destroy(window_);}
+    try{CRT::Attach(replacement);}catch(...){sfRenderWindow_destroy(replacement);throw;}
+    if(window_)sfRenderWindow_destroy(window_);
     window_=replacement;
     sfRenderWindow_setVerticalSyncEnabled(window_,sfTrue);
-    CRT::Attach(window_);SetTitle();ui_.Begin(window_,{});
+    SetTitle();ui_.Begin(window_,{});
     if(!initial)router_.SuppressUntilNeutral();
 }
 void Application::SetTitle(){
@@ -60,13 +61,19 @@ void Application::RefreshQuery(bool reset){
     if(reset)query_.offset=0;query_.limit=12;if(index_)index_->QueryPage(query_);
 }
 void Application::SetPage(Page page,bool reset){page_=page;if(reset)ui_.ClearFocus();router_.SuppressUntilNeutral();}
-void Application::Error(const std::string& title,const std::string& message,Page back){
+void Application::Error(const std::string& title,const std::string& message,Page back,std::function<void()> retry){
+    retry_=std::move(retry);
     std::cerr<<"drivonix: "<<message<<'\n';
     if(options_.noDialogs){exitStatus_=1;quit_=true;return;}
     session_.Pause();errorTitle_=title;errorMessage_=message;errorBack_=back;SetPage(Page::Error);SetTitle();
 }
 void Application::EditText(const std::string& title,const std::string& value,std::function<void(std::string)> finish,Page back){
     textTitle_=title;textValue_=value;textFinish_=std::move(finish);textBack_=back;textUpper_=false;textSymbols_=false;SetPage(Page::Text);
+}
+bool Application::EditingSettings() const {
+    return page_==Page::Settings||page_==Page::Bindings||page_==Page::Capture||page_==Page::Conflict||page_==Page::Unsaved||page_==Page::About||
+        (page_==Page::Browser&&browserBack_==Page::Settings)||
+        (page_==Page::Text&&(textBack_==Page::Settings||textBack_==Page::Bindings||(textBack_==Page::Browser&&browserBack_==Page::Settings)));
 }
 bool Application::DraftDirty() const {Settings::Document a,b;a.Apply(settings_);b.Apply(draft_);return a.Serialize()!=b.Serialize();}
 
@@ -109,11 +116,16 @@ int Application::Run(){
             }
             if(sample.requestClose)RequestQuit();
         }
+        if(!frame_.focused&&session_.Active()&&!session_.Paused()){
+            session_.Pause();neutralResume_=false;SetPage(Page::Paused);SetTitle();
+        }
         const bool playing=session_.Active()&&!session_.Paused()&&page_==Page::Library;
         auto routed=router_.Update(frame_,settings_,playing,ms);
         if(routed.ui.fullscreen&&page_!=Page::Capture&&page_!=Page::Conflict){
+            const bool preserve=EditingSettings();auto pending=draft_;
             if(document_){draft_=settings_;draft_.fullscreen=!draft_.fullscreen;SaveSettings();}
             else{settings_.fullscreen=!settings_.fullscreen;RecreateWindow();}
+            if(preserve){pending.fullscreen=settings_.fullscreen;draft_=std::move(pending);}
         }
         if(page_==Page::Capture){FinishCapture(capture_.Update(frame_,ms));routed.ui={};}
         if(neutralResume_&&Input::Neutral(frame_,settings_.controllerDeadzone)){neutralResume_=false;session_.Resume();nextFrame_=now;SetTitle();}
@@ -230,10 +242,7 @@ void Application::ReturnLibrary(){
     catch(const std::exception& error){pendingStop_="library";errorMessage_=error.what();confirmDiscard_=false;SetPage(Page::SaveFailure);}
 }
 void Application::RequestQuit(){
-    const bool editing=page_==Page::Settings||page_==Page::Bindings||page_==Page::Capture||page_==Page::Conflict||page_==Page::Unsaved||
-        (page_==Page::Text&&(textBack_==Page::Settings||textBack_==Page::Bindings))||
-        (page_==Page::Browser&&browserBack_==Page::Settings);
-    if(editing&&DraftDirty()){pendingStop_="settingsquit";SetPage(Page::Unsaved);return;}
+    if(EditingSettings()&&DraftDirty()){pendingStop_="settingsquit";SetPage(Page::Unsaved);return;}
     if(loadCancel_)loadCancel_->store(true);if(archiveCancel_)archiveCancel_->store(true);
     try{if(session_.Active()){session_.Stop();RecordEnd("completed");}quit_=true;}
     catch(const std::exception& error){if(options_.noDialogs){std::cerr<<error.what()<<'\n';exitStatus_=1;quit_=true;return;}
@@ -241,19 +250,28 @@ void Application::RequestQuit(){
 }
 void Application::SaveSettings(){
     const auto back=page_;const auto previous=settings_;const bool resume=session_.Active()&&!session_.Paused();
-    session_.Pause();
+    session_.Pause();bool displayChanged=false;
     try{
         Settings::Validate(draft_);
         if(!document_)throw std::runtime_error("Repair and reload the settings file before saving. Your original file has not been replaced.");
-        auto next=*document_;next.Apply(draft_);next.Save();*document_=std::move(next);settings_=draft_;
+        auto next=*document_;next.Apply(draft_);
+        settings_=draft_;
         if(previous.fullscreen!=settings_.fullscreen||previous.windowWidth!=settings_.windowWidth||previous.windowHeight!=settings_.windowHeight){
-            try{RecreateWindow();}catch(...){settings_.fullscreen=false;settings_.windowWidth=1280;settings_.windowHeight=720;RecreateWindow();throw;}
+            RecreateWindow();displayChanged=true;
         }
+        // A failed replacement leaves the old file. A failure after replacement
+        // retains the new baseline so an explicit retry can recognize its write.
+        try{next.Save();}catch(...){*document_=std::move(next);throw;}
+        *document_=std::move(next);
         auto host=settings_;if(options_.noAudio)host.audioEnabled=false;AudioOutput::ApplySettings(host);
         if(!session_.Active()||session_.Paused())AudioOutput::Suspend();
         ConfigureLibrary(!session_.Active());Metadata::Options online;online.enabled=settings_.onlineMetadata&&!session_.Active();metadata_->Configure(online);metadataEnabled_=online.enabled;
         notice_="SETTINGS SAVED";SetPage(back);if(resume)ResumeGame();
-    }catch(const std::exception& error){settings_=previous;retry_=[this]{SaveSettings();};Error("Settings were not applied",error.what(),back);}
+    }catch(const std::exception& error){
+        settings_=previous;std::string message=error.what();
+        if(displayChanged){try{RecreateWindow();}catch(const std::exception& rollback){message+="\nCould not restore the previous window: ";message+=rollback.what();}}
+        Error("Settings were not applied",message,back,[this]{SaveSettings();});
+    }
 }
 void Application::SelectGame(Id id){
     if(!snapshot_)return;
@@ -301,10 +319,15 @@ void Application::UpdateMetadata(){
         }else if(event.type==Metadata::Event::Type::Error)notice_="ONLINE: "+event.message;
         else matched_.clear();
     }
-    while(covers_.size()>60){auto victim=covers_.begin();if(victim->first==std::to_string(selected_.id)&&covers_.size()>1)++victim;covers_.erase(victim);}
+    std::set<std::string> visible;for(const auto& cover:covers)visible.insert(cover.key);
+    while(covers_.size()>60){
+        const auto victim=std::find_if(covers_.begin(),covers_.end(),[&](const std::pair<const std::string,Texture>& item){return !visible.count(item.first);});
+        if(victim==covers_.end())break;covers_.erase(victim);
+    }
 }
 void Application::Update(){
-    if(index_){snapshot_=index_->GetSnapshot();if(snapshot_->revision!=seenRevision_){seenRevision_=snapshot_->revision;coverViewport_.clear();}
+    if(index_){snapshot_=index_->GetSnapshot();if(snapshot_->revision!=seenRevision_){seenRevision_=snapshot_->revision;coverViewport_.clear();
+            for(const auto& game:snapshot_->games)if(game.id==selected_.id){selected_.metadata=game.metadata;selected_.manualOverride=game.manualOverride;selected_.favorite=game.favorite;selected_.playSeconds=game.playSeconds;break;}}
         if(!snapshot_->error.empty()&&snapshot_->error!=libraryError_){libraryError_=snapshot_->error;notice_="LIBRARY: "+snapshot_->error;}}
     if(directoryJob_.valid()&&directoryJob_.wait_for(std::chrono::seconds(0))==std::future_status::ready){directory_=directoryJob_.get();
         directory_.files.erase(std::remove_if(directory_.files.begin(),directory_.files.end(),[this](const Storage::File& file){
@@ -317,7 +340,7 @@ void Application::Update(){
             if(count==1){const auto item=std::find_if(members_.begin(),members_.end(),[](const Archive::MemberInfo& member){return member.available;});BeginLoad(archivePath_,item->name,pendingCopy_);}
             else if(!count)Error("No playable games", "This archive contains no supported cartridge. Check the unavailable entries or choose another file.",session_.Active()?Page::Paused:Page::Library);
         }catch(const Process::Cancelled&){if(page_==Page::Archive)SetPage(session_.Active()?Page::Paused:Page::Library);}
-        catch(const std::exception& error){retry_=[this]{OpenGame(archivePath_);};Error("Archive could not be opened",error.what(),session_.Active()?Page::Paused:Page::Library);}
+        catch(const std::exception& error){if(!archiveCancel_->load()){Error("Archive could not be opened",error.what(),session_.Active()?Page::Paused:Page::Library,[this]{OpenGame(archivePath_);});}}
     }
     if(loading_.valid()&&loading_.wait_for(std::chrono::seconds(0))==std::future_status::ready){
         try{auto next=loading_.get();if(loadCancel_->load())throw Process::Cancelled();
@@ -328,7 +351,7 @@ void Application::Update(){
             auto host=settings_;if(options_.noAudio)host.audioEnabled=false;AudioOutput::ApplySettings(host);
             SetPage(Page::Library);neutralResume_=false;nextFrame_=Clock::now();SetTitle();
         }catch(const Process::Cancelled&){if(page_==Page::Loading)SetPage(session_.Active()?Page::Paused:Page::Library);}
-        catch(const std::exception& error){retry_=[this]{BeginLoad(pendingPath_,pendingMember_,pendingCopy_);};Error("Game could not be started",error.what(),session_.Active()?Page::Paused:Page::Library);}
+        catch(const std::exception& error){if(!loadCancel_->load()){Error("Game could not be started",error.what(),session_.Active()?Page::Paused:Page::Library,[this]{BeginLoad(pendingPath_,pendingMember_,pendingCopy_);});}}
     }
     UpdateMetadata();
 }
@@ -352,7 +375,11 @@ void Application::DrawLibrary(){
     ui_.Button("filters","FILTERS",{332,47,82,23});ui_.Button("addroot","ADD FOLDER",{422,47,110,23});
     const bool scanning=snapshot_&&snapshot_->progress.scanning;
     ui_.Button(scanning?"cancelscan":"scan",scanning?"CANCEL":"SCAN",{540,47,88,23});
-    if(!snapshot_||!snapshot_->ready){ui_.Text("READING YOUR LIBRARY...",190,166,18,Ui::Green);}
+    if(snapshot_&&!snapshot_->ready&&!snapshot_->error.empty()){
+        ui_.Rect({75,100,490,187},Ui::Panel,Ui::Red);ui_.Text("LIBRARY NEEDS ATTENTION",105,116,19,Ui::Red);
+        ui_.Wrap(snapshot_->error,{95,149,450,75},13,Ui::White);
+        ui_.Button("retryindex","RETRY LIBRARY",{190,240,260,29},true,Ui::Tone::Accent);
+    }else if(!snapshot_||!snapshot_->ready){ui_.Text("READING YOUR LIBRARY...",190,166,18,Ui::Green);}
     else if(snapshot_->games.empty()){
         ui_.Rect({80,98,480,182},Ui::Panel,Ui::Border);
         ui_.Text(settings_.libraryRoots.empty()?"YOUR GAMES LIVE HERE":"NO MATCHING GAMES",148,122,20,Ui::Green,390);
@@ -524,6 +551,7 @@ void Application::Dispatch(const std::string& action){
     if(action=="filters"){SetPage(Page::Filters);return;}
     if(action=="next"){if(snapshot_&&query_.offset+12<snapshot_->totalGames){query_.offset+=12;RefreshQuery(false);ui_.ClearFocus();}return;}
     if(action=="previous"){if(query_.offset>=12){query_.offset-=12;RefreshQuery(false);ui_.ClearFocus();}return;}
+    if(action=="retryindex"){index_.reset(new Library::Index(Storage::Join(dataDir_,"library.sqlite")));catalogSeen_=nullptr;ConfigureLibrary(true);RefreshQuery();return;}
     if(action=="scan"){index_->Scan();notice_.clear();return;}
     if(action=="cancelscan"){index_->CancelScan();notice_="SCAN CANCELLED - EXISTING ENTRIES RETAINED";return;}
     if(action=="addroot"||action=="addrootempty"){draft_=settings_;OpenBrowser(BrowserMode::Root);return;}
@@ -596,7 +624,7 @@ void Application::Dispatch(const std::string& action){
     if(action=="skipbios"){session_.SkipBios();router_.SuppressUntilNeutral();return;}
     if(action=="restart"){
         try{auto recordPrevious=CaptureEnd("restarted");session_.Restart();recordPrevious();recorded_=false;SetPage(Page::Library);neutralResume_=true;session_.Pause();nextFrame_=Clock::now();SetTitle();}
-        catch(const std::exception& error){retry_=[this]{Dispatch("restart");};Error("Cartridge could not restart",error.what(),Page::Paused);}return;
+        catch(const std::exception& error){Error("Cartridge could not restart",error.what(),Page::Paused,[this]{Dispatch("restart");});}return;
     }
     if(action=="library"){ReturnLibrary();return;}
     if(action=="retrysave"){if(pendingStop_=="quit")RequestQuit();else ReturnLibrary();return;}

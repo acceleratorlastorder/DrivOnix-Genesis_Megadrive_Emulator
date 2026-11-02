@@ -125,7 +125,7 @@ unsigned Route(const Frame& frame,const std::string& target) {
 class Script {
 public:
     using Operation=std::function<bool(Frame&)>;
-    Script(std::string name,std::string report):name_(std::move(name)),report_(std::move(report)){}
+    Script(std::string name,std::string report,unsigned initialSettle=2):name_(std::move(name)),report_(std::move(report)),settle_(initialSettle){}
     void Add(const std::string& label,Operation operation) {steps_.push_back({label,std::move(operation)});}
     void Wait(const std::string& label,std::function<bool(const Frame&)> condition) {
         Add(label,[condition](Frame& frame){return condition(frame);});
@@ -145,6 +145,9 @@ public:
     }
     void Press(unsigned buttons,const std::string& label) {
         Add(label,[buttons](Frame& frame){Buttons(frame,buttons);return true;});
+    }
+    void Key(const std::string& key,const std::string& label) {
+        Add(label,[key](Frame& frame){frame.input.keys.insert(key);return true;});
     }
     void Neutral(unsigned count=3) {
         Add("release controls",[count](Frame&)mutable{return --count==0;});
@@ -250,7 +253,18 @@ void Pause(Script& script) {
 }
 
 void GameScenario(const std::string& report,const std::string& config,const std::string& rom,const std::string& brokenDirectory) {
-    Script script("controller-session",report);Running(script);
+    Script script("controller-session",report,0);
+    std::uint64_t unfocusedFrames=0;
+    script.Add("lose focus on completed cartridge load",[&](Frame& frame){
+        if(!frame.active||frame.page!="library"||frame.paused)return false;
+        Need(frame.frames==0,"Focus acceptance missed the first completed-load frame");
+        unfocusedFrames=frame.frames;frame.input.focused=false;return true;
+    });
+    script.Page("paused","resume");
+    script.Add("unfocused completed load never runs CPU",[&](Frame& frame){
+        Need(frame.active&&frame.paused&&frame.frames==unfocusedFrames&&Genesis::MasterCycles()==0,"A completed load executed while unfocused");return true;
+    });
+    Freeze(script,"paused");script.Press(Controller::B,"Xbox B resumes focus-paused cartridge");script.Neutral(4);Running(script);
     script.Add("cartridge initialized real I/O and SRAM",[](Frame& frame){
         Need(frame.active&&!frame.paused,"Cartridge was not running");
         Need((Genesis::M68KReadMemoryBYTE(0xff0000)&0x10)!=0,"Neutral pad did not reach the cartridge");
@@ -331,6 +345,13 @@ void EmptyLibraryScenario(const std::string& report,const std::string& config,co
     script.Wait("edited search restores indexed game",[](const Frame& frame){return frame.page=="library"&&!First(frame,"game:").empty();});
     script.Select("library","settings");script.Page("settings","s.tab.1");script.Select("settings","s.tab.1");
     script.Select("settings","s.volume.down");script.Select("settings","s.volume.down");
+    script.Key("f11","fullscreen hotkey while volume draft is dirty");script.Neutral(3);
+    script.Key("f11","return to windowed mode while retaining draft");script.Neutral(3);
+    script.Add("fullscreen hotkey preserves unsaved settings",[config](Frame& frame){
+        Need(frame.page=="settings","Fullscreen hotkey left the settings screen");
+        const auto saved=Settings::Document::Load(config).Get();
+        Need(saved.volume==100&&!saved.fullscreen,"Fullscreen hotkey unexpectedly committed the volume draft or failed to return windowed");return true;
+    });
     script.Press(Controller::B,"unsaved settings prompt via Xbox B");script.Page("unsaved","s.unsaved.stay");
     script.Shot("controller-unsaved-settings.png");script.Select("unsaved","s.unsaved.stay");script.Page("settings","s.save");
     script.Select("settings","s.save");
@@ -393,7 +414,7 @@ int main(int argc,char** argv) {
             Environment linuxData("XDG_DATA_HOME",data),windowsData("LOCALAPPDATA",data);
             EmptyLibraryScenario(report,libraryConfig,romDirectory);ReopenScenario(report,libraryConfig);
         }
-        const std::string passed="Application Xbox acceptance passed: real controller routing, on-screen search, Unicode folder scan, favorites, binding conflict swap, INI persistence, CPU I/O, pause freeze, neutral resume, failed-switch preservation, SRAM, and reopen.\n";
+        const std::string passed="Application Xbox acceptance passed: real controller routing, on-screen search, Unicode folder scan, favorites, binding conflict swap, INI persistence, CPU I/O, focus-loss pause, fullscreen draft retention, pause freeze, neutral resume, failed-switch preservation, SRAM, and reopen.\n";
         Storage::AtomicWrite(Storage::Join(report,"result.txt"),std::vector<unsigned char>(passed.begin(),passed.end()));std::cout<<passed;return 0;
     }catch(const std::exception& error){std::cerr<<"Application acceptance: "<<error.what()<<'\n';return 1;}
 }

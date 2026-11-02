@@ -116,6 +116,8 @@ jobs:
           Copy-Item build/deps/bin/*.dll build/emulator/Release/
       - name: Test console, sound, saves, frontend and pinned dependencies
         run: ctest --test-dir build/emulator -C Release --output-on-failure
+      - name: Test Unicode installed paths and controller frontend from an unrelated directory
+        run: python unittests/frontend/test_windows_install.py --application build/emulator/Release/application_tests.exe --probe build/emulator/Release/archive_tests.exe --data-dir build/emulator/Release --report-dir build/windows-install-report
       - name: Exercise real Windows metadata HTTPS transport
         run: ./build/emulator/Release/metadata_tests.exe --live
       - name: Assemble and test the installed layout
@@ -142,3 +144,4 @@ jobs:
           name: drivonix-windows-evidence
           path: |
             build/emulator/application-report/
+            build/windows-install-report/

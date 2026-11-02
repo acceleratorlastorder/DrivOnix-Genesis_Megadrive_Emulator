@@ -41,8 +41,12 @@ struct Ui::Canvas::Impl {
     }
     const sfFont* Font(sfUint32 point)const {
         if(!main)throw std::runtime_error("Interface font is not loaded");
-        if(sfFont_hasGlyph(main,point))return main;
-        if(upper&&sfFont_hasGlyph(upper,point))return upper;
+        // These pinned Unifont files divide coverage at the BMP boundary:
+        // unifont.otf supplies U+0000..FFFF; unifont_upper.otf supplies the
+        // supplementary planes. Avoid sfFont_hasGlyph, which is absent from
+        // distro CSFML 2.6.0 even though that supported release has the other
+        // required font APIs. Missing glyphs retain the font's replacement.
+        if(point>0xffff&&upper)return upper;
         return main;
     }
     float Advance(sfUint32 point,unsigned size)const {
