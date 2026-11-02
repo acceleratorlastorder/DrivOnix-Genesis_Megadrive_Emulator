@@ -433,13 +433,13 @@ bool Application::DispatchSettings(const std::string& action) {
         else if(action=="error.reload"){
             const auto old=settings_;
             try{LoadSettings();try{RecreateWindow();}catch(...){settings_=old;RecreateWindow();throw;}
-                ConfigureLibrary(true);if(metadata_){Metadata::Options online;online.enabled=settings_.onlineMetadata;metadata_->Configure(online);}
+                ConfigureLibrary(!session_.Active());if(metadata_){Metadata::Options online;online.enabled=settings_.onlineMetadata&&!session_.Active();metadata_->Configure(online);metadataEnabled_=online.enabled;}
                 auto host=settings_;if(options_.noAudio)host.audioEnabled=false;AudioOutput::ApplySettings(host);AudioOutput::Suspend();
                 notice_="SETTINGS RELOADED";SetPage(session_.Active()?Page::Paused:Page::Library);
             }catch(const std::exception& error){settingsError_=error.what();configDefaultsOnce_=false;Error("Settings need attention",settingsError_,Page::Library);}
         }else if(action=="error.defaults"){
-            document_.reset();settings_=Settings::Values();draft_=settings_;configDefaultsOnce_=true;RecreateWindow();ConfigureLibrary(true);
-            if(metadata_){Metadata::Options online;online.enabled=settings_.onlineMetadata;metadata_->Configure(online);}
+            document_.reset();settings_=Settings::Values();draft_=settings_;configDefaultsOnce_=true;RecreateWindow();ConfigureLibrary(!session_.Active());
+            if(metadata_){Metadata::Options online;online.enabled=settings_.onlineMetadata&&!session_.Active();metadata_->Configure(online);metadataEnabled_=online.enabled;}
             notice_="TEMPORARY DEFAULTS - ORIGINAL SETTINGS FILE UNCHANGED";SetPage(Page::Library);
         }
         return true;
