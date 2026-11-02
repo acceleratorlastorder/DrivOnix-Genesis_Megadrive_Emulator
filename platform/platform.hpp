@@ -13,6 +13,8 @@ std::string SelectRom();
 std::string SelectArchiveMember(const std::string& archive, const std::vector<std::string>& members);
 std::string DataFile(const std::string& relativePath);
 void CheckDisplay();
+void OpenExternal(const std::string& pathOrUrl);
+void ShowError(const std::string& title,const std::string& message);
 // Explicit and portable paths are mutually exclusive. Returned paths are
 // absolute UTF-8; the installed default template is never a writable target.
 std::string SettingsPath(const std::string& custom, bool portable);

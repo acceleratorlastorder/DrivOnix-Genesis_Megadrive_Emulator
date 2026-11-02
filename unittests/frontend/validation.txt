@@ -151,3 +151,26 @@ and pin waveforms remain bounded; see the VDP/Z80 module notes. Unknown save
 boards, J-Cart, Sega CD, 32X, SVP and other special hardware are not covered.
 No commercial-game compatibility matrix or universal minimum-host performance
 guarantee follows from these tests or a single headless benchmark.
+
+Retro frontend acceptance
+-------------------------
+
+frontend_session tests pure ROM/save/audio staging, failed load/save preservation,
+pause invariants, full restart, PAL and optional BIOS handoff. frontend_input
+checks both player profiles, reserved recovery controls, input capture/conflicts,
+repeat timing, focus and neutral suppression. library and metadata tests cover
+persistent user state, incremental/cancellable indexing, global catalog matching,
+Unicode paths, mixed eligible/unsupported archive siblings and offline caches.
+
+application_tests opens the production frontend and routes injected native Xbox
+states through its actual input/router/widget loop. The separate Linux
+unittests/frontend/test_linux_frontend.py sends X11 keyboard/mouse events and
+asserts framebuffer colors, library/archive selection, settings preservation,
+pause isolation and save/reopen behavior with original generated cartridges.
+The old test_linux_gui.py remains a shared generated-ROM/X11 helper; its former
+standalone native-picker expectations describe the superseded frontend.
+
+Native CI runs the new interface on Linux and Windows, explicit real HTTPS
+transport checks, package integrity and Linux ASan/UBSan. A passed simulated
+Xbox flow is not a physical-device test. Original BIOS pixel artwork, CPU core,
+SRAM/EEPROM save names and source/member identities remain preserved.

@@ -185,8 +185,9 @@ std::string Process::FindProgram(const std::string& name)
     return {};
 }
 
-Process::Result Process::Run(const std::vector<std::string>& arguments,std::size_t outputLimit,unsigned timeoutMilliseconds)
+Process::Result Process::Run(const std::vector<std::string>& arguments,std::size_t outputLimit,unsigned timeoutMilliseconds,const CancelToken& cancel)
 {
+    CheckCancelled(cancel);
     if(arguments.empty()||arguments.front().empty()||!timeoutMilliseconds)
         throw std::invalid_argument("Invalid archive process invocation");
     for(const auto& argument:arguments)
@@ -222,6 +223,7 @@ Process::Result Process::Run(const std::vector<std::string>& arguments,std::size
     bool outputOpen=true,errorOpen=true;
     while(outputOpen||errorOpen||WaitForSingleObject(processHandle.value,0)!=WAIT_OBJECT_0)
     {
+        CheckCancelled(cancel);
         if(Clock::now()>=deadline) throw std::runtime_error("Archive process timed out");
         if(outputOpen)outputOpen=Drain(outputRead.value,result.output,result.error,true,outputLimit);
         if(errorOpen)errorOpen=Drain(errorRead.value,result.output,result.error,false,outputLimit);
@@ -250,6 +252,7 @@ Process::Result Process::Run(const std::vector<std::string>& arguments,std::size
     {
         while(outputOpen||errorOpen||!finished)
         {
+            CheckCancelled(cancel);
             if(Clock::now()>=deadline) throw std::runtime_error("Archive process timed out");
             struct pollfd descriptors[2]={{outputOpen ? output.read:-1,POLLIN,0},{errorOpen ? error.read:-1,POLLIN,0}};
             if(poll(descriptors,2,10)<0&&errno!=EINTR) throw std::runtime_error("Cannot wait for archive process output");

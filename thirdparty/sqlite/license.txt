@@ -1,0 +1,2 @@
+SQLite is in the public domain. See https://sqlite.org/copyright.html
+All SQLite code is dedicated to the public domain by its authors.

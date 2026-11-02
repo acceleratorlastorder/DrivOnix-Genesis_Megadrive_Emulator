@@ -95,7 +95,9 @@ def check_layout(root, platform, version, commit):
                                ("releasing.txt", "releasing.txt"),
                                ("settings.txt", "settings.txt"),
                                ("third-party/notice.txt", "thirdparty/notice.txt"),
-                               ("third-party/sound-z80.lock.json", "thirdparty/sound-z80.lock.json")):
+                               ("third-party/sound-z80.lock.json", "thirdparty/sound-z80.lock.json"),
+                               ("third-party/sqlite.lock.json", "thirdparty/sqlite.lock.json"),
+                               ("assets/branding.bmp", "bios/res/biosbackground.bmp")):
         same_file(data / relative, REPOSITORY / original)
     metadata_path = data / "build-info.json"
     require(metadata_path.is_file(), "Missing packaged build-info.json")
@@ -104,13 +106,24 @@ def check_layout(root, platform, version, commit):
                 "build_os": "ubuntu-24.04" if platform == "linux" else "windows-2022"}
     for key, value in expected.items():
         require(metadata.get(key) == value, f"Packaged metadata {key} differs: {metadata.get(key)!r} != {value!r}")
-    lock = json.loads((REPOSITORY / "thirdparty/sound-z80.lock.json").read_text())
-    for entry in lock["files"]:
-        relative = Path(entry["path"]).relative_to("thirdparty")
-        installed = data / "third-party" / relative
-        require(installed.is_file(), f"Missing packaged dependency source/license: {relative}")
+    for lock_name in ("sound-z80.lock.json", "sqlite.lock.json"):
+        lock = json.loads((REPOSITORY / "thirdparty" / lock_name).read_text())
+        for entry in lock["files"]:
+            relative = Path(entry["path"]).relative_to("thirdparty")
+            installed = data / "third-party" / relative
+            require(installed.is_file(), f"Missing packaged dependency source/license: {relative}")
+            require(hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"],
+                    f"Packaged dependency source/license changed: {relative}")
+    for original in (REPOSITORY / "assets").rglob("*"):
+        if original.is_file() and "__pycache__" not in original.parts and original.suffix != ".pyc":
+            same_file(data / "assets" / original.relative_to(REPOSITORY / "assets"), original)
+    font_manifest = json.loads((REPOSITORY / "assets/fonts/manifest.json").read_text())
+    for entry in font_manifest["files"]:
+        installed = data / "assets/fonts" / entry["path"]
+        require(installed.is_file() and installed.stat().st_size == entry["size"],
+                "Missing or truncated packaged font/license: " + entry["path"])
         require(hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"],
-                f"Packaged dependency source/license changed: {relative}")
+                "Packaged font/license changed: " + entry["path"])
     if platform == "windows":
         dlls = {path.name.lower() for path in (root / "bin").glob("*.dll")}
         required = {f"{prefix}-{component}-2.dll" for prefix in ("sfml", "csfml")

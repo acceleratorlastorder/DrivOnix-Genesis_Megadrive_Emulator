@@ -211,19 +211,26 @@ unsigned EEPROM::Capacity(Profile profile)
     }
     throw std::invalid_argument("Unknown EEPROM profile");
 }
-void EEPROM::Init(Profile profile,const std::vector<byte>& persisted)
+EEPROM::Prepared EEPROM::Prepare(Profile profile,const std::vector<byte>& persisted)
 {
     const unsigned size=Capacity(profile);
     if(!persisted.empty()&&persisted.size()!=size) throw std::runtime_error("Incorrect EEPROM save size");
-    Device next;
+    Prepared next;
     next.profile=profile;
     next.pageSize=size==128||profile==Profile::AcclaimX24C02 ? 4:
         size==256 ? 8:size==8192 ? 64:16;
     if(size==8192) next.addressBytes=2;
     next.bytes=persisted.empty()?std::vector<byte>(size,0xff):persisted;
     // Build the complete replacement before altering the active serial device.
+    return next;
+}
+void EEPROM::Commit(Prepared prepared) noexcept {
+    Device next;
+    next.profile=prepared.profile;next.bytes=std::move(prepared.bytes);
+    next.pageSize=prepared.pageSize;next.addressBytes=prepared.addressBytes;
     device=std::move(next);
 }
+void EEPROM::Init(Profile profile,const std::vector<byte>& persisted) { Commit(Prepare(profile,persisted)); }
 void EEPROM::WriteLines(bool scl,bool sda)
 {
     if(device.bytes.empty()) return;

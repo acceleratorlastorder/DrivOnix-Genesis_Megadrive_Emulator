@@ -52,3 +52,11 @@ void AudioOutput::Shutdown() {
     std::lock_guard<std::mutex> lock(s.mutex);
     s.queue.clear();
 }
+void AudioOutput::Suspend() {
+    auto& s=Get();
+    // Stop outside the callback mutex: stopping waits for its worker to finish.
+    if(s.stream) sfSoundStream_stop(s.stream);
+    std::lock_guard<std::mutex> lock(s.mutex);s.queue.clear();
+}
+void AudioOutput::Resume() { auto& s=Get();if(s.stream)sfSoundStream_play(s.stream); }
+std::size_t AudioOutput::QueuedSamples() {auto& s=Get();std::lock_guard<std::mutex> lock(s.mutex);return s.queue.size();}

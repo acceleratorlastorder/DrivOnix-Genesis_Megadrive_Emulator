@@ -1,6 +1,7 @@
 #include "crt.hpp"
 #include "../ym7101/ym7101.hpp"
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 CRT::CRT() : width(320), height(224), pixelSize(1)
 #ifndef DRIVONIX_HEADLESS
@@ -14,6 +15,7 @@ void CRT::Init(const Settings::Values& settings) {
     Shutdown();
     auto& s = get();
     s.pixelSize = settings.scale;
+    s.externalWindow=false;
     s.fullscreen = settings.fullscreen;
     const unsigned displayHeight=s.height>240 ? s.height/2:s.height;
     const sfVideoMode mode = s.fullscreen ? sfVideoMode_getDesktopMode() : sfVideoMode{320*s.pixelSize, displayHeight*s.pixelSize, 32};
@@ -37,8 +39,9 @@ void CRT::Shutdown() {
     auto& s = get();
     if (s.sprite) sfSprite_destroy(s.sprite);
     if (s.texture) sfTexture_destroy(s.texture);
-    if (s.window) sfRenderWindow_destroy(s.window);
+    if (s.window && !s.externalWindow) sfRenderWindow_destroy(s.window);
     s.sprite = nullptr; s.texture = nullptr; s.window = nullptr;
+    s.externalWindow=false;
 #endif
 }
 void CRT::SetResolution(unsigned width, unsigned height) {
@@ -56,7 +59,7 @@ void CRT::SetResolution(unsigned width, unsigned height) {
     s.width = width; s.height = height;
     if(changed) ResetScreen();
 #ifndef DRIVONIX_HEADLESS
-    if (s.sprite) {
+    if (s.sprite && !s.externalWindow) {
         sfTexture_setSmooth(s.texture,height>240?sfTrue:sfFalse);
         sfSprite_setTextureRect(s.sprite, sfIntRect{0, 0, 320, int(height)});
         sfVector2f position{0,0};
@@ -93,6 +96,31 @@ void CRT::ResetScreen() {
 }
 const byte* CRT::Pixels() { return get().pixels.data(); }
 unsigned CRT::Height() { return get().height; }
+unsigned CRT::Width() { return get().width; }
+#ifndef DRIVONIX_HEADLESS
+void CRT::Attach(sfRenderWindow* window) {
+    // Allocate before releasing the old display: a failed graphics allocation
+    // must leave the paused game's framebuffer available for recovery.
+    auto* texture=sfTexture_create(320,480);auto* sprite=sfSprite_create();
+    if(!texture||!sprite){if(texture)sfTexture_destroy(texture);if(sprite)sfSprite_destroy(sprite);
+        throw std::runtime_error("Cannot create the game framebuffer");}
+    sfSprite_setTexture(sprite,texture,sfTrue);
+    Shutdown();auto& s=get();s.window=window;s.externalWindow=true;s.texture=texture;s.sprite=sprite;
+}
+void CRT::Draw(sfFloatRect viewport,bool integerFit,unsigned fixedScale) {
+    auto& s=get();if(!s.window||!s.texture||!s.sprite) return;
+    const unsigned height=s.height>240?s.height/2:s.height;
+    const float available=std::max(1.f,std::floor(std::min(viewport.width/320.f,viewport.height/float(height))));
+    const float scale=integerFit?available:std::min(available,float(std::max(1u,fixedScale)));
+    sfTexture_updateFromPixels(s.texture,s.pixels.data(),320,s.height,0,0);
+    sfTexture_setSmooth(s.texture,s.height>240?sfTrue:sfFalse);
+    sfSprite_setTextureRect(s.sprite,{0,0,320,int(s.height)});
+    sfSprite_setScale(s.sprite,{scale,scale*(s.height>240?0.5f:1.f)});
+    sfSprite_setPosition(s.sprite,{viewport.left+(viewport.width-320*scale)/2,
+        viewport.top+(viewport.height-height*scale)/2});
+    sfRenderWindow_drawSprite(s.window,s.sprite,nullptr);
+}
+#endif
 void CRT::Write(int x, int y, byte red, byte green, byte blue) {
     auto& s = get();
     if (x < 0 || x >= int(s.width) || y < 0 || y >= int(s.height)) return;

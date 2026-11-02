@@ -188,12 +188,17 @@ State& Get()
 }
 }
 
-void Audio::Init(std::uint32_t masterClockHz, std::uint32_t outputSampleRate)
+struct Audio::PreparedState { std::unique_ptr<State> value; };
+std::shared_ptr<Audio::PreparedState> Audio::Prepare(std::uint32_t masterClockHz, std::uint32_t outputSampleRate)
 {
     if (masterClockHz < 1000000 || outputSampleRate < 8000 || outputSampleRate > 192000)
         throw std::invalid_argument("Invalid audio clock or output sample rate");
-    state.reset(new State(masterClockHz, outputSampleRate));
+    auto prepared=std::make_shared<PreparedState>();
+    prepared->value.reset(new State(masterClockHz, outputSampleRate));
+    return prepared;
 }
+void Audio::Commit(std::shared_ptr<PreparedState> prepared) noexcept { if(prepared) state.swap(prepared->value); }
+void Audio::Init(std::uint32_t clock, std::uint32_t rate) { Commit(Prepare(clock,rate)); }
 void Audio::Advance(std::uint64_t masterCycles) { Get().Advance(masterCycles); }
 std::uint8_t Audio::ReadFM(unsigned port)
 {

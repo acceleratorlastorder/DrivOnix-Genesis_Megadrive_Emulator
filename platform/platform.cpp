@@ -2,6 +2,7 @@
 #include "settings.hpp"
 
 #include <cerrno>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +19,7 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #else
 #include <gtk/gtk.h>
 #include <fcntl.h>
@@ -524,6 +526,9 @@ bool Platform::ImportLegacySettings(Settings::Values& values,std::string& source
         if(!ReadLegacy(path,bytes)) continue;
         const auto screen=LegacyScreen(bytes,path);
         auto imported=values;imported.scale=screen==2 ? 2:1;imported.fullscreen=screen==3;
+        imported.integerFit=screen==3;
+        imported.windowWidth=std::max(640u,320*imported.scale);
+        imported.windowHeight=std::max(360u,224*imported.scale);
         Settings::Validate(imported);
         values=imported;sourcePath=path;return true;
     }
@@ -536,5 +541,32 @@ void Platform::CheckDisplay()
     const char* display = std::getenv("DISPLAY");
     if (!display || !*display)
         throw std::runtime_error("DrivOnix needs an X11 display (or XWayland) to show the emulator window.");
+#endif
+}
+
+void Platform::OpenExternal(const std::string& pathOrUrl)
+{
+#ifdef _WIN32
+    const auto target=Wide(pathOrUrl);
+    if(reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr,L"open",target.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)
+        throw std::runtime_error("Cannot open: "+pathOrUrl);
+#else
+    if(!gtk_init_check(nullptr,nullptr))throw std::runtime_error("A desktop is required to open this location");
+    GError* error=nullptr;gchar* localUri=nullptr;
+    const bool url=pathOrUrl.compare(0,8,"https://")==0;
+    const char* uri=url?pathOrUrl.c_str():(localUri=g_filename_to_uri(pathOrUrl.c_str(),nullptr,&error));
+    const bool okay=uri&&gtk_show_uri_on_window(nullptr,uri,GDK_CURRENT_TIME,&error);
+    g_free(localUri);
+    if(!okay){const std::string message=error?error->message:"Cannot open location";if(error)g_error_free(error);throw std::runtime_error(message);}
+#endif
+}
+void Platform::ShowError(const std::string& title,const std::string& message)
+{
+#ifdef _WIN32
+    MessageBoxW(nullptr,Wide(message).c_str(),Wide(title).c_str(),MB_OK|MB_ICONERROR);
+#else
+    if(!gtk_init_check(nullptr,nullptr))return;
+    auto* dialog=gtk_message_dialog_new(nullptr,GTK_DIALOG_MODAL,GTK_MESSAGE_ERROR,GTK_BUTTONS_CLOSE,"%s",message.c_str());
+    gtk_window_set_title(GTK_WINDOW(dialog),title.c_str());gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);
 #endif
 }

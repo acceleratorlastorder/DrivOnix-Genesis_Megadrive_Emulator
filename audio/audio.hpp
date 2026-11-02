@@ -3,10 +3,14 @@
 
 #include <cstdint>
 #include <vector>
+#include <memory>
 
 // Advance before a timestamped register access. All time is in console master clocks.
 namespace Audio
 {
+struct PreparedState;
+std::shared_ptr<PreparedState> Prepare(std::uint32_t masterClockHz, std::uint32_t outputSampleRate = 48000);
+void Commit(std::shared_ptr<PreparedState> prepared) noexcept;
 void Init(std::uint32_t masterClockHz, std::uint32_t outputSampleRate = 48000);
 void Advance(std::uint64_t masterCycles);
 std::uint8_t ReadFM(unsigned port);

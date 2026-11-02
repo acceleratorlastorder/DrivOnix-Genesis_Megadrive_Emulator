@@ -23,6 +23,9 @@ public:
 #endif
     static void SetButton(int gamepad, int button, bool pressed);
     static void SetControllerState(int gamepad, word buttons);
+    // Final frontend-routed mask. Clears legacy source masks so UI input cannot
+    // leak into an old keyboard/controller hold when a session is resumed.
+    static void SetInputState(int gamepad, word buttons);
     static void SetFocus(bool focused);
     static void Advance(unsigned masterCycles);
     static void SetSixButton(int gamepad, bool enabled);

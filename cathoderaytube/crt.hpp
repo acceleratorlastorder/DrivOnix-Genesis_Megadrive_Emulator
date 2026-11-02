@@ -18,6 +18,12 @@ public:
     static void SetResolution(unsigned width, unsigned height);
     static const byte* Pixels();
     static unsigned Height();
+    static unsigned Width();
+#ifndef DRIVONIX_HEADLESS
+    // A frontend-owned window is never resized, presented or destroyed by CRT.
+    static void Attach(sfRenderWindow* window);
+    static void Draw(sfFloatRect viewport,bool integerFit=true,unsigned fixedScale=1);
+#endif
     static void Write(int x, int y, byte red, byte green, byte blue);
     static void ApplyIntensity(int x, int y, int intensity);
     static sfRenderWindow* GetWindow();
@@ -30,6 +36,7 @@ private:
     sfTexture* texture;
     sfSprite* sprite;
     bool fullscreen;
+    bool externalWindow=false;
 #endif
 };
 #endif

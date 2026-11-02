@@ -69,33 +69,33 @@ std::vector<byte> ReadSave(const std::string& path,unsigned size)
     return persisted;
 }
 }
-void Cartridge::Load(const std::vector<byte>& rom, const std::string& path) {
-    Save();
-    auto nextImage=rom;
-    std::vector<byte> nextRam,serialBytes;
-    const auto nextProfile=EEPROM::Detect(nextImage);
-    std::string nextPath=path+(nextProfile==EEPROM::Profile::None ? ".srm":".eep");
-    dword nextStart=0,nextEnd=0;
-    bool nextSingleLane=false,nextEnabled=false;
-    if(nextProfile!=EEPROM::Profile::None) {
-        serialBytes=ReadSave(nextPath,EEPROM::Capacity(nextProfile));
-    } else if(nextImage.size()>=0x200&&nextImage[0x1b0]=='R'&&nextImage[0x1b1]=='A') {
-        nextStart=BE32(nextImage,0x1b4)&0xffffff;nextEnd=BE32(nextImage,0x1b8)&0xffffff;
-        if(nextEnd<nextStart||nextEnd>=0x400000) throw std::runtime_error("Invalid cartridge save-RAM range");
-        nextSingleLane=((nextStart^nextEnd)&1)==0;
-        const dword size=(nextEnd-nextStart)/(nextSingleLane ? 2:1)+1;
+Cartridge::Prepared Cartridge::Prepare(const std::vector<byte>& rom,const std::string& path) {
+    Prepared next;next.image=rom;
+    const auto profile=EEPROM::Detect(rom);
+    next.savePath=path+(profile==EEPROM::Profile::None ? ".srm":".eep");
+    std::vector<byte> serial;
+    if(profile!=EEPROM::Profile::None) serial=ReadSave(next.savePath,EEPROM::Capacity(profile));
+    else if(rom.size()>=0x200&&rom[0x1b0]=='R'&&rom[0x1b1]=='A') {
+        next.ramStart=BE32(rom,0x1b4)&0xffffff;next.ramEnd=BE32(rom,0x1b8)&0xffffff;
+        if(next.ramEnd<next.ramStart||next.ramEnd>=0x400000) throw std::runtime_error("Invalid cartridge save-RAM range");
+        next.singleLane=((next.ramStart^next.ramEnd)&1)==0;
+        const dword size=(next.ramEnd-next.ramStart)/(next.singleLane ? 2:1)+1;
         if(size>0x20000) throw std::runtime_error("Unsupported cartridge save-RAM size");
-        nextRam=ReadSave(nextPath,size);
-        if(nextRam.empty()) nextRam.assign(size,0xff);
-        nextEnabled=nextImage.size()<=0x200000;
+        next.ram=ReadSave(next.savePath,size);
+        if(next.ram.empty()) next.ram.assign(size,0xff);
+        next.enabled=rom.size()<=0x200000;
     }
-    // Missing saves are new devices. Every other read/validation failure leaves
-    // the previous cartridge, mapper, RAM and in-flight serial device intact.
-    EEPROM::Init(nextProfile,serialBytes);
-    image=std::move(nextImage);ram=std::move(nextRam);savePath=std::move(nextPath);
-    serialProfile=nextProfile;ramStart=nextStart;ramEnd=nextEnd;
-    singleLane=nextSingleLane;enabled=nextEnabled;writeProtected=false;dirty=false;
+    next.eeprom=EEPROM::Prepare(profile,serial);return next;
+}
+void Cartridge::Commit(Prepared next) noexcept {
+    serialProfile=next.eeprom.profile;EEPROM::Commit(std::move(next.eeprom));
+    image.swap(next.image);ram.swap(next.ram);savePath.swap(next.savePath);
+    ramStart=next.ramStart;ramEnd=next.ramEnd;singleLane=next.singleLane;
+    enabled=next.enabled;writeProtected=false;dirty=false;
     for(unsigned i=0;i<8;++i) banks[i]=i;
+}
+void Cartridge::Load(const std::vector<byte>& rom,const std::string& path) {
+    Save();auto next=Prepare(rom,path);Commit(std::move(next));
 }
 byte Cartridge::Read(dword address) {
     address&=0xffffff;
