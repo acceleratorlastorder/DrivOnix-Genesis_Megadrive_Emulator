@@ -30,6 +30,13 @@ The Sega-compatible PSG and console master-clock/mixing integration in audio/
 are original DrivOnix code. Other vendor files above retain their own notices.
 Binary distributions must include this notice and the accompanying licenses.
 
+sqlite/
+  SQLite3.54.1 official amalgamation, public-domain dedication. The exact
+  download URL, official archive SHA3-256, source identity and individual
+  SHA-256 hashes are recorded in sqlite.lock.json. The unmodified SQLite
+  source/header and dedication accompany distributions. SQLite stores the
+  local library index and user library state; no database server is needed.
+
 Windows packages also include the native SFML/CSFML libraries and their external
 dependency notices. windows-notices/manifest.json records the exact source
 versions, upstream notice URLs and SHA-256 hashes used by the Windows build

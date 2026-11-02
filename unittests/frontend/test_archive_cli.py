@@ -28,7 +28,7 @@ def main():
         digest = hashlib.sha256(archive.read_bytes()).digest()
 
         def run(arguments, status, message=""):
-            result = subprocess.run([emulator, *arguments], cwd=root, env=environment,
+            result = subprocess.run([emulator, "--no-dialogs", *arguments], cwd=root, env=environment,
                                     capture_output=True, encoding="utf-8", timeout=15)
             assert result.returncode == status, (arguments, result.stdout, result.stderr)
             assert message in result.stdout + result.stderr, (arguments, result.stdout, result.stderr)

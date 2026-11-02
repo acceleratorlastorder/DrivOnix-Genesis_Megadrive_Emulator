@@ -71,6 +71,18 @@ State ReadDevice(unsigned device) {
     result.buttons = state.Gamepad.wButtons;
     result.leftX = state.Gamepad.sThumbLX;
     result.leftY = state.Gamepad.sThumbLY;
+    result.rightX = state.Gamepad.sThumbRX;
+    result.rightY = state.Gamepad.sThumbRY;
+    result.leftTrigger = state.Gamepad.bLeftTrigger;
+    result.rightTrigger = state.Gamepad.bRightTrigger;
+    const unsigned native[]={A,B,X,Y,LeftShoulder,RightShoulder,Back,Start,0,LeftThumb,RightThumb};
+    for(unsigned i=0;i<11;++i)if(result.buttons&native[i])result.rawButtons|=std::uint32_t(1)<<i;
+    result.axes={{result.leftX,result.leftY,std::int16_t(unsigned(result.leftTrigger)*32767/255),
+        std::int16_t(unsigned(result.rightTrigger)*32767/255),result.rightX,result.rightY,
+        std::int16_t((result.buttons&DpadRight?32767:0)-(result.buttons&DpadLeft?32767:0)),
+        std::int16_t((result.buttons&DpadUp?32767:0)-(result.buttons&DpadDown?32767:0))}};
+    result.backend = Backend::XInput;
+    result.name = "XInput controller " + std::to_string(device+1);
     return result;
 }
 #else
@@ -88,7 +100,15 @@ State ReadDevice(unsigned device) {
     state.leftY = axis(sfJoystickY);
     state.povX = axis(sfJoystickPovX);
     state.povY = axis(sfJoystickPovY);
-    return FromJoystick(state);
+    state.rightX = axis(sfJoystickU);
+    state.rightY = axis(sfJoystickV);
+    state.leftTrigger = sfJoystick_hasAxis(device,sfJoystickZ)?axis(sfJoystickZ):-100.f;
+    state.rightTrigger = sfJoystick_hasAxis(device,sfJoystickR)?axis(sfJoystickR):-100.f;
+    auto result=FromJoystick(state);
+    const auto identification=sfJoystick_getIdentification(device);
+    result.name=identification.name?identification.name:"Joystick";
+    result.vendor=identification.vendorId;result.product=identification.productId;
+    return result;
 }
 #endif
 #endif
@@ -113,12 +133,28 @@ State FromJoystick(const JoystickState& source) {
     const NativeButton buttons[] = {A, B, X, Y, LeftShoulder, RightShoulder, Back, Start};
     for (unsigned button = 0; button < 8; ++button)
         if (source.buttons[button]) state.buttons |= buttons[button];
+    if(source.buttons[9])state.buttons|=LeftThumb;
+    if(source.buttons[10])state.buttons|=RightThumb;
+    for(unsigned button=0;button<source.buttons.size();++button)
+        if(source.buttons[button])state.rawButtons|=std::uint32_t(1)<<button;
     if (std::isfinite(source.povX) && source.povX < -50.f) state.buttons |= DpadLeft;
     if (std::isfinite(source.povX) && source.povX > 50.f) state.buttons |= DpadRight;
     if (std::isfinite(source.povY) && source.povY < -50.f) state.buttons |= DpadUp;
     if (std::isfinite(source.povY) && source.povY > 50.f) state.buttons |= DpadDown;
     state.leftX = Axis(source.leftX, false);
     state.leftY = Axis(source.leftY, true);
+    state.rightX = Axis(source.rightX,false);
+    state.rightY = Axis(source.rightY,true);
+    const auto trigger=[](float value){
+        if(!std::isfinite(value))return std::uint8_t(0);
+        return std::uint8_t(std::lround((std::max(-100.f,std::min(100.f,value))+100.f)*(255.f/200.f)));
+    };
+    state.leftTrigger=trigger(source.leftTrigger);
+    state.rightTrigger=trigger(source.rightTrigger);
+    state.axes={{state.leftX,state.leftY,std::int16_t(unsigned(state.leftTrigger)*32767/255),
+        std::int16_t(unsigned(state.rightTrigger)*32767/255),state.rightX,state.rightY,
+        Axis(source.povX,false),Axis(source.povY,true)}};
+    state.backend=Backend::Joystick;
     return state;
 }
 
@@ -161,18 +197,20 @@ Pads MapDevices(const Devices& devices, const Options& options, bool focused) {
 
 Pads Poll(bool focused) {
     const auto options = GetOptions();
-    Devices devices{};
-#ifndef DRIVONIX_HEADLESS
-    if (focused && options.enabled) {
-#ifndef _WIN32
-        sfJoystick_update();
-#endif
-        const int indices[] = {options.player1, options.player2};
-        for (unsigned pad = 0; pad < 2; ++pad)
-            if (indices[pad] >= 0 && (pad == 0 || indices[pad] != indices[0]))
-                devices[unsigned(indices[pad])] = ReadDevice(unsigned(indices[pad]));
-    }
-#endif
+    const auto devices=focused&&options.enabled?ReadDevices():Devices{};
     return MapDevices(devices, options, focused);
+}
+Devices ReadDevices() {
+    Devices result{};
+#ifndef DRIVONIX_HEADLESS
+#ifndef _WIN32
+    sfJoystick_update();
+#endif
+    for(unsigned device=0;device<result.size();++device)result[device]=ReadDevice(device);
+#endif
+    return result;
+}
+const char* BackendName(Backend backend) {
+    return backend==Backend::XInput?"XInput":backend==Backend::Joystick?"Joystick":"Disconnected";
 }
 }

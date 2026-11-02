@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "../audio/audio.hpp"
 #include "romloader/romloader.hpp"
 #include "gamepad/gamepad.hpp"
 #include "../m68k/m68k.hpp"
@@ -13,6 +14,7 @@ class Genesis {
 public:
     Genesis();
     static void Init();
+    static void InitPrepared(std::shared_ptr<Audio::PreparedState> audio);
     static void SetRegionToPAL(bool pal);
     static void SetHardwareRegion(byte region);
     static byte GetHardwareRegion();

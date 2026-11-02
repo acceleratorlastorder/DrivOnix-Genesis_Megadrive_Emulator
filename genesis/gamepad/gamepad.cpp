@@ -2,6 +2,8 @@
 #include <algorithm>
 #ifndef DRIVONIX_HEADLESS
 #include "../../platform/controller.hpp"
+static_assert(sfKeyEscape==36&&sfKeyReturn==58&&sfKeyF1==85&&sfKeyF11==95&&sfKeyPause==100,
+              "Frontend symbolic keys require the CSFML 2 key-code layout");
 #endif
 
 GamePad::GamePad()
@@ -234,6 +236,11 @@ void GamePad::SetButton(int pad, int button, bool pressed) {
 void GamePad::SetControllerState(int pad, word buttons) {
     if (pad < 0 || pad > 1) return;
     get().gamepadState[pad] = get().focused ? word(buttons & 0x0fff) : 0;
+}
+void GamePad::SetInputState(int pad, word buttons) {
+    if(pad<0||pad>1)return;
+    get().buttonState[pad]=get().focused?word(buttons&0x0fff):0;
+    get().gamepadState[pad]=0;
 }
 void GamePad::SetFocus(bool focused) {
     auto& state = get();

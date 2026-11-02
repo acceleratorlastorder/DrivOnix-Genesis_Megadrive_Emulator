@@ -1,4 +1,4 @@
-# GameBoo
+# DrivOnix
 ```bash
 
 
@@ -35,7 +35,7 @@ Extract the Windows ZIP and run `bin/drivonix.exe`; its dependency DLLs and MSVC
 runtimes are included. On Ubuntu 24.04 or a compatible newer system, install a
 downloaded `.deb` with `sudo apt install ./drivonix-*.deb` and run `drivonix`.
 The Linux tarball preserves executable permissions and the `bin/` + `share/`
-layout; it requires CSFML 2 and GTK 3 runtime libraries and a compatible Ubuntu
+layout; it requires CSFML 2.6, GTK 3 and libcurl runtime libraries and a compatible Ubuntu
 24.04/glibc baseline. It is not a distribution-independent static bundle.
 
 See [releasing.txt](releasing.txt) for tag releases, prereleases and manual
@@ -54,27 +54,27 @@ cd drivonix
 
 ```sh
 sudo apt-get update
-sudo apt-get install build-essential cmake pkg-config python3 libcsfml-dev libgtk-3-dev 7zip
+sudo apt-get install build-essential cmake pkg-config python3 libcsfml-dev libgtk-3-dev libcurl4-openssl-dev 7zip
 cmake -S . -B build/linux -DCMAKE_BUILD_TYPE=Release
 cmake --build build/linux --parallel 2
 ./build/linux/drivonix
 ```
 
-Run without arguments to select a ROM in the GTK file picker, or pass its path:
+Run without arguments to open the retro game library, or pass a ROM path:
 
 ```sh
 ./build/linux/drivonix "/path/to/My Game.bin"
 ```
 
-This is a native Linux build of the full graphical emulator. CSFML **2.x** is
+This is a native Linux build of the full graphical emulator. CSFML **2.6.x** is
 required; CSFML 3 uses a different API. On Wayland desktops, XWayland must be
 available because CSFML 2 uses X11. Other distributions need a C++14 compiler,
-CMake 3.16 or newer, CSFML 2 development files, GTK 3 development files and
+CMake 3.16 or newer, CSFML 2.6 development files, GTK 3 and libcurl development files and
 pkg-config. Python 3.9 or newer is needed to run tests; pass
 `-DBUILD_TESTING=OFF` when building without Python.
 
-The build copies `bios/drivonix.bios` alongside the executable, so it can be
-launched from another working directory or via `PATH`. Keep that directory with
+The build copies the `assets/` and `bios/` directories alongside the executable, so it can be
+launched from another working directory or via `PATH`. Keep both directories with
 the executable when moving the build. Writable settings live in your user
 profile by default; use `--portable` to keep them beside the executable. An optional
 installation uses the usual `bin/` and `share/drivonix/` layout:
@@ -86,15 +86,8 @@ cmake --install build/linux --prefix "$HOME/.local"
 
 #### Windows
 
-The original 32-bit MinGW build is still available:
-
-```bat
-compile.bat
-```
-
-It uses CMake, a C++14 MinGW toolchain, matching installed CSFML 2 headers, and the bundled 32-bit CSFML import libraries/DLLs. For a native
-64-bit MSVC build, build matching dependencies and use CMake (Visual Studio
-2022 C++ tools, CMake and Python required):
+For the native 64-bit MSVC build, build matching dependencies and use CMake
+(Visual Studio 2022 C++ tools, CMake and Python required):
 
 ```powershell
 python .github/scripts/build_windows_csfml.py --prefix build/deps
@@ -112,12 +105,12 @@ archives before building them. The native CMake builds do not use the bundled
 
 Run frontend and ROM-loader checks with `ctest --test-dir build/linux
 --output-on-failure` (on Windows add `-C Release` and use `build/windows`). The
-Linux GUI smoke test generates an original test ROM and checks the picker,
-BIOS handoff, rendered red/green frames, controller input and clean exit:
+Linux GUI acceptance test generates original cartridges and checks the library,
+archive selection, BIOS, rendered frames, settings, input and battery saves:
 
 ```sh
 sudo apt-get install xvfb xdotool
-xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_gui.py --emulator build/linux/drivonix
+xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_frontend.py --emulator build/linux/drivonix
 ```
 
 The separate CPU conformance suite remains documented in
@@ -156,9 +149,32 @@ synthetic results do not establish every game's frame-time behavior.
 
 ## Usage
 
-Launch `drivonix` (Linux) or `drivonix.exe` (Windows) and select a ROM, or pass a
-ROM path as the first argument. Use `--no-audio` to disable the host sound device while retaining deterministic sound-chip execution. Cancelling the picker exits normally; invalid
-or unreadable files report an error. BIN, MD, GEN and SMD extensions are accepted
+Launch `drivonix` (Linux) or `drivonix.exe` (Windows) to open the library. Add
+one or more ROM folders, then choose a game, a variant and a source copy. ZIP and
+7z collections remain compressed. Covers appear when a public catalog checksum
+matches; the library also works offline with placeholders, cached covers and
+local PNG artwork. Favorites, recent games, search, region/year/genre filters
+and remembered variant/copy choices are saved in the library database.
+
+**Settings** edits the same INI file used for manual configuration. It includes
+display/audio controls, ROM folders, online access and full keyboard/controller
+remapping for both players. Changes stay in a draft until **Save & Apply**;
+leaving a changed draft offers Save, Discard or Stay. The in-app folder browser
+and on-screen keyboard work with a controller.
+
+**R3, Escape or F1** opens the pause menu. The game and audio stop while menus
+are open. Resume waits for neutral controls; held menu buttons cannot leak into
+the game. **F11** toggles fullscreen. The window is resizable, starts windowed
+at 1280×720 (clamped to the desktop), and fits the game at a whole-pixel scale.
+Fixed 1×–8× game scaling is also available. The original BIOS is optional, off
+by default, and skippable with Enter, Space, controller A or Start.
+
+You can still open a game directly from its path. `--no-audio` disables host
+playback for the current run while retaining deterministic sound-chip execution.
+Interactive errors show recovery options inside the frontend; `--no-dialogs`
+reports failures to stderr and exits for automation.
+
+BIN, MD, GEN and SMD extensions are accepted
 without case sensitivity. The ROM header selects USA, Japan or Europe hardware,
 in that preference order when several regions are supported. The loader accepts
 J/U/E combinations, USA/JAPAN/EUROPE names and hexadecimal masks; invalid fields
@@ -183,13 +199,13 @@ enabled=true
 volume=75
 ```
 
-`scale` accepts 1 through 8; `volume` accepts 0 through 100. Edit the file and
-restart to apply it. Use `--config /path/to/drivonix.ini` for an explicit file,
+`scale` accepts 1 through 8; `volume` accepts 0 through 100. Edit the file and restart to apply it, or use **Reload Repaired Settings**
+in Settings → About after correcting a rejected file. Use `--config /path/to/drivonix.ini` for an explicit file,
 or `--portable` for `config/drivonix.ini` beside the executable. These two options
 are mutually exclusive. `--no-audio` overrides playback only for the current run.
 The installed `share/drivonix/config/drivonix.ini` is a default template, not the
 writable user file. See [settings.txt](settings.txt) for migration, save behavior
-and the shared settings API intended for the later UI.
+and the shared settings API used by the UI.
 
 ## Joypad/Input
 
@@ -245,9 +261,22 @@ Keyboard bindings:
 <kbd>Numpad 0</kbd> - Mode<br/><br/>
 
 -Emulator<br/>
-<kbd>Esc</kbd> - Quit Emulator<br/><br/>
+<kbd>Esc</kbd>, <kbd>F1</kbd>, controller R3 - Pause/menu<br/>
+<kbd>F11</kbd> - Fullscreen<br/><br/>
 
-### Saving 
+### Library and cache locations
+
+Preferences remain in the INI file. Indexed game records, manual matches,
+favorites and history live in `library.sqlite`: Linux uses
+`$XDG_DATA_HOME/drivonix` (default `~/.local/share/drivonix`), Windows uses
+`%LOCALAPPDATA%/drivonix`. `--portable` puts data in `data/` beside the executable.
+Metadata and artwork cache lives in `cache/` inside that directory. Disabling
+online access retains cached content; clearing the cache retains manual artwork,
+favorites and history. ROMs and battery saves stay in their original locations.
+See [frontend architecture](frontend/readme.txt), [library indexing](library/readme.txt)
+and [metadata sources](metadata/readme.txt).
+
+### Saving
 Cartridge SRAM and supported I2C EEPROM boards load/save beside the ROM as
 `game.bin.srm` and `game.bin.eep`. Save files are validated against the configured
 capacity. Changes are flushed to a new file and atomically replace the old save
@@ -259,7 +288,7 @@ be writable. Save states are not implemented.
 
 ### ZIP and 7z games
 
-Open `.zip` and `.7z` files in the normal ROM picker or pass them on the command
+Open `.zip` and `.7z` files from the library or file browser or pass them on the command
 line. Install [7-Zip](https://www.7-zip.org/download.html) separately (Linux:
 `sudo apt install 7zip`, or `p7zip-full` on older distributions). DrivOnix finds
 `7zz`, `7z` or `7za` in PATH, plus the usual 7-Zip installation on Windows.
@@ -267,7 +296,7 @@ It streams the selected ROM into memory; no decompressor is bundled and no ROM
 files are extracted into your collection.
 
 Single-game archives open directly. Merged collections such as GenMerge show a
-native chooser for the exact variant. The command line also supports:
+retro chooser for the exact variant; unsupported siblings show their reason. The command line also supports:
 
 ```sh
 drivonix --list-archive "/path/to/Sonic The Hedgehog 3.7z"

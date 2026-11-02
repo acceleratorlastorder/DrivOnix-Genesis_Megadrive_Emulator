@@ -19,12 +19,15 @@ bool VDPAddress(dword a) { return (a&0xe700e0)==0xc00000; }
 Genesis::Genesis() : powerOff(false),hardwareRegion('U'),masterCycles(0),frameDeadline(0),frames(0),openBus(0xffff),observer(nullptr),ram(65536,0) { std::memset(io,0,sizeof(io)); }
 Genesis& Genesis::get() { static Genesis instance; return instance; }
 void Genesis::Init() {
+    InitPrepared(Audio::Prepare(MasterClock()));
+}
+void Genesis::InitPrepared(std::shared_ptr<Audio::PreparedState> audio) {
     auto& s=get();
     std::memset(s.io,0,sizeof(s.io));
     for (unsigned i=0xf;i<0x20;i+=6) s.io[i]=0xff;
     s.masterCycles=s.frameDeadline=s.frames=0;
     s.openBus=0xffff; s.powerOff=false;
-    Audio::Init(MasterClock());
+    Audio::Commit(std::move(audio));
     EEPROM::SetMasterClock(MasterClock());
     Z80::Init(ZRead,ZWrite,nullptr);
     GamePad::Init();

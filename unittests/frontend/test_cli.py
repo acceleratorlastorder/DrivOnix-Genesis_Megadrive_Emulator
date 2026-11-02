@@ -14,7 +14,9 @@ def isolated_settings_environment(directory):
     home.mkdir(parents=True, exist_ok=True)
     return dict(os.environ, HOME=str(home), USERPROFILE=str(home),
                 XDG_CONFIG_HOME=str(directory / "xdg"),
-                LOCALAPPDATA=str(directory / "localappdata"))
+                LOCALAPPDATA=str(directory / "localappdata"),
+                XDG_DATA_HOME=str(directory / "data"),
+                XDG_CACHE_HOME=str(directory / "cache"))
 
 
 def assert_defaults(path):
@@ -43,7 +45,7 @@ def main():
         default_config = profile_base / "drivonix/drivonix.ini"
 
         def check(arguments, status, message, env=None):
-            result = subprocess.run([emulator, *arguments], cwd=directory,
+            result = subprocess.run([emulator, "--no-dialogs", *arguments], cwd=directory,
                                     env=environment if env is None else env,
                                     capture_output=True, text=True, encoding="utf-8", timeout=10)
             output = result.stdout + result.stderr
@@ -136,7 +138,7 @@ def main():
             # through the real loader and asset lookup before rejecting no display.
             (directory / "valid ROM.BIN").write_bytes(bytes(0x400))
             check(["valid ROM.BIN"], 1, "X11 display")
-            check([], 1, "Cannot open the ROM picker")
+            check([], 1, "X11 display")
     print("Frontend arguments, isolated INI paths/creation, Unicode settings, invalid ROMs and startup errors passed")
 
 

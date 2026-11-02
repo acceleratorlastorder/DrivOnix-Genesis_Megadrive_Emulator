@@ -1,0 +1,6 @@
+{
+  "source": "bios/res/biosbackground.bmp",
+  "sha256": "ed83cec04b798534bdb41ee50a9439777eb6070d5b14a85990df7d94f272feae",
+  "size": 72758,
+  "usage": "Original DrivOnix BIOS artwork; render a sprite source rectangle to reuse the logo without altering the source pixels."
+}

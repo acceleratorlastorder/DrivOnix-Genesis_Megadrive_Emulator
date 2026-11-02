@@ -1,0 +1,31 @@
+{
+  "project": "GNU Unifont",
+  "version": "18.0.01",
+  "license": "SIL OFL-1.1",
+  "files": [
+    {
+      "path": "unifont.otf",
+      "url": "https://unifoundry.com/pub/unifont/unifont-18.0.01/font-builds/unifont-18.0.01.otf",
+      "sha256": "88d0a14d4aa9a96419720b39ba5da921a59560d76d4ec7d523acc06ed85cd3c2",
+      "size": 5320148
+    },
+    {
+      "path": "unifont_upper.otf",
+      "url": "https://unifoundry.com/pub/unifont/unifont-18.0.01/font-builds/unifont_upper-18.0.01.otf",
+      "sha256": "472201e45a050bff4c7658208b8c73e34ebce3764b287a5a46c7774038ef9391",
+      "size": 5954156
+    },
+    {
+      "path": "ofl-1.1.txt",
+      "url": "https://unifoundry.com/OFL-1.1.txt",
+      "sha256": "869692af094c57fb7258c57fe26820c759319603321d0ffeb278de3651763ded",
+      "size": 4340
+    },
+    {
+      "path": "license.txt",
+      "url": "https://unifoundry.com/LICENSE.txt",
+      "sha256": "1e74cb82bf476843e97c2596297b04219b1a7e51f7238944a8c031cb9401fa87",
+      "size": 24142
+    }
+  ]
+}

@@ -28,7 +28,7 @@ jobs:
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libcsfml-dev libgtk-3-dev xvfb xdotool libgl1-mesa-dri dpkg-dev 7zip
+          sudo apt-get install -y --no-install-recommends libcsfml-dev libgtk-3-dev libcurl4-openssl-dev xvfb xdotool libgl1-mesa-dri dpkg-dev 7zip
       - name: Configure and build the full emulator
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
@@ -53,20 +53,24 @@ jobs:
           python3 unittests/frontend/test_cli.py --emulator /usr/bin/drivonix
       - name: Require all 1604000 Z80 cases to pass
         run: python3 unittests/conformance/z80.py --fetch --worker build/emulator/z80_worker --report-dir build/z80-report
-      - name: Exercise native picker, BIOS, rendering and joypad input
+      - name: Exercise retro library, settings, rendering and controller navigation
         env:
           ALSOFT_DRIVERS: "null"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_gui.py --emulator /usr/bin/drivonix
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_regions.py --emulator /usr/bin/drivonix
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_settings.py --emulator /usr/bin/drivonix
-          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_archives.py --emulator /usr/bin/drivonix
+          xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_frontend.py --emulator /usr/bin/drivonix --report-dir build/linux-frontend-report
+          xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/application_tests --report-dir build/application-report
+          xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/ui_tests assets/fonts build/ui-report
           xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/display_settings_tests
+      - name: Exercise the real metadata HTTPS transport
+        run: ./build/emulator/metadata_tests --live
       - name: Check console hardware, saves and startup paths with sanitizers
         run: |
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
           cmake --build build/frontend-sanitized --parallel 2
           ctest --test-dir build/frontend-sanitized --output-on-failure
+          ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 1280x1024x24" ./build/frontend-sanitized/application_tests --report-dir build/application-sanitized-report
+          LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 1280x1024x24" ./build/frontend-sanitized/ui_tests assets/fonts build/ui-sanitized-report
       - name: Save verified Linux packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -82,10 +86,10 @@ jobs:
         with:
           name: drivonix-linux-evidence
           path: |
-            build/linux-gui-report/
-            build/linux-region-report/
-            build/linux-settings-report/
-            build/linux-archive-report/
+            build/linux-frontend-report/
+            build/application-report/
+            build/application-sanitized-report/
+            build/ui-report/
             build/z80-report/
           if-no-files-found: error
           retention-days: 14
@@ -112,6 +116,8 @@ jobs:
           Copy-Item build/deps/bin/*.dll build/emulator/Release/
       - name: Test console, sound, saves, frontend and pinned dependencies
         run: ctest --test-dir build/emulator -C Release --output-on-failure
+      - name: Exercise real Windows metadata HTTPS transport
+        run: ./build/emulator/Release/metadata_tests.exe --live
       - name: Assemble and test the installed layout
         run: |
           cmake --install build/emulator --prefix build/package --config Release
@@ -129,9 +135,10 @@ jobs:
           path: build/packages/*.zip
           if-no-files-found: error
           retention-days: 14
-      - name: Save Windows archive chooser evidence
+      - name: Save Windows frontend evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: drivonix-windows-evidence
-          path: build/emulator/windows-archive-report/
+          path: |
+            build/emulator/application-report/
