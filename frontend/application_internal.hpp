@@ -69,7 +69,7 @@ private:
     void RefreshQuery(bool reset=true);
     void Events();
     void Update();
-    void Draw(const Input::UiActions& actions);
+    void Draw(const Input::UiActions& actions,const std::string& capturePath={});
     void Dispatch(const std::string& action);
     bool DispatchSettings(const std::string& action);
     void Header(const std::string& title);
@@ -156,8 +156,10 @@ private:
     const Metadata::Catalog* catalogSeen_=nullptr;
     std::string coverViewport_;
     uint64_t seenRevision_=0;
-    bool fontsReady_=false,smoothFontsReady_=false,appearancePreview_=false;
-    std::string appearanceError_;
+    bool fontsReady_=false,smoothFontsReady_=false,appearancePreview_=false,windowFullscreen_=false;
+    std::string appearanceError_,failedAppearanceRequest_;
+    sfVector2i lastGlobalPointer_{0,0};
+    bool pointerKnown_=false;
     std::size_t libraryCapacity_=12;
     std::string pendingLibraryFocus_;
 };

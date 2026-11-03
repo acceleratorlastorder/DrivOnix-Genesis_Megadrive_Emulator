@@ -2,6 +2,14 @@
 #include "../platform/storage.hpp"
 #include "../library/rominfo.hpp"
 #include "../thirdparty/json/json.h"
+#include <SFML/Window/Context.h>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+#include <GL/gl.h>
 
 #include <algorithm>
 #include <cmath>
@@ -60,6 +68,77 @@ std::vector<std::pair<sfUint32,sfUint32>> Coverage(const std::vector<unsigned ch
     }
     return result;
 }
+template<class Function> Function GlFunction(const char* name) {
+    const auto function=sfContext_getFunction(name);
+    if(!function)throw std::runtime_error(std::string("Framebuffer capture requires OpenGL ")+name);
+    return reinterpret_cast<Function>(function);
+}
+struct Readback {
+    using Get=void (APIENTRY*)(GLenum,GLint*);
+    using Set=void (APIENTRY*)(GLenum,GLint);
+    using Read=void (APIENTRY*)(GLenum);
+    using Pixels=void (APIENTRY*)(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void*);
+    using Error=GLenum (APIENTRY*)();
+    using Bind=void (APIENTRY*)(GLenum,GLuint);
+    Get get=GlFunction<Get>("glGetIntegerv");
+    Set set=GlFunction<Set>("glPixelStorei");
+    Read read=GlFunction<Read>("glReadBuffer");
+    Pixels pixels=GlFunction<Pixels>("glReadPixels");
+    Error error=GlFunction<Error>("glGetError");
+    Bind bind=nullptr;
+    static constexpr GLenum packBuffer=0x88eb,packBufferBinding=0x88ed;
+    const GLenum fields[6]={GL_PACK_ALIGNMENT,GL_PACK_ROW_LENGTH,GL_PACK_SKIP_ROWS,
+        GL_PACK_SKIP_PIXELS,GL_PACK_SWAP_BYTES,GL_PACK_LSB_FIRST};
+    GLint previous[6]{},buffer=0,source=GL_BACK;
+    bool saved=false;
+    explicit Readback(sfRenderWindow* window) {
+        const auto settings=sfRenderWindow_getSettings(window);
+        const bool hasBuffers=settings.majorVersion>2||(settings.majorVersion==2&&settings.minorVersion>=1)||
+            sfContext_isExtensionAvailable("GL_ARB_pixel_buffer_object")||sfContext_isExtensionAvailable("GL_EXT_pixel_buffer_object");
+        if(hasBuffers){
+            auto function=sfContext_getFunction("glBindBuffer");
+            if(!function)function=sfContext_getFunction("glBindBufferARB");
+            if(!function)throw std::runtime_error("Cannot preserve OpenGL pixel-pack buffer during capture");
+            bind=reinterpret_cast<Bind>(function);
+        }
+        const auto prior=error();
+        if(prior!=GL_NO_ERROR)throw std::runtime_error("OpenGL error before framebuffer capture: "+std::to_string(prior));
+        get(GL_READ_BUFFER,&source);
+        for(unsigned i=0;i<6;++i)get(fields[i],&previous[i]);
+        if(bind)get(packBufferBinding,&buffer);
+        const auto status=error();
+        if(status!=GL_NO_ERROR)throw std::runtime_error("Cannot query framebuffer capture state: "+std::to_string(status));
+        saved=true;
+        if(bind)bind(packBuffer,0);
+        for(unsigned i=0;i<6;++i)set(fields[i],i==0?1:0);
+        read(GL_BACK);
+    }
+    ~Readback(){
+        if(saved){read(GLenum(source));for(unsigned i=0;i<6;++i)set(fields[i],previous[i]);
+            if(bind)bind(packBuffer,GLuint(buffer));}
+    }
+    Readback(const Readback&)=delete;Readback& operator=(const Readback&)=delete;
+};
+}
+
+void Ui::CaptureWindow(sfRenderWindow* window,const std::string& path) {
+    if(!window||path.empty()||path.find('\0')!=std::string::npos)throw std::invalid_argument("Invalid framebuffer capture destination");
+    const auto size=sfRenderWindow_getSize(window);
+    const auto count=std::uint64_t(size.x)*size.y;
+    if(!size.x||!size.y||size.x>unsigned(std::numeric_limits<GLsizei>::max())||size.y>unsigned(std::numeric_limits<GLsizei>::max())||
+       count>std::numeric_limits<std::size_t>::max()/4)throw std::runtime_error("Framebuffer capture dimensions exceed the addressable image size");
+    std::vector<sfUint8> bytes(std::size_t(count)*4);
+    if(!sfRenderWindow_setActive(window,sfTrue))throw std::runtime_error("Cannot activate the window for framebuffer capture");
+    {
+        Readback state(window);
+        state.pixels(0,0,GLsizei(size.x),GLsizei(size.y),GL_RGBA,GL_UNSIGNED_BYTE,bytes.data());
+        const auto status=state.error();
+        if(status!=GL_NO_ERROR)throw std::runtime_error("Cannot read the rendered framebuffer: "+std::to_string(status));
+    }
+    std::unique_ptr<sfImage,decltype(&sfImage_destroy)> image(sfImage_createFromPixels(size.x,size.y,bytes.data()),sfImage_destroy);
+    if(!image)throw std::runtime_error("Cannot allocate the framebuffer image");
+    sfImage_flipVertically(image.get());
+    if(!sfImage_saveToFile(image.get(),path.c_str()))throw std::runtime_error("Cannot save the framebuffer capture: "+path);
 }
 
 struct Ui::Canvas::Impl {

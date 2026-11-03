@@ -53,6 +53,7 @@ void Buttons(Frame& frame,unsigned buttons) {
 }
 std::string Describe(const Frame& frame) {
     std::ostringstream out;out<<"page="<<frame.page<<", focus="<<frame.focus
+        <<", theme="<<frame.theme<<", window="<<frame.windowSize.x<<"x"<<frame.windowSize.y
         <<", active="<<frame.active<<", paused="<<frame.paused<<", frames="<<frame.frames;
     if(!frame.error.empty())out<<", error="<<frame.error;
     return out.str();
@@ -422,6 +423,12 @@ void AppearanceScenario(const std::string& report,const std::string& config,cons
     script.Select("paused","settings");script.Select("settings","s.appearance");script.Select("appearance","appearance.theme."+alternative);script.Select("appearance","appearance.scale.125");
     script.Select("appearance","appearance.back");script.Select("settings","s.save");
     script.Add("theme and size saved atomically",[&](Frame& f){const auto saved=Settings::Document::Load(config).Get();Need(saved.theme==alternative&&saved.uiScale==125&&f.theme==alternative,"Theme/size save did not persist");return true;});
+    script.Key("f11","enter fullscreen with saved theme");script.Neutral(5);
+    std::string fullscreenWindow;
+    script.Add("remember fullscreen window identity",[&](Frame& f){Need(Settings::Document::Load(config).Get().fullscreen,"Fullscreen preference did not apply");fullscreenWindow=f.windowId;return true;});
+    script.Select("settings","s.size.preset");script.Select("settings","s.save");
+    script.Add("window-size preferences keep fullscreen window",[&](Frame& f){Need(f.windowId==fullscreenWindow&&Settings::Document::Load(config).Get().fullscreen,"Saving windowed dimensions replaced the active fullscreen window");return true;});
+    script.Key("f11","leave fullscreen with deferred window size");script.Neutral(5);
     script.Add("resize to compact native window",[](Frame& f){f.resize={640,360};return true;});script.Neutral(6);
     script.Wait("small native window applied",[](const Frame& f){return f.windowSize.x==640&&f.windowSize.y==360;});
     const char* bottom[]={"s.appearance","s.volume.down","s.bindings","s.root.add","s.open.cache","s.about.details"};

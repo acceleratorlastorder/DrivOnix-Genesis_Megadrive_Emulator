@@ -30,9 +30,12 @@ void Application::LoadSettings(){
         Platform::EnsureSettingsDirectory(options_.configPath);next.Save();
     }
     settings_=next.Get();draft_=settings_;document_.reset(new Settings::Document(std::move(next)));
-    settingsError_.clear();configDefaultsOnce_=false;appearancePreview_=false;
+    settingsError_.clear();configDefaultsOnce_=false;appearancePreview_=false;failedAppearanceRequest_.clear();
 }
 void Application::RecreateWindow(bool initial){
+    // SFML allows one fullscreen window at a time. Preferences for the next
+    // windowed size do not require replacing the active fullscreen window.
+    if(window_&&windowFullscreen_&&settings_.fullscreen){SetTitle();return;}
     const auto desktop=sfVideoMode_getDesktopMode();
     unsigned width=std::min(settings_.windowWidth,std::max(640u,desktop.width-std::min(80u,desktop.width/8)));
     unsigned height=std::min(settings_.windowHeight,std::max(360u,desktop.height-std::min(100u,desktop.height/6)));
@@ -41,7 +44,8 @@ void Application::RecreateWindow(bool initial){
     if(!replacement)throw std::runtime_error("Cannot create the DrivOnix window");
     try{CRT::Attach(replacement);}catch(...){sfRenderWindow_destroy(replacement);throw;}
     if(window_)sfRenderWindow_destroy(window_);
-    window_=replacement;
+    window_=replacement;windowFullscreen_=settings_.fullscreen;
+    lastGlobalPointer_=sfMouse_getPositionRenderWindow(nullptr);pointerKnown_=true;
     sfRenderWindow_setVerticalSyncEnabled(window_,sfTrue);
     SetTitle();ui_.Begin(window_,{});
     if(!initial)router_.SuppressUntilNeutral();
@@ -62,6 +66,7 @@ void Application::RefreshQuery(bool reset){
 }
 void Application::SetPage(Page page,bool reset){
     if(appearancePreview_&&!SettingsPage(page)){appearancePreview_=false;SyncAppearance();}
+    if(page!=Page::Library)pendingLibraryFocus_.clear();
     page_=page;if(reset)ui_.ClearFocus();router_.SuppressUntilNeutral();
 }
 void Application::Error(const std::string& title,const std::string& message,Page back,std::function<void()> retry){
@@ -89,7 +94,7 @@ void Application::ApplyAppearance(const Settings::Values& values){
     ui_.Configure(id,values.uiScale);
 }
 bool Application::PreviewAppearance(){
-    try{ApplyAppearance(draft_);appearancePreview_=true;appearanceError_.clear();return true;}
+    try{ApplyAppearance(draft_);appearancePreview_=true;appearanceError_.clear();failedAppearanceRequest_.clear();return true;}
     catch(const std::exception& error){appearanceError_=error.what();return false;}
 }
 void Application::SyncAppearance(){
@@ -97,8 +102,10 @@ void Application::SyncAppearance(){
     const auto& values=appearancePreview_?draft_:settings_;
     // Configure changes no state if the current theme and size already match.
     if(Ui::Theme(ui_.Context().theme).key==values.theme&&ui_.Context().requestedScale==values.uiScale)return;
-    try{ApplyAppearance(values);appearanceError_.clear();}
-    catch(const std::exception& error){if(appearanceError_!=error.what()){appearanceError_=error.what();notice_="APPEARANCE: "+appearanceError_;}}
+    const auto request=values.theme+":"+std::to_string(values.uiScale);
+    if(request==failedAppearanceRequest_)return;
+    try{ApplyAppearance(values);appearanceError_.clear();failedAppearanceRequest_.clear();}
+    catch(const std::exception& error){failedAppearanceRequest_=request;appearanceError_=error.what();notice_="APPEARANCE: "+appearanceError_;}
 }
 bool Application::DraftDirty() const {Settings::Document a,b;a.Apply(settings_);b.Apply(draft_);return a.Serialize()!=b.Serialize();}
 
@@ -132,6 +139,7 @@ int Application::Run(){
         if(options_.automation){
             static const char* names[]={"library","details","copies","archive","browser","paused","settings","bindings","capture","conflict","text","filters","match","about","error","loading","unsaved","savefailure","appearance"};
             AutomationFrame sample;sample.input=frame_;sample.controls=ui_.Controls();sample.page=names[unsigned(page_)];
+            std::ostringstream windowId;windowId<<sfRenderWindow_getSystemHandle(window_);sample.windowId=windowId.str();
             sample.theme=Ui::Theme(ui_.Context().theme).key;sample.uiScale=ui_.Context().requestedScale;sample.windowSize=sfRenderWindow_getSize(window_);
             sample.focus=ui_.Focus();sample.error=errorMessage_;sample.active=session_.Active();sample.paused=session_.Paused();sample.frames=session_.ActiveFrames();
             options_.automation(sample);if(sample.resize.x>=640&&sample.resize.y>=360)sfRenderWindow_setSize(window_,sample.resize);frame_=std::move(sample.input);screenshot=std::move(sample.screenshotPath);
@@ -165,14 +173,7 @@ int Application::Run(){
             nextFrame_+=std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(session_.FrameSeconds()));
             if(now>nextFrame_+std::chrono::milliseconds(100))nextFrame_=now;
         }
-        Draw(routed.ui);
-        if(!screenshot.empty()){
-            auto* texture=sfTexture_create(sfRenderWindow_getSize(window_).x,sfRenderWindow_getSize(window_).y);
-            if(!texture)throw std::runtime_error("Cannot capture frontend screenshot");
-            sfTexture_updateFromRenderWindow(texture,window_,0,0);auto* image=sfTexture_copyToImage(texture);
-            const bool saved=image&&sfImage_saveToFile(image,screenshot.c_str());if(image)sfImage_destroy(image);sfTexture_destroy(texture);
-            if(!saved)throw std::runtime_error("Cannot save frontend screenshot");
-        }
+        Draw(routed.ui,screenshot);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     if(session_.Active()&&!discardExit_){
@@ -183,15 +184,20 @@ int Application::Run(){
 
 void Application::Events(){
     mouseClicked_=mouseMoved_=false;wheel_=0;entered_.clear();
-    sfEvent event;
+    sfEvent event;bool resized=false;
     while(sfRenderWindow_pollEvent(window_,&event)){
         if(event.type==sfEvtClosed){RequestQuit();continue;}
         if(event.type==sfEvtResized){
+            resized=true;mouseMoved_=false;lastGlobalPointer_=sfMouse_getPositionRenderWindow(nullptr);pointerKnown_=true;
             if(event.size.width<640||event.size.height<360)sfRenderWindow_setSize(window_,{std::max(640u,event.size.width),std::max(360u,event.size.height)});
         }
         if(event.type==sfEvtKeyPressed||event.type==sfEvtKeyReleased){const auto name=Input::KeyName(int(event.key.code));
             if(!name.empty()&&name!="unknown"){if(event.type==sfEvtKeyPressed)frame_.keys.insert(name);else frame_.keys.erase(name);}}
-        if(event.type==sfEvtMouseMoved){pointerPixels_={event.mouseMove.x,event.mouseMove.y};mouseMoved_=true;}
+        if(event.type==sfEvtMouseMoved){
+            pointerPixels_={event.mouseMove.x,event.mouseMove.y};const auto global=sfMouse_getPositionRenderWindow(nullptr);
+            if(!resized&&(!pointerKnown_||global.x!=lastGlobalPointer_.x||global.y!=lastGlobalPointer_.y))mouseMoved_=true;
+            lastGlobalPointer_=global;pointerKnown_=true;
+        }
         if(event.type==sfEvtMouseButtonPressed&&event.mouseButton.button==sfMouseLeft){pointerPixels_={event.mouseButton.x,event.mouseButton.y};mouseClicked_=true;}
         if(event.type==sfEvtMouseWheelScrolled)wheel_+=event.mouseWheelScroll.delta>0?1:-1;
         if(event.type==sfEvtTextEntered)entered_.push_back(event.text.unicode);
@@ -357,7 +363,7 @@ void Application::UpdateMetadata(){
 }
 void Application::Update(){
     if(index_){snapshot_=index_->GetSnapshot();
-        if(!pendingLibraryFocus_.empty())for(std::size_t i=0;i<snapshot_->games.size()&&i<libraryCapacity_;++i)
+        if(page_==Page::Library&&!session_.Active()&&!pendingLibraryFocus_.empty())for(std::size_t i=0;i<snapshot_->games.size()&&i<libraryCapacity_;++i)
             if("game:"+std::to_string(snapshot_->games[i].id)==pendingLibraryFocus_){ui_.Focus(pendingLibraryFocus_);pendingLibraryFocus_.clear();break;}
         if(snapshot_->revision!=seenRevision_){seenRevision_=snapshot_->revision;coverViewport_.clear();
             for(const auto& game:snapshot_->games)if(game.id==selected_.id){selected_.metadata=game.metadata;selected_.manualOverride=game.manualOverride;selected_.favorite=game.favorite;selected_.playSeconds=game.playSeconds;break;}}
@@ -518,7 +524,8 @@ void Application::DrawPaused(){
     for(unsigned i=0;i<6;++i)ui_.Button(ids[i],labels[i],{151,107+float(i)*33,338,28},true,i==0?Ui::Tone::Accent:i==5?Ui::Tone::Danger:Ui::Tone::Normal);
     Footer("R3 / ESC / F1: MENU   A: CONFIRM   B: RESUME   Battery saves are automatic");
 }
-void Application::Draw(const Input::UiActions& actions){
+void Application::Draw(const Input::UiActions& actions,const std::string& capturePath){
+    if(page_==Page::Library&&(actions.up||actions.down||actions.left||actions.right))pendingLibraryFocus_.clear();
     SyncAppearance();
     ui_.Begin(window_,{});
     const auto capacity=Ui::LibraryLayout(ui_.Context()).capacity;
@@ -578,7 +585,9 @@ void Application::Draw(const Input::UiActions& actions){
             ui_.Button("discard","QUIT WITHOUT SAVING",{168,273,300,30},true,Ui::Tone::Danger);}
         Footer("The game remains paused and its pending battery memory is retained.");break;
     }
-    const auto action=ui_.Finish();sfRenderWindow_display(window_);
+    const auto action=ui_.Finish();
+    if(!capturePath.empty())Ui::CaptureWindow(window_,capturePath);
+    sfRenderWindow_display(window_);
     try{
         if(!action.empty())Dispatch(action);
         else if(actions.back&&!gameOnly&&page_!=Page::Capture)Back();
@@ -605,6 +614,7 @@ void Application::Back(){
     }
 }
 void Application::Dispatch(const std::string& action){
+    if(page_==Page::Library)pendingLibraryFocus_.clear();
     if(DispatchSettings(action))return;
     if(action=="back"){Back();return;}
     if(action=="quit"){RequestQuit();return;}

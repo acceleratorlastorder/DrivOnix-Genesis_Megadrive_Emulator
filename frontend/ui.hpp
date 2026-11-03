@@ -22,6 +22,9 @@ struct ControlInfo {
     std::string panel;
     sfFloatRect clip{0,0,0,0};
 };
+// Call on the window's render thread after drawing and before display(). Reads
+// the rendered backbuffer into CPU memory without a window-sized GL texture.
+void CaptureWindow(sfRenderWindow* window,const std::string& path);
 class Canvas {
 public:
     Canvas();~Canvas();

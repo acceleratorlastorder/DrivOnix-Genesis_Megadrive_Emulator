@@ -151,6 +151,7 @@ jobs:
         with:
           name: drivonix-windows-evidence
           path: |
+            build/emulator/ui-report/
             build/emulator/application-report/
             build/emulator/application-report-hd/
             build/emulator/application-report-modern/

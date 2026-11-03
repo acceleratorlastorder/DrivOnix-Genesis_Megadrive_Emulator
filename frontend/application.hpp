@@ -12,7 +12,7 @@ struct AutomationFrame {
     std::string page,focus,error,screenshotPath;
     bool active=false,paused=true,requestClose=false;
     uint64_t frames=0;
-    std::string theme;unsigned uiScale=100;
+    std::string theme,windowId;unsigned uiScale=100;
     sfVector2u windowSize{0,0},resize{0,0};
     std::vector<sfUint32> text;
 };
