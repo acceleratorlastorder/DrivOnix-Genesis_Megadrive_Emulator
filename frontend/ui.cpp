@@ -101,8 +101,12 @@ struct Readback {
             if(!function)throw std::runtime_error("Cannot preserve OpenGL pixel-pack buffer during capture");
             bind=reinterpret_cast<Bind>(function);
         }
-        const auto prior=error();
-        if(prior!=GL_NO_ERROR)throw std::runtime_error("OpenGL error before framebuffer capture: "+std::to_string(prior));
+        // Release SFML can leave capability errors on legacy drivers (for
+        // example GL_FRAMEBUFFER_SRGB on GDI OpenGL 1.1). Establish a clean
+        // baseline, then attribute only our own query/read errors to capture.
+        unsigned drained=0;
+        while(error()!=GL_NO_ERROR)
+            if(++drained==32)throw std::runtime_error("Cannot clear existing OpenGL errors before framebuffer capture");
         get(GL_READ_BUFFER,&source);
         for(unsigned i=0;i<6;++i)get(fields[i],&previous[i]);
         if(bind)get(packBufferBinding,&buffer);

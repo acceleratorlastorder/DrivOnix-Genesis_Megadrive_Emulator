@@ -49,6 +49,8 @@ void ReadbackFixture(sfRenderWindow* window,Ui::Canvas& ui,const std::string& di
     auto get=Gl<decltype(&glGetIntegerv)>("glGetIntegerv");
     auto store=Gl<decltype(&glPixelStorei)>("glPixelStorei");
     auto read=Gl<decltype(&glReadBuffer)>("glReadBuffer");
+    auto enable=Gl<decltype(&glEnable)>("glEnable");
+    auto error=Gl<decltype(&glGetError)>("glGetError");
     const GLenum fields[]={GL_PACK_ALIGNMENT,GL_PACK_ROW_LENGTH,GL_PACK_SKIP_ROWS,GL_PACK_SKIP_PIXELS,GL_PACK_SWAP_BYTES,GL_PACK_LSB_FIRST};
     GLint previous[6]{},source=0;get(GL_READ_BUFFER,&source);
     for(unsigned i=0;i<6;++i)get(fields[i],&previous[i]);
@@ -65,7 +67,13 @@ void ReadbackFixture(sfRenderWindow* window,Ui::Canvas& ui,const std::string& di
         bind=Gl<Bind>("glBindBuffer");auto gen=Gl<Gen>("glGenBuffers");auto data=Gl<Data>("glBufferData");remove=Gl<Remove>("glDeleteBuffers");
         get(0x88ed,&oldBuffer);gen(1,&buffer);bind(0x88eb,buffer);data(0x88eb,8,nullptr,0x88e1);
     }
+    unsigned drained=0;while(error()!=GL_NO_ERROR)Need(++drained<32,"Could not prepare stale GL error fixture");
+    enable(GLenum(0xffffffffu));Need(error()==GL_INVALID_ENUM,"Fixture did not produce the expected preexisting GL error");
+    // Leave the verified error pending for the helper, as a release SFML draw
+    // may do on a Windows GL1.1 context. Capture must check its own operations.
+    enable(GLenum(0xffffffffu));
     const auto path=Storage::Join(directory,"capture-rgba-state.png");Ui::CaptureWindow(window,path);
+    Need(error()==GL_NO_ERROR,"Capture left an error from its own readback operations");
     GLint restored=0;get(GL_READ_BUFFER,&restored);Need(restored==GL_FRONT,"Capture changed the caller's GL read buffer");
     for(unsigned i=0;i<6;++i){get(fields[i],&restored);Need(restored==altered[i],"Capture changed a pixel-pack setting");}
     if(bind){get(0x88ed,&restored);Need(GLuint(restored)==buffer,"Capture changed the caller's pixel-pack buffer");bind(0x88eb,GLuint(oldBuffer));remove(1,&buffer);}
