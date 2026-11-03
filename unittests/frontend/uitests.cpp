@@ -42,7 +42,8 @@ void Resize(sfRenderWindow* window,sfVector2u size) {
     throw std::runtime_error("Native resize event did not reach the renderer");
 }
 void ReadbackFixture(sfRenderWindow* window,Ui::Canvas& ui,const std::string& directory) {
-    Resize(window,{640,360});ui.Configure(Ui::ThemeId::Retronix,100);ui.Begin(window,{});
+    Resize(window,{640,360});sfRenderWindow_setPosition(window,{0,0});
+    ui.Configure(Ui::ThemeId::Retronix,100);ui.Begin(window,{});
     sfRenderWindow_clear(window,{13,27,39,255});
     ui.Rect({0,0,320,180},{210,40,70,255});ui.Rect({320,180,320,180},{40,190,110,255});
     ui.Finish();
@@ -206,10 +207,13 @@ int main(int argc,char** argv) {
         const auto focused=Control(ui,ui.Focus());
         Need(focused.top>=120&&focused.top+focused.height<=320,"Cross-panel focus remained clipped offscreen");
         Need(std::abs(Control(ui,"fixed-bottom").top-600)<0.1,"Scroll panel shifted the fixed action bar");
+        // Exact RGBA/orientation/state checks require an owned, visible default framebuffer.
+        // Run this compact oracle before exercising windows larger than the CI desktop.
+        ReadbackFixture(window,ui,argv[2]);
         const sfVector2u resolutions[]={{640,360},{1280,720},{1920,1080},{800,800},{2560,1080},{3840,2160}};
         const unsigned scales[]={200,125,150,125,100,200};
         for(unsigned i=0;i<6;++i){
-            Resize(window,resolutions[i]);
+            Resize(window,resolutions[i]);sfRenderWindow_setPosition(window,{0,0});
             ui.Configure(Ui::ThemeId::Modern,scales[i]);ui.Begin(window,{});const auto context=ui.Context();
             Need(context.width>=639.9f&&context.height>=359.9f&&context.requestedScale==scales[i],"Small-window UI scale lost the minimum canvas or requested preference");
             const auto center=ui.ToLogical({int(resolutions[i].x/2),int(resolutions[i].y/2)});
@@ -225,9 +229,30 @@ int main(int argc,char** argv) {
             present();
             if(i==5){const auto path=Storage::Join(argv[2],"modern-native-3840x2160.png");
                 const auto bytes=Storage::ReadBytes(path,64*1024*1024);auto* image=sfImage_createFromMemory(bytes.data(),bytes.size());Need(image!=nullptr,"Cannot decode native4K capture");
-                const auto captured=sfImage_getSize(image);const auto top=sfImage_getPixel(image,2,2),bottom=sfImage_getPixel(image,3837,2157),background=ui.Colors().background;
-                const bool intact=top.r==background.r&&top.g==background.g&&top.b==background.b&&top.a==255&&bottom.r==background.r&&bottom.g==background.g&&bottom.b==background.b&&bottom.a==255;
-                sfImage_destroy(image);Need(captured.x==3840&&captured.y==2160&&intact,"Native4K screenshot was scaled, cropped or returned an empty framebuffer");}
+                const auto captured=sfImage_getSize(image);Need(captured.x==3840&&captured.y==2160,"Native4K screenshot dimensions changed");
+                auto origin=sfRenderWindow_getPosition(window);const auto desktop=sfVideoMode_getDesktopMode();
+#ifdef _WIN32
+                POINT client{};Need(ClientToScreen(sfRenderWindow_getSystemHandle(window),&client)!=0,"Cannot locate the native capture client area");origin={int(client.x),int(client.y)};
+#endif
+                const auto background=ui.Colors().background;
+                auto matches=[&](sfColor pixel){return pixel.r==background.r&&pixel.g==background.g&&pixel.b==background.b&&pixel.a==255;};
+                auto owned=[&](int x,int y){return origin.x+x>=0&&origin.y+y>=0&&origin.x+x<int(desktop.width)&&origin.y+y<int(desktop.height);};
+                unsigned corners=0;
+                for(const auto point:{sfVector2i{2,2},sfVector2i{3837,2157}})if(owned(point.x,point.y)){
+                    const auto pixel=sfImage_getPixel(image,unsigned(point.x),unsigned(point.y));++corners;
+                    if(!matches(pixel))throw std::runtime_error("Native4K owned corner differs from background at "+std::to_string(point.x)+","+std::to_string(point.y)+
+                        ": RGBA "+std::to_string(pixel.r)+","+std::to_string(pixel.g)+","+std::to_string(pixel.b)+","+std::to_string(pixel.a)+
+                        "; client "+std::to_string(origin.x)+","+std::to_string(origin.y)+" desktop "+std::to_string(desktop.width)+"x"+std::to_string(desktop.height));
+                }
+                // Default-framebuffer pixels outside the physical desktop are undefined
+                // (notably Windows GDI OpenGL). Require real rendered content in its
+                // visible area, retaining both exact corner checks on a 4K desktop.
+                unsigned ink=0;const auto* pixels=sfImage_getPixelsPtr(image);
+                for(unsigned y=0;y<captured.y&&ink<100;++y)for(unsigned x=0;x<captured.x&&ink<100;++x)if(owned(int(x),int(y))){
+                    const auto* pixel=pixels+(std::size_t(y)*captured.x+x)*4;
+                    if(pixel[3]==255&&(pixel[0]!=background.r||pixel[1]!=background.g||pixel[2]!=background.b))++ink;
+                }
+                sfImage_destroy(image);Need(corners>0&&ink==100,"Native4K capture has no visible rendered content");}
         }
         Resize(window,{640,360});ui.Configure(Ui::ThemeId::Modern,100);
         auto denseForm=[&](const Input::UiActions& action){
@@ -250,7 +275,6 @@ int main(int argc,char** argv) {
         Need(ui.Focus().compare(0,5,"body:")!=0,"Vertical navigation could not leave the panel at its actual end");
         ui.Configure(Ui::ThemeId::Retronix,200);Resize(window,{800,800});draw({});
         Need(ui.Context().theme==Ui::ThemeId::Retronix&&std::abs(ui.ToLogical({400,400}).x-320)<0.1,"Returning to Retronix changed legacy coordinates");
-        ReadbackFixture(window,ui,argv[2]);
         std::cout<<"Retronix/HD/Modern rendering, staged fonts, Unicode fallback, spatial focus, clipped scrolling, scale matrix and native RGBA framebuffer capture passed\n";return 0;
     }catch(const std::exception& error){std::cerr<<"UI test: "<<error.what()<<'\n';return 1;}
 }
