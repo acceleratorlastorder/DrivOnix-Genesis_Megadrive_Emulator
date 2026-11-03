@@ -30,9 +30,12 @@ void Application::LoadSettings(){
         Platform::EnsureSettingsDirectory(options_.configPath);next.Save();
     }
     settings_=next.Get();draft_=settings_;document_.reset(new Settings::Document(std::move(next)));
-    settingsError_.clear();configDefaultsOnce_=false;
+    settingsError_.clear();configDefaultsOnce_=false;appearancePreview_=false;failedAppearanceRequest_.clear();
 }
 void Application::RecreateWindow(bool initial){
+    // SFML allows one fullscreen window at a time. Preferences for the next
+    // windowed size do not require replacing the active fullscreen window.
+    if(window_&&windowFullscreen_&&settings_.fullscreen){SetTitle();return;}
     const auto desktop=sfVideoMode_getDesktopMode();
     unsigned width=std::min(settings_.windowWidth,std::max(640u,desktop.width-std::min(80u,desktop.width/8)));
     unsigned height=std::min(settings_.windowHeight,std::max(360u,desktop.height-std::min(100u,desktop.height/6)));
@@ -41,7 +44,8 @@ void Application::RecreateWindow(bool initial){
     if(!replacement)throw std::runtime_error("Cannot create the DrivOnix window");
     try{CRT::Attach(replacement);}catch(...){sfRenderWindow_destroy(replacement);throw;}
     if(window_)sfRenderWindow_destroy(window_);
-    window_=replacement;
+    window_=replacement;windowFullscreen_=settings_.fullscreen;
+    lastGlobalPointer_=sfMouse_getPositionRenderWindow(nullptr);pointerKnown_=true;
     sfRenderWindow_setVerticalSyncEnabled(window_,sfTrue);
     SetTitle();ui_.Begin(window_,{});
     if(!initial)router_.SuppressUntilNeutral();
@@ -58,9 +62,13 @@ void Application::ConfigureLibrary(bool scan){
     if(index_)index_->Configure(std::move(roots),scan&&!session_.Active());
 }
 void Application::RefreshQuery(bool reset){
-    if(reset)query_.offset=0;query_.limit=12;if(index_)index_->QueryPage(query_);
+    if(reset){query_.offset=0;pendingLibraryFocus_.clear();}query_.limit=libraryCapacity_;if(index_)index_->QueryPage(query_);
 }
-void Application::SetPage(Page page,bool reset){page_=page;if(reset)ui_.ClearFocus();router_.SuppressUntilNeutral();}
+void Application::SetPage(Page page,bool reset){
+    if(appearancePreview_&&!SettingsPage(page)){appearancePreview_=false;SyncAppearance();}
+    if(page!=Page::Library)pendingLibraryFocus_.clear();
+    page_=page;if(reset)ui_.ClearFocus();router_.SuppressUntilNeutral();
+}
 void Application::Error(const std::string& title,const std::string& message,Page back,std::function<void()> retry){
     retry_=std::move(retry);
     std::cerr<<"drivonix: "<<message<<'\n';
@@ -70,10 +78,34 @@ void Application::Error(const std::string& title,const std::string& message,Page
 void Application::EditText(const std::string& title,const std::string& value,std::function<void(std::string)> finish,Page back){
     textTitle_=title;textValue_=value;textFinish_=std::move(finish);textBack_=back;textUpper_=false;textSymbols_=false;SetPage(Page::Text);
 }
-bool Application::EditingSettings() const {
-    return page_==Page::Settings||page_==Page::Bindings||page_==Page::Capture||page_==Page::Conflict||page_==Page::Unsaved||page_==Page::About||
-        (page_==Page::Browser&&browserBack_==Page::Settings)||
-        (page_==Page::Text&&(textBack_==Page::Settings||textBack_==Page::Bindings||(textBack_==Page::Browser&&browserBack_==Page::Settings)));
+bool Application::SettingsPage(Page page) const {
+    if(page==Page::Error)page=errorBack_;
+    return page==Page::Appearance||page==Page::Settings||page==Page::Bindings||page==Page::Capture||page==Page::Conflict||page==Page::Unsaved||page==Page::About||
+        (page==Page::Browser&&browserBack_==Page::Settings)||
+        (page==Page::Text&&(textBack_==Page::Settings||textBack_==Page::Bindings||textBack_==Page::Appearance||(textBack_==Page::Browser&&browserBack_==Page::Settings)));
+}
+bool Application::EditingSettings() const {return SettingsPage(page_);}
+void Application::ApplyAppearance(const Settings::Values& values){
+    if(!fontsReady_)return;
+    const auto id=Ui::ParseTheme(values.theme);
+    if(id!=Ui::ThemeId::Retronix&&!smoothFontsReady_){
+        ui_.LoadSmoothFonts(Platform::DataFile("assets/fonts/roboto-regular.ttf"),Platform::DataFile("assets/fonts/roboto-medium.ttf"),Platform::DataFile("assets/fonts/roboto-coverage.json"));smoothFontsReady_=true;
+    }
+    ui_.Configure(id,values.uiScale);
+}
+bool Application::PreviewAppearance(){
+    try{ApplyAppearance(draft_);appearancePreview_=true;appearanceError_.clear();failedAppearanceRequest_.clear();return true;}
+    catch(const std::exception& error){appearanceError_=error.what();return false;}
+}
+void Application::SyncAppearance(){
+    if(!fontsReady_)return;
+    const auto& values=appearancePreview_?draft_:settings_;
+    // Configure changes no state if the current theme and size already match.
+    if(Ui::Theme(ui_.Context().theme).key==values.theme&&ui_.Context().requestedScale==values.uiScale)return;
+    const auto request=values.theme+":"+std::to_string(values.uiScale);
+    if(request==failedAppearanceRequest_)return;
+    try{ApplyAppearance(values);appearanceError_.clear();failedAppearanceRequest_.clear();}
+    catch(const std::exception& error){failedAppearanceRequest_=request;appearanceError_=error.what();notice_="APPEARANCE: "+appearanceError_;}
 }
 bool Application::DraftDirty() const {Settings::Document a,b;a.Apply(settings_);b.Apply(draft_);return a.Serialize()!=b.Serialize();}
 
@@ -89,6 +121,7 @@ int Application::Run(){
     }
     Platform::CheckDisplay();RecreateWindow(true);
     ui_.LoadFonts(Platform::DataFile("assets/fonts/unifont.otf"),Platform::DataFile("assets/fonts/unifont_upper.otf"));
+    fontsReady_=true;SyncAppearance();
     try{const auto bytes=Storage::ReadBytes(Platform::DataFile("assets/branding.bmp"),4*1024*1024);auto* image=sfImage_createFromMemory(bytes.data(),bytes.size());
         if(image){sfImage_createMaskFromColor(image,sfBlack,0);branding_.reset(sfTexture_createFromImage(image,nullptr));sfImage_destroy(image);}}catch(...){}
     dataDir_=Storage::DataDirectory(options_.portable);Storage::EnsureDirectory(dataDir_);cacheDir_=Storage::Join(dataDir_,"cache");
@@ -104,10 +137,12 @@ int Application::Run(){
         frame_.devices=Controller::ReadDevices();frame_.focused=sfRenderWindow_hasFocus(window_)!=sfFalse;
         std::string screenshot;
         if(options_.automation){
-            static const char* names[]={"library","details","copies","archive","browser","paused","settings","bindings","capture","conflict","text","filters","match","about","error","loading","unsaved","savefailure"};
+            static const char* names[]={"library","details","copies","archive","browser","paused","settings","bindings","capture","conflict","text","filters","match","about","error","loading","unsaved","savefailure","appearance"};
             AutomationFrame sample;sample.input=frame_;sample.controls=ui_.Controls();sample.page=names[unsigned(page_)];
+            std::ostringstream windowId;windowId<<sfRenderWindow_getSystemHandle(window_);sample.windowId=windowId.str();
+            sample.theme=Ui::Theme(ui_.Context().theme).key;sample.uiScale=ui_.Context().requestedScale;sample.windowSize=sfRenderWindow_getSize(window_);
             sample.focus=ui_.Focus();sample.error=errorMessage_;sample.active=session_.Active();sample.paused=session_.Paused();sample.frames=session_.ActiveFrames();
-            options_.automation(sample);frame_=std::move(sample.input);screenshot=std::move(sample.screenshotPath);
+            options_.automation(sample);if(sample.resize.x>=640&&sample.resize.y>=360)sfRenderWindow_setSize(window_,sample.resize);frame_=std::move(sample.input);screenshot=std::move(sample.screenshotPath);
             entered_=std::move(sample.text);
             if(page_==Page::Text&&!entered_.empty()){
                 auto text=Ui::Canvas::Decode(textValue_);
@@ -122,10 +157,10 @@ int Application::Run(){
         const bool playing=session_.Active()&&!session_.Paused()&&page_==Page::Library;
         auto routed=router_.Update(frame_,settings_,playing,ms);
         if(routed.ui.fullscreen&&page_!=Page::Capture&&page_!=Page::Conflict){
-            const bool preserve=EditingSettings();auto pending=draft_;
+            const bool preserve=EditingSettings();const bool preview=appearancePreview_;auto pending=draft_;
             if(document_){draft_=settings_;draft_.fullscreen=!draft_.fullscreen;SaveSettings();}
             else{settings_.fullscreen=!settings_.fullscreen;RecreateWindow();}
-            if(preserve){pending.fullscreen=settings_.fullscreen;draft_=std::move(pending);}
+            if(preserve){pending.fullscreen=settings_.fullscreen;draft_=std::move(pending);appearancePreview_=preview;}
         }
         if(page_==Page::Capture){FinishCapture(capture_.Update(frame_,ms));routed.ui={};}
         if(neutralResume_&&Input::Neutral(frame_,settings_.controllerDeadzone)){neutralResume_=false;session_.Resume();nextFrame_=now;SetTitle();}
@@ -138,14 +173,7 @@ int Application::Run(){
             nextFrame_+=std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(session_.FrameSeconds()));
             if(now>nextFrame_+std::chrono::milliseconds(100))nextFrame_=now;
         }
-        Draw(routed.ui);
-        if(!screenshot.empty()){
-            auto* texture=sfTexture_create(sfRenderWindow_getSize(window_).x,sfRenderWindow_getSize(window_).y);
-            if(!texture)throw std::runtime_error("Cannot capture frontend screenshot");
-            sfTexture_updateFromRenderWindow(texture,window_,0,0);auto* image=sfTexture_copyToImage(texture);
-            const bool saved=image&&sfImage_saveToFile(image,screenshot.c_str());if(image)sfImage_destroy(image);sfTexture_destroy(texture);
-            if(!saved)throw std::runtime_error("Cannot save frontend screenshot");
-        }
+        Draw(routed.ui,screenshot);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     if(session_.Active()&&!discardExit_){
@@ -156,15 +184,20 @@ int Application::Run(){
 
 void Application::Events(){
     mouseClicked_=mouseMoved_=false;wheel_=0;entered_.clear();
-    sfEvent event;
+    sfEvent event;bool resized=false;
     while(sfRenderWindow_pollEvent(window_,&event)){
         if(event.type==sfEvtClosed){RequestQuit();continue;}
         if(event.type==sfEvtResized){
+            resized=true;mouseMoved_=false;lastGlobalPointer_=sfMouse_getPositionRenderWindow(nullptr);pointerKnown_=true;
             if(event.size.width<640||event.size.height<360)sfRenderWindow_setSize(window_,{std::max(640u,event.size.width),std::max(360u,event.size.height)});
         }
         if(event.type==sfEvtKeyPressed||event.type==sfEvtKeyReleased){const auto name=Input::KeyName(int(event.key.code));
             if(!name.empty()&&name!="unknown"){if(event.type==sfEvtKeyPressed)frame_.keys.insert(name);else frame_.keys.erase(name);}}
-        if(event.type==sfEvtMouseMoved){pointerPixels_={event.mouseMove.x,event.mouseMove.y};mouseMoved_=true;}
+        if(event.type==sfEvtMouseMoved){
+            pointerPixels_={event.mouseMove.x,event.mouseMove.y};const auto global=sfMouse_getPositionRenderWindow(nullptr);
+            if(!resized&&(!pointerKnown_||global.x!=lastGlobalPointer_.x||global.y!=lastGlobalPointer_.y))mouseMoved_=true;
+            lastGlobalPointer_=global;pointerKnown_=true;
+        }
         if(event.type==sfEvtMouseButtonPressed&&event.mouseButton.button==sfMouseLeft){pointerPixels_={event.mouseButton.x,event.mouseButton.y};mouseClicked_=true;}
         if(event.type==sfEvtMouseWheelScrolled)wheel_+=event.mouseWheelScroll.delta>0?1:-1;
         if(event.type==sfEvtTextEntered)entered_.push_back(event.text.unicode);
@@ -181,9 +214,11 @@ void Application::Events(){
     if(wheel_){
         const int delta=wheel_>0?-1:1;
         if(page_==Page::Library&&!session_.Active()){
-            if(delta<0&&query_.offset>=12){query_.offset-=12;RefreshQuery(false);}
-            else if(delta>0&&snapshot_&&query_.offset+12<snapshot_->totalGames){query_.offset+=12;RefreshQuery(false);}
-        }else if(page_==Page::Browser){if(delta<0&&browserOffset_>=10)browserOffset_-=10;else if(delta>0&&browserOffset_+10<directory_.files.size())browserOffset_+=10;}
+            const auto logical=ui_.ToLogical(pointerPixels_);
+            if(ui_.Context().theme==Ui::ThemeId::Modern&&!ui_.Context().compact&&logical.x<208)return;
+            if(delta<0&&query_.offset>=libraryCapacity_){query_.offset-=libraryCapacity_;RefreshQuery(false);}
+            else if(delta>0&&snapshot_&&query_.offset+libraryCapacity_<snapshot_->totalGames){query_.offset+=libraryCapacity_;RefreshQuery(false);}
+        }else if(page_==Page::Browser&&ui_.Context().theme==Ui::ThemeId::Retronix){if(delta<0&&browserOffset_>=Capacity(Ui::ListKind::Browser))browserOffset_-=Capacity(Ui::ListKind::Browser);else if(delta>0&&browserOffset_+Capacity(Ui::ListKind::Browser)<directory_.files.size())browserOffset_+=Capacity(Ui::ListKind::Browser);}
     }
 }
 void Application::OpenBrowser(BrowserMode mode,const std::string& requested){
@@ -255,6 +290,7 @@ void Application::SaveSettings(){
         Settings::Validate(draft_);
         if(!document_)throw std::runtime_error("Repair and reload the settings file before saving. Your original file has not been replaced.");
         auto next=*document_;next.Apply(draft_);
+        ApplyAppearance(draft_);appearancePreview_=true;
         settings_=draft_;
         if(previous.fullscreen!=settings_.fullscreen||previous.windowWidth!=settings_.windowWidth||previous.windowHeight!=settings_.windowHeight){
             RecreateWindow();displayChanged=true;
@@ -266,7 +302,7 @@ void Application::SaveSettings(){
         auto host=settings_;if(options_.noAudio)host.audioEnabled=false;AudioOutput::ApplySettings(host);
         if(!session_.Active()||session_.Paused())AudioOutput::Suspend();
         ConfigureLibrary(!session_.Active());Metadata::Options online;online.enabled=settings_.onlineMetadata&&!session_.Active();metadata_->Configure(online);metadataEnabled_=online.enabled;
-        notice_="SETTINGS SAVED";SetPage(back);if(resume)ResumeGame();
+        appearancePreview_=false;notice_="SETTINGS SAVED";SetPage(back);if(resume)ResumeGame();
     }catch(const std::exception& error){
         settings_=previous;std::string message=error.what();
         if(displayChanged){try{RecreateWindow();}catch(const std::exception& rollback){message+="\nCould not restore the previous window: ";message+=rollback.what();}}
@@ -277,7 +313,7 @@ void Application::SelectGame(Id id){
     if(!snapshot_)return;
     const auto game=std::find_if(snapshot_->games.begin(),snapshot_->games.end(),[&](const Library::Game& item){return item.id==id;});
     if(game==snapshot_->games.end())return;selected_=*game;variant_=0;listOffset_=0;
-    for(std::size_t i=0;i<selected_.variants.size();++i)if(selected_.variants[i].id==selected_.preferredVariant){variant_=i;listOffset_=(i/9)*9;break;}
+    for(std::size_t i=0;i<selected_.variants.size();++i)if(selected_.variants[i].id==selected_.preferredVariant){variant_=i;listOffset_=(i/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);break;}
     SetPage(Page::Details);ui_.Focus("variant:"+std::to_string(variant_));
 }
 void Application::ApplyMetadata(const Metadata::Game& match,bool manual){
@@ -326,7 +362,10 @@ void Application::UpdateMetadata(){
     }
 }
 void Application::Update(){
-    if(index_){snapshot_=index_->GetSnapshot();if(snapshot_->revision!=seenRevision_){seenRevision_=snapshot_->revision;coverViewport_.clear();
+    if(index_){snapshot_=index_->GetSnapshot();
+        if(page_==Page::Library&&!session_.Active()&&!pendingLibraryFocus_.empty())for(std::size_t i=0;i<snapshot_->games.size()&&i<libraryCapacity_;++i)
+            if("game:"+std::to_string(snapshot_->games[i].id)==pendingLibraryFocus_){ui_.Focus(pendingLibraryFocus_);pendingLibraryFocus_.clear();break;}
+        if(snapshot_->revision!=seenRevision_){seenRevision_=snapshot_->revision;coverViewport_.clear();
             for(const auto& game:snapshot_->games)if(game.id==selected_.id){selected_.metadata=game.metadata;selected_.manualOverride=game.manualOverride;selected_.favorite=game.favorite;selected_.playSeconds=game.playSeconds;break;}}
         if(!snapshot_->error.empty()&&snapshot_->error!=libraryError_){libraryError_=snapshot_->error;notice_="LIBRARY: "+snapshot_->error;}}
     if(directoryJob_.valid()&&directoryJob_.wait_for(std::chrono::seconds(0))==std::future_status::ready){directory_=directoryJob_.get();
@@ -357,14 +396,24 @@ void Application::Update(){
 }
 
 void Application::Header(const std::string& title){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){
+        const auto& c=ui_.Context();const auto& p=ui_.Colors();
+        ui_.Rect({0,0,c.width,64},p.panel);ui_.Wordmark({20,16,180,30});
+        ui_.Text(title,232,18,c.compact?20:24,p.text,c.width-250);
+        ui_.Rect({0,63,c.width,1},p.border);return;
+    }
     ui_.Rect({0,0,640,41},Ui::Panel);
     if(branding_)ui_.Image(branding_.get(),{12,6,150,28},{60,90,210,39});
     else ui_.Text("DRIVONIX",12,9,20,Ui::Green);
     ui_.Text(title,180,11,16,Ui::White,440);
     ui_.Rect({0,39,213,2},Ui::Red);ui_.Rect({213,39,214,2},Ui::Green);ui_.Rect({427,39,213,2},Ui::Blue);
 }
-void Application::Footer(const std::string& text){ui_.Rect({0,337,640,23},Ui::Panel);ui_.Text(text,12,342,11,Ui::Muted,616);}
+void Application::Footer(const std::string& text){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){const auto& c=ui_.Context();const auto& p=ui_.Colors();
+        ui_.Rect({0,c.height-20,c.width,20},p.panel);ui_.Text(text,16,c.height-17,12,p.muted,c.width-32);return;}
+    ui_.Rect({0,337,640,23},Ui::Panel);ui_.Text(text,12,342,11,Ui::Muted,616);}
 void Application::DrawLibrary(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedLibrary();return;}
     Header("");
     ui_.Button("all","ALL",{181,8,38,23},true,query_.favoritesOnly||query_.recentOnly?Ui::Tone::Quiet:Ui::Tone::Accent);
     ui_.Button("favorites","FAV",{225,8,40,23},true,query_.favoritesOnly?Ui::Tone::Accent:Ui::Tone::Quiet);
@@ -404,6 +453,7 @@ void Application::DrawLibrary(){
     if(!notice_.empty())status=notice_;Footer(status);
 }
 void Application::DrawDetails(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedDetails();return;}
     Header("CHOOSE A VARIANT");
     ui_.Text(selected_.metadata.title.empty()?selected_.title:selected_.metadata.title,14,48,18,Ui::Green,610);
     const auto cover=covers_.find(std::to_string(selected_.id));
@@ -424,6 +474,7 @@ void Application::DrawDetails(){
     Footer(std::to_string(selected_.variants.size())+" VARIANTS  |  "+TimeText(selected_.playSeconds)+" PLAYED  |  LB/RB: PAGE");
 }
 void Application::DrawCopies(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedCopies();return;}
     Header("CHOOSE A COPY");
     if(variant_>=selected_.variants.size()){SetPage(Page::Details);return;}
     const auto& variant=selected_.variants[variant_];ui_.Text(variant.title,14,47,16,Ui::Green,612);
@@ -437,6 +488,7 @@ void Application::DrawCopies(){
     Footer("The chosen file keeps its existing battery save. No copies or saves are merged.");
 }
 void Application::DrawArchive(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedArchive();return;}
     Header("SELECT A GAME FROM ARCHIVE");ui_.Text(Storage::Filename(archivePath_),14,47,15,Ui::Green,610);
     if(inspecting_.valid())ui_.Text("READING ARCHIVE CONTENTS...",140,165,18,Ui::Muted);
     for(std::size_t i=archiveOffset_;i<members_.size()&&i<archiveOffset_+9;++i){const auto& member=members_[i];
@@ -446,6 +498,7 @@ void Application::DrawArchive(){
     ui_.Button("back","CANCEL",{528,306,98,24});Footer("A / ENTER: SELECT   B / ESC: CANCEL   LB/RB: PAGE");
 }
 void Application::DrawBrowser(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedBrowser();return;}
     Header(browserMode_==BrowserMode::Root?"ADD A ROM FOLDER":browserMode_==BrowserMode::Artwork?"CHOOSE A PNG COVER":"OPEN A GAME");
     ui_.Button("browserpath",browserPath_,{14,47,468,24},true,Ui::Tone::Quiet,12);
     ui_.Button("browserup","UP",{490,47,62,24});ui_.Button("browserhome","HOME",{560,47,66,24});
@@ -463,6 +516,7 @@ void Application::DrawBrowser(){
     ui_.Button("browsercancel","CANCEL",{530,303,96,26});Footer("A: OPEN FOLDER / SELECT FILE   B: BACK   LB/RB: PAGE");
 }
 void Application::DrawPaused(){
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedPaused();return;}
     Header("PAUSED");ui_.Rect({118,62,404,258},Ui::Panel,Ui::Border,2);
     ui_.Text(session_.Rom().title,141,76,16,Ui::Green,360);
     const char* ids[]={"resume","restart","settings","open","library","quit"};
@@ -470,20 +524,34 @@ void Application::DrawPaused(){
     for(unsigned i=0;i<6;++i)ui_.Button(ids[i],labels[i],{151,107+float(i)*33,338,28},true,i==0?Ui::Tone::Accent:i==5?Ui::Tone::Danger:Ui::Tone::Normal);
     Footer("R3 / ESC / F1: MENU   A: CONFIRM   B: RESUME   Battery saves are automatic");
 }
-void Application::Draw(const Input::UiActions& actions){
-    sfRenderWindow_clear(window_,Ui::Background);
+void Application::Draw(const Input::UiActions& actions,const std::string& capturePath){
+    if(page_==Page::Library&&(actions.up||actions.down||actions.left||actions.right))pendingLibraryFocus_.clear();
+    SyncAppearance();
+    ui_.Begin(window_,{});
+    const auto capacity=Ui::LibraryLayout(ui_.Context()).capacity;
+    if(capacity!=libraryCapacity_){
+        std::size_t anchor=query_.offset;
+        if(Starts(ui_.Focus(),"game:")&&snapshot_)for(std::size_t i=0;i<snapshot_->games.size();++i)
+            if("game:"+std::to_string(snapshot_->games[i].id)==ui_.Focus()){anchor+=i;break;}
+        if(Starts(ui_.Focus(),"game:"))pendingLibraryFocus_=ui_.Focus();
+        libraryCapacity_=capacity;query_.offset=(anchor/capacity)*capacity;RefreshQuery(false);
+    }
+    sfRenderWindow_clear(window_,ui_.Colors().background);
     const auto size=sfRenderWindow_getSize(window_);sfView* pixels=sfView_createFromRect({0,0,float(size.x),float(size.y)});
     sfRenderWindow_setView(window_,pixels);sfView_destroy(pixels);
     if(session_.Active())CRT::Draw({0,0,float(size.x),float(size.y)},settings_.integerFit,settings_.scale);
     const bool gameOnly=session_.Active()&&!session_.Paused()&&page_==Page::Library;
     if(!gameOnly){
         sfRectangleShape* shade=sfRectangleShape_create();sfRectangleShape_setSize(shade,{float(size.x),float(size.y)});
-        sfRectangleShape_setFillColor(shade,session_.Active()?sfColor{1,3,9,205}:Ui::Background);sfRenderWindow_drawRectangleShape(window_,shade,nullptr);sfRectangleShape_destroy(shade);
+        sfRectangleShape_setFillColor(shade,session_.Active()?sfColor{1,3,9,205}:ui_.Colors().background);sfRenderWindow_drawRectangleShape(window_,shade,nullptr);sfRectangleShape_destroy(shade);
     }
     ui_.Begin(window_,actions);const auto logical=ui_.ToLogical(pointerPixels_);
-    ui_.Begin(window_,actions,{logical.x,logical.y,mouseMoved_,mouseClicked_});
-    if(gameOnly){if(session_.Booting()){ui_.Rect({132,312,376,35},sfColor{4,8,15,220});ui_.Button("skipbios","A / ENTER: SKIP BOOT",{140,316,360,27},true,Ui::Tone::Accent);}}
-    else if(neutralResume_){ui_.Text("RELEASE CONTROLS TO RESUME",159,165,18,Ui::Green);}
+    ui_.Begin(window_,actions,{logical.x,logical.y,mouseMoved_,mouseClicked_,float(wheel_)});
+    if(gameOnly){if(session_.Booting()){
+        const auto& c=ui_.Context();const float x=(c.width-360)/2,y=c.height-44;
+        ui_.Rect({x-8,y-4,376,35},sfColor{4,8,15,220});ui_.Button("skipbios","A / ENTER: SKIP BOOT",{x,y,360,27},true,Ui::Tone::Accent);
+    }}
+    else if(neutralResume_){ui_.Text("RELEASE CONTROLS TO RESUME",(ui_.Context().width-322)/2,(ui_.Context().height-30)/2,18,ui_.Colors().green);}
     else switch(page_){
     case Page::Library:DrawLibrary();break;
     case Page::Details:DrawDetails();break;
@@ -497,15 +565,19 @@ void Application::Draw(const Input::UiActions& actions){
     case Page::Filters:DrawFilters();break;
     case Page::Match:DrawMatch();break;
     case Page::Error:DrawError();break;
+    case Page::Appearance:DrawAppearance();break;
     case Page::About:
+        if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedAbout();break;}
         Header("ABOUT DRIVONIX");ui_.Text("DRIVONIX",200,69,32,Ui::Green);ui_.Text(version_,200,109,14,Ui::Muted,410);
-        ui_.Wrap("Genesis / Mega Drive emulator\nOriginal emulator & BIOS: Julien Magnin\nOriginal unit tests: Okba Hamidi\n\nArtwork and game metadata: Libretro\nPixel fonts: GNU Unifont (OFL 1.1)\nLibrary storage: SQLite\n\nGame ROMs are not included.",{58,146,528,160},14,Ui::White);
+        ui_.Wrap("Genesis / Mega Drive emulator\nOriginal emulator & BIOS: Julien Magnin\nOriginal unit tests: Okba Hamidi\n\nArtwork and game metadata: Libretro\nFonts: Unifont (OFL) + Roboto (Apache 2.0)\nLibrary storage: SQLite\n\nGame ROMs are not included.",{58,146,528,160},14,Ui::White);
         ui_.Button("back","BACK",{490,305,128,26});Footer("DrivOnix - the original retro identity, with a controller-friendly frontend");break;
     case Page::Loading:
+        if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedLoading();break;}
         Header("PREPARING GAME");ui_.Text(Storage::Filename(pendingPath_),50,112,18,Ui::Green,540);
         ui_.Wrap("Reading cartridge and validating its battery save. Your current game stays paused until preparation succeeds.",{60,159,520,80},15,Ui::Muted);
         ui_.Button("back","CANCEL",{220,271,200,28});Footer("Preparation can be cancelled without replacing the active game.");break;
     case Page::SaveFailure:
+        if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedSaveFailure();break;}
         Header("BATTERY SAVE NEEDS ATTENTION");ui_.Wrap(errorMessage_,{35,70,570,110},14,Ui::Red);
         if(confirmDiscard_){ui_.Wrap("Exit without saving? Progress since the last successful battery save will be lost.",{50,188,540,57},16,Ui::White);
             ui_.Button("discardconfirmed","EXIT WITHOUT SAVING",{50,264,300,32},true,Ui::Tone::Danger);ui_.Button("discardcancel","CANCEL",{375,264,210,32});}
@@ -513,7 +585,9 @@ void Application::Draw(const Input::UiActions& actions){
             ui_.Button("discard","QUIT WITHOUT SAVING",{168,273,300,30},true,Ui::Tone::Danger);}
         Footer("The game remains paused and its pending battery memory is retained.");break;
     }
-    const auto action=ui_.Finish();sfRenderWindow_display(window_);
+    const auto action=ui_.Finish();
+    if(!capturePath.empty())Ui::CaptureWindow(window_,capturePath);
+    sfRenderWindow_display(window_);
     try{
         if(!action.empty())Dispatch(action);
         else if(actions.back&&!gameOnly&&page_!=Page::Capture)Back();
@@ -529,7 +603,7 @@ void Application::Back(){
     switch(page_){
     case Page::Library:if(session_.Active()&&session_.Paused())ResumeGame();break;
     case Page::Details:SetPage(Page::Library);RefreshQuery(false);break;
-    case Page::Copies:listOffset_=(variant_/9)*9;SetPage(Page::Details);ui_.Focus("variant:"+std::to_string(variant_));break;
+    case Page::Copies:listOffset_=(variant_/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);SetPage(Page::Details);ui_.Focus("variant:"+std::to_string(variant_));break;
     case Page::Archive:if(archiveCancel_)archiveCancel_->store(true);SetPage(session_.Active()?Page::Paused:Page::Library);break;
     case Page::Browser:{const auto parent=Storage::Parent(browserPath_);if(parent!=browserPath_&&browserPath_!="DRIVES")ReadDirectory(parent);else SetPage(browserBack_);break;}
     case Page::Paused:ResumeGame();break;
@@ -540,6 +614,7 @@ void Application::Back(){
     }
 }
 void Application::Dispatch(const std::string& action){
+    if(page_==Page::Library)pendingLibraryFocus_.clear();
     if(DispatchSettings(action))return;
     if(action=="back"){Back();return;}
     if(action=="quit"){RequestQuit();return;}
@@ -549,8 +624,8 @@ void Application::Dispatch(const std::string& action){
     }
     if(action=="search"){EditText("SEARCH GAMES",query_.search,[this](std::string value){query_.search=std::move(value);RefreshQuery();},Page::Library);return;}
     if(action=="filters"){SetPage(Page::Filters);return;}
-    if(action=="next"){if(snapshot_&&query_.offset+12<snapshot_->totalGames){query_.offset+=12;RefreshQuery(false);ui_.ClearFocus();}return;}
-    if(action=="previous"){if(query_.offset>=12){query_.offset-=12;RefreshQuery(false);ui_.ClearFocus();}return;}
+    if(action=="next"){if(snapshot_&&query_.offset+libraryCapacity_<snapshot_->totalGames){query_.offset+=libraryCapacity_;RefreshQuery(false);ui_.ClearFocus();}return;}
+    if(action=="previous"){if(query_.offset>=libraryCapacity_){query_.offset-=libraryCapacity_;RefreshQuery(false);ui_.ClearFocus();}return;}
     if(action=="retryindex"){index_.reset(new Library::Index(Storage::Join(dataDir_,"library.sqlite")));catalogSeen_=nullptr;ConfigureLibrary(true);RefreshQuery();return;}
     if(action=="scan"){index_->Scan();notice_.clear();return;}
     if(action=="cancelscan"){index_->CancelScan();notice_="SCAN CANCELLED - EXISTING ENTRIES RETAINED";return;}
@@ -565,13 +640,13 @@ void Application::Dispatch(const std::string& action){
         const auto& variant=selected_.variants[variant_];index_->SetPreferredVariant(selected_.id,variant.id);
         if(variant.copies.size()==1){Launch(variant.copies.front());return;}
         std::size_t choice=0;for(std::size_t i=0;i<variant.copies.size();++i)if(variant.copies[i].id==variant.preferredCopy)choice=i;
-        listOffset_=(choice/4)*4;SetPage(Page::Copies);ui_.Focus("copy:"+std::to_string(choice));return;
+        listOffset_=(choice/Capacity(Ui::ListKind::Copies))*Capacity(Ui::ListKind::Copies);SetPage(Page::Copies);ui_.Focus("copy:"+std::to_string(choice));return;
     }
     if(Starts(action,"copy:")){const auto i=std::size_t(std::stoull(action.substr(5)));if(variant_<selected_.variants.size()&&i<selected_.variants[variant_].copies.size())Launch(selected_.variants[variant_].copies[i]);return;}
-    if(action=="varnext"){if(listOffset_+9<selected_.variants.size())listOffset_+=9;ui_.ClearFocus();return;}
-    if(action=="varprev"){listOffset_=listOffset_>=9?listOffset_-9:0;ui_.ClearFocus();return;}
-    if(action=="copynext"){if(variant_<selected_.variants.size()&&listOffset_+4<selected_.variants[variant_].copies.size())listOffset_+=4;ui_.ClearFocus();return;}
-    if(action=="copyprev"){listOffset_=listOffset_>=4?listOffset_-4:0;ui_.ClearFocus();return;}
+    if(action=="varnext"){if(listOffset_+Capacity(Ui::ListKind::Variants)<selected_.variants.size())listOffset_+=Capacity(Ui::ListKind::Variants);ui_.ClearFocus();return;}
+    if(action=="varprev"){listOffset_=listOffset_>=Capacity(Ui::ListKind::Variants)?listOffset_-Capacity(Ui::ListKind::Variants):0;ui_.ClearFocus();return;}
+    if(action=="copynext"){if(variant_<selected_.variants.size()&&listOffset_+Capacity(Ui::ListKind::Copies)<selected_.variants[variant_].copies.size())listOffset_+=Capacity(Ui::ListKind::Copies);ui_.ClearFocus();return;}
+    if(action=="copyprev"){listOffset_=listOffset_>=Capacity(Ui::ListKind::Copies)?listOffset_-Capacity(Ui::ListKind::Copies):0;ui_.ClearFocus();return;}
     if(action=="favorite"){selected_.favorite=!selected_.favorite;index_->SetFavorite(selected_.id,selected_.favorite);return;}
     if(action=="metadata"){
         const auto catalog=metadata_->Snapshot();matches_=catalog?catalog->Search(selected_.title,50):std::vector<Metadata::Game>();listOffset_=0;SetPage(Page::Match);return;
@@ -582,14 +657,14 @@ void Application::Dispatch(const std::string& action){
         if(!members_[i].available){Error("Unsupported variant",members_[i].diagnostic.empty()?members_[i].status:members_[i].diagnostic,Page::Archive);return;}
         BeginLoad(archivePath_,members_[i].name,pendingCopy_);return;
     }
-    if(action=="arcnext"){if(archiveOffset_+9<members_.size())archiveOffset_+=9;ui_.ClearFocus();return;}
-    if(action=="arcprev"){archiveOffset_=archiveOffset_>=9?archiveOffset_-9:0;ui_.ClearFocus();return;}
+    if(action=="arcnext"){if(archiveOffset_+Capacity(Ui::ListKind::Archive)<members_.size())archiveOffset_+=Capacity(Ui::ListKind::Archive);ui_.ClearFocus();return;}
+    if(action=="arcprev"){archiveOffset_=archiveOffset_>=Capacity(Ui::ListKind::Archive)?archiveOffset_-Capacity(Ui::ListKind::Archive):0;ui_.ClearFocus();return;}
     if(action=="browserpath"){EditText("FOLDER PATH",browserPath_,[this](std::string value){ReadDirectory(Storage::Absolute(value));},Page::Browser);return;}
     if(action=="browserup"){ReadDirectory(Storage::Parent(browserPath_));return;}
     if(action=="browserhome"){ReadDirectory(Home());return;}
     if(action=="browsercancel"){SetPage(browserBack_);return;}
-    if(action=="browsernext"){if(browserOffset_+10<directory_.files.size())browserOffset_+=10;ui_.ClearFocus();return;}
-    if(action=="browserprev"){browserOffset_=browserOffset_>=10?browserOffset_-10:0;ui_.ClearFocus();return;}
+    if(action=="browsernext"){if(browserOffset_+Capacity(Ui::ListKind::Browser)<directory_.files.size())browserOffset_+=Capacity(Ui::ListKind::Browser);ui_.ClearFocus();return;}
+    if(action=="browserprev"){browserOffset_=browserOffset_>=Capacity(Ui::ListKind::Browser)?browserOffset_-Capacity(Ui::ListKind::Browser):0;ui_.ClearFocus();return;}
     if(action=="drives"){
 #ifdef _WIN32
         directory_.files.clear();directory_.error.clear();browserOffset_=0;browserPath_="DRIVES";

@@ -33,6 +33,7 @@
 namespace {
 using Frame=Frontend::AutomationFrame;
 using Clock=std::chrono::steady_clock;
+std::string requestedTheme="retronix";
 void Need(bool condition,const std::string& message) {
     if(!condition)throw std::runtime_error(message);
 }
@@ -52,6 +53,7 @@ void Buttons(Frame& frame,unsigned buttons) {
 }
 std::string Describe(const Frame& frame) {
     std::ostringstream out;out<<"page="<<frame.page<<", focus="<<frame.focus
+        <<", theme="<<frame.theme<<", window="<<frame.windowSize.x<<"x"<<frame.windowSize.y
         <<", active="<<frame.active<<", paused="<<frame.paused<<", frames="<<frame.frames;
     if(!frame.error.empty())out<<", error="<<frame.error;
     return out.str();
@@ -103,9 +105,13 @@ unsigned Route(const Frame& frame,const std::string& target) {
         const auto id=pending.front();pending.pop_front();const auto* item=Find(frame,id);
         for(unsigned direction=0;direction<4;++direction) {
             const Ui::ControlInfo* best=nullptr;float score=std::numeric_limits<float>::max();
+            const bool local=ys[direction]&&!item->panel.empty()&&std::any_of(frame.controls.begin(),frame.controls.end(),[&](const Ui::ControlInfo& candidate){
+                return candidate.enabled&&candidate.id!=id&&candidate.panel==item->panel&&
+                    ((candidate.area.top+candidate.area.height/2)-(item->area.top+item->area.height/2))*ys[direction]>0.5f;
+            });
             const auto x=item->area.left+item->area.width/2,y=item->area.top+item->area.height/2;
             for(const auto& candidate:frame.controls) {
-                if(!candidate.enabled||candidate.id==id)continue;
+                if(!candidate.enabled||candidate.id==id||(local&&candidate.panel!=item->panel))continue;
                 const auto dx=candidate.area.left+candidate.area.width/2-x;
                 const auto dy=candidate.area.top+candidate.area.height/2-y;
                 const auto forward=ys[direction]?dy*ys[direction]:dx*xs[direction];
@@ -137,7 +143,8 @@ public:
         Add((activate?"activate ":"focus ")+requested,[page,requested,activate,release=0](Frame& frame)mutable {
             if(release){--release;return false;}
             if(frame.page!=page)return false;
-            const auto target=Starts(requested,"prefix:")?First(frame,requested.substr(7)):requested;
+            auto target=Starts(requested,"prefix:")?First(frame,requested.substr(7)):requested;
+            if(Starts(requested,"last:")){target.clear();for(const auto& control:frame.controls)if(control.enabled&&Starts(control.id,requested.substr(5)))target=control.id;}
             if(target.empty()||!Find(frame,target))return false;
             if(frame.focus==target){if(activate)Buttons(frame,Controller::A);return true;}
             const auto button=Route(frame,target);if(button){Buttons(frame,button);release=2;}return false;
@@ -227,7 +234,7 @@ std::vector<unsigned char> CartridgeImage() {
 }
 void Seed(const std::string& config) {
     Settings::Values values;values.onlineMetadata=false;values.audioEnabled=false;
-    values.showBios=false;values.windowWidth=960;values.windowHeight=540;
+    values.showBios=false;values.theme=requestedTheme;values.windowWidth=960;values.windowHeight=540;
     Settings::Document document;document.Apply(values);const auto text=document.Serialize();
     Storage::AtomicWrite(config,std::vector<unsigned char>(text.begin(),text.end()));
 }
@@ -256,6 +263,7 @@ void GameScenario(const std::string& report,const std::string& config,const std:
     Script script("controller-session",report,0);
     std::uint64_t unfocusedFrames=0;
     script.Add("lose focus on completed cartridge load",[&](Frame& frame){
+        Need(frame.theme==requestedTheme,"Stored interface theme was not activated");
         if(!frame.active||frame.page!="library"||frame.paused)return false;
         Need(frame.frames==0,"Focus acceptance missed the first completed-load frame");
         unfocusedFrames=frame.frames;frame.input.focused=false;return true;
@@ -390,12 +398,107 @@ void ReopenScenario(const std::string& report,const std::string& config) {
     });
     Running(script);Pause(script);script.Select("paused","quit");script.Run(Options(config));
 }
+void AppearanceScenario(const std::string& report,const std::string& config,const std::string& rom){
+    const std::string alternative=requestedTheme=="modern"?"retronix_hd":"modern";
+    Script script("appearance-transactions",report);
+    Running(script);Pause(script);Freeze(script,"paused");
+    std::uint64_t frames=0,cycles=0;std::uint32_t pc=0;
+    script.Add("remember paused machine before appearance preview",[&](Frame& f){frames=f.frames;cycles=Genesis::MasterCycles();pc=M68k::GetCpuState().programCounter;return true;});
+    script.Select("paused","settings");script.Select("settings","s.appearance");script.Page("appearance","appearance.theme.modern");
+    for(const std::string theme:{"retronix_hd","modern","retronix"}){
+        script.Select("appearance","appearance.theme."+theme);
+        script.Add("preview is transient and does not run CPU",[&,theme](Frame& f){
+            Need(f.theme==theme,"Appearance preview did not activate selected renderer");
+            Need(f.active&&f.paused&&f.frames==frames&&Genesis::MasterCycles()==cycles&&M68k::GetCpuState().programCounter==pc,"Changing appearance advanced the paused machine");
+            Need(Settings::Document::Load(config).Get().theme==requestedTheme,"Theme preview wrote the settings file");return true;
+        });
+        script.Shot("appearance-preview-"+theme+".png");
+    }
+    script.Select("appearance","appearance.theme."+alternative);script.Select("appearance","appearance.scale.200");
+    script.Select("appearance","appearance.back");script.Press(Controller::B,"leave dirty theme settings");script.Page("unsaved","s.unsaved.stay");
+    script.Select("unsaved","s.unsaved.stay");script.Page("settings","s.cancel");
+    script.Add("stay retains theme draft",[&](Frame& f){Need(f.theme==alternative&&f.uiScale==200,"Keep editing lost the appearance preview");return true;});
+    script.Press(Controller::B,"discard appearance preview");script.Select("unsaved","s.unsaved.discard");script.Page("paused","settings");
+    script.Add("discard restores saved theme",[&](Frame& f){Need(f.theme==requestedTheme&&f.uiScale==100,"Discard did not restore saved appearance");Need(Settings::Document::Load(config).Get().theme==requestedTheme,"Discard wrote preview theme");return true;});
+    script.Select("paused","settings");script.Select("settings","s.appearance");script.Select("appearance","appearance.theme."+alternative);script.Select("appearance","appearance.scale.125");
+    script.Select("appearance","appearance.back");script.Select("settings","s.save");
+    script.Add("theme and size saved atomically",[&](Frame& f){const auto saved=Settings::Document::Load(config).Get();Need(saved.theme==alternative&&saved.uiScale==125&&f.theme==alternative,"Theme/size save did not persist");return true;});
+    script.Key("f11","enter fullscreen with saved theme");script.Neutral(5);
+    std::string fullscreenWindow;
+    script.Add("remember fullscreen window identity",[&](Frame& f){Need(Settings::Document::Load(config).Get().fullscreen,"Fullscreen preference did not apply");fullscreenWindow=f.windowId;return true;});
+    script.Select("settings","s.size.preset");script.Select("settings","s.save");
+    script.Add("window-size preferences keep fullscreen window",[&](Frame& f){Need(f.windowId==fullscreenWindow&&Settings::Document::Load(config).Get().fullscreen,"Saving windowed dimensions replaced the active fullscreen window");return true;});
+    script.Key("f11","leave fullscreen with deferred window size");script.Neutral(5);
+    script.Add("resize to compact native window",[](Frame& f){f.resize={640,360};return true;});script.Neutral(6);
+    script.Wait("small native window applied",[](const Frame& f){return f.windowSize.x==640&&f.windowSize.y==360;});
+    const char* bottom[]={"s.appearance","s.volume.down","s.bindings","s.root.add","s.open.cache","s.about.details"};
+    for(unsigned tab=0;tab<6;++tab){
+        script.Select("settings","s.tab."+std::to_string(tab));script.Select("settings",bottom[tab],false);
+        script.Shot("appearance-small-settings-"+std::to_string(tab)+".png");
+    }
+    script.Select("settings","s.about.details");script.Page("about","back");script.Shot("appearance-small-about.png");
+    script.Press(Controller::B,"return from credits");script.Select("settings","s.tab.0");script.Select("settings","s.width");script.Page("text","text.cancel");
+    script.Select("text","text.cancel",false);script.Shot("appearance-small-keyboard.png");script.Press(Controller::B,"cancel text editor");
+    script.Select("settings","s.tab.2");script.Select("settings","s.bindings");script.Page("bindings","bind.controller");
+    script.Select("bindings","bind.controller");script.Select("bindings","bind.action.6");script.Page("capture","capture.cancel");script.Neutral(5);
+    script.Press(Controller::A,"capture controller conflict on small screen");script.Page("conflict","capture.cancel");script.Shot("appearance-small-conflict.png");
+    script.Select("conflict","capture.cancel");script.Select("bindings","bind.done");script.Press(Controller::B,"return to paused game after compact settings");script.Page("paused","resume");
+    script.Add("compact settings and theme changes preserve machine",[&](Frame& f){Need(f.frames==frames&&Genesis::MasterCycles()==cycles&&M68k::GetCpuState().programCounter==pc,"Appearance/settings navigation advanced CPU");return true;});
+    script.Press(Controller::B,"resume after theme changes");script.Neutral(5);Running(script,frames+3);Pause(script);script.Select("paused","quit");script.Run(Options(config,rom));
+    Script reopen("appearance-reopen",report);reopen.Page("library","settings");
+    reopen.Add("saved appearance survives application reopen",[&](Frame& f){Need(f.theme==alternative&&f.uiScale==125,"Application reopen did not restore saved theme and size");return true;});
+    reopen.Shot("appearance-reopened-library.png");reopen.QuitFromLibrary();reopen.Run(Options(config));
+}
+
+void GalleryScenario(const std::string& report,const std::string& config,const std::string& directory){
+    Storage::EnsureDirectory(directory);const unsigned w=144,h=192;
+    for(unsigned i=0;i<24;++i){
+        const auto name=std::string("demo-")+(i<10?"0":"")+std::to_string(i);
+        Storage::AtomicWrite(Storage::Join(directory,name+".bin"),CartridgeImage());
+        std::vector<sfUint8> pixels(w*h*4);
+        for(unsigned y=0;y<h;++y)for(unsigned x=0;x<w;++x){const auto at=(y*w+x)*4;const bool band=y>110&&y<138;const bool bar=(x+y+i*7)%56<12;
+            pixels[at]=sfUint8(30+(i*37)%170+(band?30:0));pixels[at+1]=sfUint8(25+(i*53)%150+(bar?35:0));pixels[at+2]=sfUint8(35+(i*19)%155+(band?15:0));pixels[at+3]=255;}
+        auto* image=sfImage_createFromPixels(w,h,pixels.data());Need(image!=nullptr,"Cannot generate original cover fixture");
+        const auto art=Storage::Join(directory,name+".png");const bool saved=sfImage_saveToFile(image,art.c_str());sfImage_destroy(image);Need(saved,"Cannot write original cover fixture");
+    }
+    auto document=Settings::Document::Load(config);auto values=document.Get();values.windowWidth=1280;values.windowHeight=720;values.libraryRoots={{"gallery",directory,true,true}};document.Apply(values);document.Save();
+    {
+        Library::Index index(Storage::Join(Storage::DataDirectory(),"library.sqlite"));index.Configure({{directory,true,"gallery"}},true);
+        Library::Query query;query.limit=200;index.QueryPage(query);index.Barrier().get();auto snapshot=index.GetSnapshot();
+        Need(snapshot->ready&&snapshot->games.size()==24,"Gallery index did not discover all generated games");
+        const char* names[]={"Neon Harbor","Orbit Runner","Crystal Shore","Midnight Circuit","Sky Garden","Signal Valley"};
+        for(std::size_t i=0;i<snapshot->games.size();++i){const auto& game=snapshot->games[i];Library::Metadata metadata;
+            metadata.title=std::string(names[i%6])+" "+std::to_string(i+1)+(i==8?u8" · 日本語":i==12?u8" · Café 😀":"");
+            metadata.year=1990+int(i%8);metadata.genre=i%2?"Platform":"Action";
+            metadata.artworkPath=game.variants.front().copies.front().locator.path;metadata.artworkPath.resize(metadata.artworkPath.size()-4);metadata.artworkPath+=".png";
+            index.ApplyMetadata(game.id,metadata,true);if(i%5==0)index.SetFavorite(game.id,true);
+        }
+        index.Barrier().get();
+    }
+    Script script("responsive-gallery",report);script.Wait("generated cover library visible",[](const Frame& f){return f.page=="library"&&!First(f,"game:").empty();});script.Neutral(30);
+    script.Shot("gallery-"+requestedTheme+"-1280.png");script.Select("library","last:game:",false);
+    std::string focused;script.Add("remember focused game",[&](Frame& f){focused=f.focus;return true;});
+    for(auto size:{sfVector2u{640,360},sfVector2u{1920,1080},sfVector2u{3840,2160},sfVector2u{720,1000},sfVector2u{1280,720}}){
+        script.Add("resize responsive cover grid",[size](Frame& f){f.resize=size;return true;});script.Neutral(8);
+        script.Wait("resized cover grid keeps game focus",[&,size](const Frame& f){return f.windowSize.x==size.x&&f.windowSize.y==size.y&&f.focus==focused&&Find(f,focused);});
+        script.Shot("gallery-"+requestedTheme+"-"+std::to_string(size.x)+"x"+std::to_string(size.y)+".png");
+    }
+    script.Select("library","next");script.Neutral(8);script.Select("library","previous");script.Neutral(8);
+    script.Select("library","filters");script.Page("filters","filter.done");script.Shot("gallery-"+requestedTheme+"-filters.png");script.Select("filters","filter.done");
+    script.Select("library","prefix:game:");script.Page("details","metadata");script.Shot("gallery-"+requestedTheme+"-details.png");
+    script.Select("details","metadata");script.Page("match","match.back");script.Shot("gallery-"+requestedTheme+"-matching.png");script.Select("match","match.back");script.Press(Controller::B,"leave details gallery");
+    script.QuitFromLibrary();script.Run(Options(config));
+}
+
 }
 
 int main(int argc,char** argv) {
     try {
         std::string report;
-        for(int i=1;i<argc;++i){const std::string argument=argv[i];if(argument=="--report-dir"&&i+1<argc)report=argv[++i];else throw std::runtime_error("Usage: application_tests --report-dir DIRECTORY");}
+        for(int i=1;i<argc;++i){const std::string argument=argv[i];
+            if(argument=="--report-dir"&&i+1<argc)report=argv[++i];
+            else if(argument=="--theme"&&i+1<argc){requestedTheme=argv[++i];Ui::ParseTheme(requestedTheme);}
+            else throw std::runtime_error("Usage: application_tests --report-dir DIRECTORY [--theme retronix|retronix_hd|modern]");}
         Need(!report.empty(),"Usage: application_tests --report-dir DIRECTORY");report=Storage::Absolute(report);Storage::EnsureDirectory(report);
         const auto stamp=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         const auto run=Storage::Join(report,"run-"+std::to_string(stamp));Storage::EnsureDirectory(run);
@@ -403,7 +506,7 @@ int main(int argc,char** argv) {
         Storage::EnsureDirectory(romDirectory);Storage::EnsureDirectory(brokenDirectory);
         const auto rom=Storage::Join(romDirectory,u8"acceptance-é.bin"),broken=Storage::Join(brokenDirectory,"broken.bin");
         Storage::AtomicWrite(rom,CartridgeImage());Storage::AtomicWrite(broken,CartridgeImage());Storage::AtomicWrite(broken+".srm",{1});
-        const auto gameConfig=Storage::Join(run,"controller.ini"),libraryConfig=Storage::Join(run,"library.ini");Seed(gameConfig);Seed(libraryConfig);
+        const auto gameConfig=Storage::Join(run,"controller.ini"),libraryConfig=Storage::Join(run,"library.ini"),appearanceConfig=Storage::Join(run,"appearance.ini");Seed(gameConfig);Seed(libraryConfig);Seed(appearanceConfig);
         {
             const auto data=Storage::Join(run,"controller-user");Storage::EnsureDirectory(data);
             Environment linuxData("XDG_DATA_HOME",data),windowsData("LOCALAPPDATA",data);
@@ -414,7 +517,18 @@ int main(int argc,char** argv) {
             Environment linuxData("XDG_DATA_HOME",data),windowsData("LOCALAPPDATA",data);
             EmptyLibraryScenario(report,libraryConfig,romDirectory);ReopenScenario(report,libraryConfig);
         }
-        const std::string passed="Application Xbox acceptance passed: real controller routing, on-screen search, Unicode folder scan, favorites, binding conflict swap, INI persistence, CPU I/O, focus-loss pause, fullscreen draft retention, pause freeze, neutral resume, failed-switch preservation, SRAM, and reopen.\n";
+        {
+            const auto data=Storage::Join(run,"appearance-user");Storage::EnsureDirectory(data);
+            Environment linuxData("XDG_DATA_HOME",data),windowsData("LOCALAPPDATA",data);
+            AppearanceScenario(report,appearanceConfig,rom);
+        }
+        {
+            const auto data=Storage::Join(run,"gallery-user");Storage::EnsureDirectory(data);
+            Environment linuxData("XDG_DATA_HOME",data),windowsData("LOCALAPPDATA",data);
+            const auto galleryConfig=Storage::Join(run,"gallery.ini");Seed(galleryConfig);
+            GalleryScenario(report,galleryConfig,Storage::Join(run,"gallery-roms"));
+        }
+        const std::string passed="Application Xbox acceptance passed: real controller routing, on-screen search, Unicode folder scan, favorites, binding conflict swap, INI persistence, CPU I/O, focus-loss pause, fullscreen draft retention, pause freeze, neutral resume, failed-switch preservation, SRAM, appearance preview/save/discard/reopen, compact forms, and reopen.\n";
         Storage::AtomicWrite(Storage::Join(report,"result.txt"),std::vector<unsigned char>(passed.begin(),passed.end()));std::cout<<passed;return 0;
     }catch(const std::exception& error){std::cerr<<"Application acceptance: "<<error.what()<<'\n';return 1;}
 }

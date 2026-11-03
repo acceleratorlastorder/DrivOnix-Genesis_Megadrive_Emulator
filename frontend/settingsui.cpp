@@ -45,6 +45,7 @@ std::set<std::string> FilterValues(const std::shared_ptr<const Library::Snapshot
 }
 
 void Application::DrawSettings() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedSettings();return;}
     Header(page_==Page::Unsaved?"UNSAVED SETTINGS":"SETTINGS");
     if(page_==Page::Unsaved){
         ui_.Rect({58,78,524,210},Ui::Panel,Ui::Border,2);
@@ -70,7 +71,8 @@ void Application::DrawSettings() {
         ui_.Button("s.width","WINDOW WIDTH: "+std::to_string(draft_.windowWidth),{30,176,277,28});
         ui_.Button("s.height","WINDOW HEIGHT: "+std::to_string(draft_.windowHeight),{331,176,277,28});
         ui_.Wrap(draft_.integerFit?"Integer fit uses the largest whole-pixel game image that fits the window.":"Fixed scale keeps your chosen game pixel size. The image fits inside the available window.",{32,218,573,38},13,Ui::Muted);
-        ui_.Button("s.size.preset","NEXT WINDOW SIZE PRESET",{150,260,340,24},true,Ui::Tone::Quiet,12);break;
+        ui_.Button("s.size.preset","NEXT WINDOW SIZE PRESET",{30,260,277,24},true,Ui::Tone::Quiet,12);
+        ui_.Button("s.appearance","THEME & APPEARANCE",{331,260,277,24},true,Ui::Tone::Accent,12);break;
     case 1:
         ui_.Button("s.audio","HOST AUDIO: "+On(draft_.audioEnabled),{40,106,560,32});
         ui_.Text("VOLUME",42,153,16,Ui::White);ui_.Text(std::to_string(draft_.volume)+"%",513,153,16,Ui::Green,90);
@@ -95,8 +97,9 @@ void Application::DrawSettings() {
     case 3:{
         ui_.Text(std::to_string(draft_.libraryRoots.size())+" LIBRARY FOLDERS",30,92,12,Ui::Muted);
         ui_.Button("s.root.add","ADD FOLDER",{424,90,183,23},draft_.libraryRoots.size()<256,Ui::Tone::Accent,12);
-        if(listOffset_>=draft_.libraryRoots.size())listOffset_=draft_.libraryRoots.empty()?0:((draft_.libraryRoots.size()-1)/5)*5;
-        for(std::size_t i=listOffset_;i<draft_.libraryRoots.size()&&i<listOffset_+5;++i){
+        const auto count=Capacity(Ui::ListKind::Folders);
+        if(listOffset_>=draft_.libraryRoots.size())listOffset_=draft_.libraryRoots.empty()?0:((draft_.libraryRoots.size()-1)/count)*count;
+        for(std::size_t i=listOffset_;i<draft_.libraryRoots.size()&&i<listOffset_+count;++i){
             const auto& root=draft_.libraryRoots[i];const float y=121+float(i-listOffset_)*29;
             const auto prefix="s.root."+std::to_string(i)+".";
             ui_.Button(prefix+"path",root.path,{29,y,340,25},true,Ui::Tone::Quiet,11);
@@ -106,7 +109,7 @@ void Application::DrawSettings() {
         }
         if(draft_.libraryRoots.empty())ui_.Wrap("Choose a folder containing your ROMs or archives. Adding a folder does not move or change its files.",{90,151,460,74},16,Ui::Muted);
         ui_.Button("s.root.previous","< PREV",{30,269,90,19},listOffset_>0,Ui::Tone::Quiet,10);
-        ui_.Button("s.root.next","NEXT >",{129,269,90,19},listOffset_+5<draft_.libraryRoots.size(),Ui::Tone::Quiet,10);
+        ui_.Button("s.root.next","NEXT >",{129,269,90,19},listOffset_+count<draft_.libraryRoots.size(),Ui::Tone::Quiet,10);
         ui_.Text("SUB = SCAN SUBFOLDERS",341,272,10,Ui::Muted,266);break;
     }
     case 4:
@@ -136,6 +139,7 @@ void Application::DrawSettings() {
 }
 
 void Application::DrawBindings() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedBindings();return;}
     Header("PLAYER "+std::to_string(bindingPlayer_+1)+" GAME BINDINGS");
     if(page_==Page::Capture){
         ui_.Rect({55,76,530,221},Ui::Panel,Ui::Border,2);
@@ -205,6 +209,7 @@ void Application::FinishCapture(const Input::CaptureResult& result) {
 }
 
 void Application::DrawTextEditor() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedTextEditor();return;}
     Header(textTitle_);
     ui_.Rect({18,57,604,53},Ui::Panel,Ui::Green);
     auto visible=Ui::Canvas::Decode(textValue_);if(visible.size()>60){visible.erase(visible.begin(),visible.end()-60);visible.insert(visible.begin(),0x2026);}
@@ -230,6 +235,7 @@ void Application::DrawTextEditor() {
 }
 
 void Application::DrawFilters() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedFilters();return;}
     Header("LIBRARY FILTERS");
     ui_.Button("filter.region","REGION: "+(query_.region.empty()?std::string("ALL"):query_.region),{20,58,468,31});
     ui_.Button("filter.region.text","TYPE...",{500,58,120,31});
@@ -248,6 +254,7 @@ void Application::DrawFilters() {
 }
 
 void Application::DrawMatch() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedMatch();return;}
     Header("MATCH GAME INFORMATION");
     ui_.Button("match.search","SEARCH CATALOG...",{17,49,331,28},metadata_&&metadata_->Snapshot()!=nullptr,Ui::Tone::Accent);
     ui_.Button("match.refresh","REFRESH",{359,49,124,28},metadata_&&settings_.onlineMetadata);
@@ -255,18 +262,20 @@ void Application::DrawMatch() {
     ui_.Text(selected_.metadata.title.empty()?selected_.title:selected_.metadata.title,20,85,13,Ui::Green,600);
     if(!metadata_||!metadata_->Snapshot())ui_.Wrap(settings_.onlineMetadata?"The catalog is still loading. Refresh it or return to the library.":"No cached catalog is available. Enable online information in Settings to fetch it.",{70,150,500,92},16,Ui::Muted);
     else if(matches_.empty())ui_.Wrap("No matching catalog entries. Search another title, or keep the local game information.",{70,150,500,92},16,Ui::Muted);
-    if(listOffset_>=matches_.size())listOffset_=matches_.empty()?0:((matches_.size()-1)/6)*6;
-    for(std::size_t i=listOffset_;i<matches_.size()&&i<listOffset_+6;++i){const auto& match=matches_[i];
+    const auto count=Capacity(Ui::ListKind::Matches);
+    if(listOffset_>=matches_.size())listOffset_=matches_.empty()?0:((matches_.size()-1)/count)*count;
+    for(std::size_t i=listOffset_;i<matches_.size()&&i<listOffset_+count;++i){const auto& match=matches_[i];
         const auto detail=(match.region.empty()?"":(" ["+match.region+"]"))+(match.year?" "+std::to_string(match.year):"");
         ui_.Button("match.choose."+std::to_string(i),match.title+detail,{18,108+float(i-listOffset_)*29,604,25},true,Ui::Tone::Normal,12);
     }
     ui_.Button("match.previous","< PREV",{18,301,105,27},listOffset_>0);
-    ui_.Button("match.next","NEXT >",{134,301,105,27},listOffset_+6<matches_.size());
+    ui_.Button("match.next","NEXT >",{134,301,105,27},listOffset_+count<matches_.size());
     ui_.Button("match.auto","USE AUTOMATIC MATCHING",{300,301,322,27});
     Footer("Choosing an entry saves a manual information override; ROMs and battery saves stay separate.");
 }
 
 void Application::DrawError() {
+    if(ui_.Context().theme!=Ui::ThemeId::Retronix){DrawThemedError();return;}
     Header(errorTitle_.empty()?"SOMETHING NEEDS ATTENTION":errorTitle_);
     ui_.Rect({18,57,604,172},Ui::Panel,Ui::Red);
     ui_.Wrap(errorMessage_,{32,69,575,150},13,Ui::White);
@@ -295,10 +304,11 @@ bool Application::DispatchSettings(const std::string& action) {
         case Page::Settings:if(DraftDirty())SetPage(Page::Unsaved);else SetPage(settingsBack_);return true;
         case Page::Unsaved:if(pendingStop_=="settingsquit")pendingStop_.clear();SetPage(Page::Settings);return true;
         case Page::Bindings:SetPage(Page::Settings);return true;
+        case Page::Appearance:SetPage(Page::Settings);ui_.Focus("s.appearance");return true;
         case Page::Capture:capture_.Cancel();SetPage(Page::Bindings);return true;
         case Page::Conflict:SetPage(Page::Bindings);return true;
         case Page::Filters:SetPage(Page::Library);return true;
-        case Page::Match:listOffset_=(variant_/9)*9;SetPage(Page::Details);return true;
+        case Page::Match:listOffset_=(variant_/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);SetPage(Page::Details);return true;
         case Page::Error:
             if(!settingsError_.empty()&&!configDefaultsOnce_)ui_.Focus("error.defaults");
             else SetPage(errorBack_);
@@ -306,11 +316,22 @@ bool Application::DispatchSettings(const std::string& action) {
         default:return false;
         }
     }
+    if(Starts(action,"appearance.")){
+        if(action=="appearance.back"){SetPage(Page::Settings);ui_.Focus("s.appearance");return true;}
+        const auto previousTheme=draft_.theme;const auto previousScale=draft_.uiScale;
+        if(Starts(action,"appearance.theme."))draft_.theme=action.substr(17);
+        else if(Starts(action,"appearance.scale.")&&draft_.theme!="retronix")draft_.uiScale=Integer(action.substr(17),100,200);
+        else return true;
+        try{Settings::Validate(draft_);if(!PreviewAppearance()){draft_.theme=previousTheme;draft_.uiScale=previousScale;}}
+        catch(...){draft_.theme=previousTheme;draft_.uiScale=previousScale;throw;}
+        return true;
+    }
     if(Starts(action,"s.")){
-        if(Starts(action,"s.tab.")){settingsTab_=unsigned(SuffixIndex(action,"s.tab."));if(settingsTab_>5)settingsTab_=0;listOffset_=0;ui_.ClearFocus();}
+        if(Starts(action,"s.tab.")){settingsTab_=unsigned(SuffixIndex(action,"s.tab."));if(settingsTab_>5)settingsTab_=0;listOffset_=0;ui_.Focus("s.tab."+std::to_string(settingsTab_));}
         else if(action=="s.fullscreen")draft_.fullscreen=!draft_.fullscreen;
         else if(action=="s.fit")draft_.integerFit=!draft_.integerFit;
         else if(action=="s.bios")draft_.showBios=!draft_.showBios;
+        else if(action=="s.appearance"){appearanceError_.clear();SetPage(Page::Appearance);}
         else if(action=="s.scale.down")draft_.scale=std::max(1u,draft_.scale-1);
         else if(action=="s.scale.up")draft_.scale=std::min(8u,draft_.scale+1);
         else if(action=="s.width"||action=="s.height"){
@@ -332,8 +353,8 @@ bool Application::DispatchSettings(const std::string& action) {
             index=std::max(-1,std::min(7,index+(Ends(action,".up")?1:-1)));
         }else if(action=="s.bindings"){SetPage(Page::Bindings);}
         else if(action=="s.root.add"){OpenBrowser(BrowserMode::Root);}
-        else if(action=="s.root.previous"){if(listOffset_>=5)listOffset_-=5;ui_.ClearFocus();}
-        else if(action=="s.root.next"){if(listOffset_+5<draft_.libraryRoots.size())listOffset_+=5;ui_.ClearFocus();}
+        else if(action=="s.root.previous"){const auto count=Capacity(Ui::ListKind::Folders);if(listOffset_>=count)listOffset_-=count;else listOffset_=0;ui_.ClearFocus();}
+        else if(action=="s.root.next"){const auto count=Capacity(Ui::ListKind::Folders);if(listOffset_+count<draft_.libraryRoots.size())listOffset_+=count;ui_.ClearFocus();}
         else if(Starts(action,"s.root.")){
             const auto split=action.find('.',7);if(split==std::string::npos)return true;
             const auto index=Integer(action.substr(7,split-7),0,255);if(index>=draft_.libraryRoots.size())return true;
@@ -413,13 +434,13 @@ bool Application::DispatchSettings(const std::string& action) {
         RefreshQuery();return true;
     }
     if(Starts(action,"match.")){
-        if(action=="match.back"){listOffset_=(variant_/9)*9;SetPage(Page::Details);}
+        if(action=="match.back"){listOffset_=(variant_/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);SetPage(Page::Details);}
         else if(action=="match.search"){EditText("SEARCH CATALOG",selected_.metadata.title.empty()?selected_.title:selected_.metadata.title,[this](std::string value){const auto catalog=metadata_?metadata_->Snapshot():nullptr;matches_=catalog?catalog->Search(value,100):std::vector<Metadata::Game>{};listOffset_=0;},Page::Match);}
         else if(action=="match.refresh"){if(metadata_)metadata_->RefreshCatalog();notice_="CATALOG REFRESH REQUESTED";}
-        else if(action=="match.previous"){if(listOffset_>=6)listOffset_-=6;ui_.ClearFocus();}
-        else if(action=="match.next"){if(listOffset_+6<matches_.size())listOffset_+=6;ui_.ClearFocus();}
-        else if(action=="match.auto"){Library::Metadata automatic;automatic.artworkPath=selected_.metadata.artworkPath;if(index_)index_->ResetManualMetadata(selected_.id);selected_.metadata=automatic;selected_.manualOverride=false;matched_.erase(selected_.id);coverViewport_.clear();listOffset_=(variant_/9)*9;SetPage(Page::Details);RefreshQuery(false);}
-        else if(Starts(action,"match.choose.")){const auto index=SuffixIndex(action,"match.choose.");if(index<matches_.size()){ApplyMetadata(matches_[index],true);selected_.manualOverride=true;listOffset_=(variant_/9)*9;SetPage(Page::Details);RefreshQuery(false);}}
+        else if(action=="match.previous"){const auto count=Capacity(Ui::ListKind::Matches);if(listOffset_>=count)listOffset_-=count;else listOffset_=0;ui_.ClearFocus();}
+        else if(action=="match.next"){const auto count=Capacity(Ui::ListKind::Matches);if(listOffset_+count<matches_.size())listOffset_+=count;ui_.ClearFocus();}
+        else if(action=="match.auto"){Library::Metadata automatic;automatic.artworkPath=selected_.metadata.artworkPath;if(index_)index_->ResetManualMetadata(selected_.id);selected_.metadata=automatic;selected_.manualOverride=false;matched_.erase(selected_.id);coverViewport_.clear();listOffset_=(variant_/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);SetPage(Page::Details);RefreshQuery(false);}
+        else if(Starts(action,"match.choose.")){const auto index=SuffixIndex(action,"match.choose.");if(index<matches_.size()){ApplyMetadata(matches_[index],true);selected_.manualOverride=true;listOffset_=(variant_/Capacity(Ui::ListKind::Variants))*Capacity(Ui::ListKind::Variants);SetPage(Page::Details);RefreshQuery(false);}}
         return true;
     }
     if(Starts(action,"error.")){
@@ -427,7 +448,7 @@ bool Application::DispatchSettings(const std::string& action) {
         else if(action=="error.openconfig")Platform::OpenExternal(Storage::Parent(options_.configPath));
         else if(action=="error.install")Platform::OpenExternal("https://www.7-zip.org/");
         else if(action=="error.open")OpenBrowser(BrowserMode::Game);
-        else if(action=="error.settings"){draft_=settings_;settingsBack_=errorBack_;SetPage(Page::Settings);}
+        else if(action=="error.settings"){if(!EditingSettings()){draft_=settings_;settingsBack_=errorBack_;}SetPage(Page::Settings);}
         else if(action=="error.back")SetPage(errorBack_);
         else if(action=="error.retry"){const auto retry=retry_;SetPage(errorBack_);if(retry)retry();if(page_==Page::Unsaved&&!DraftDirty()){if(pendingStop_=="settingsquit"){pendingStop_.clear();RequestQuit();}else SetPage(settingsBack_);}}
         else if(action=="error.reload"){

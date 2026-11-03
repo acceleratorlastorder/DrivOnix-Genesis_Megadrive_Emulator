@@ -26,6 +26,50 @@
       "url": "https://unifoundry.com/LICENSE.txt",
       "sha256": "1e74cb82bf476843e97c2596297b04219b1a7e51f7238944a8c031cb9401fa87",
       "size": 24142
+    },
+    {
+      "path": "roboto-regular.ttf",
+      "sha256": "56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d",
+      "size": 515100,
+      "url": "https://raw.githubusercontent.com/googlefonts/roboto-2/38062f4b4a0be4346d07a928408da21602545e9e/src/hinted/Roboto-Regular.ttf",
+      "project": "Roboto",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "roboto-medium.ttf",
+      "sha256": "2879a5ecb7fbfa13a7fc3e2cdd7fecbf73aa45e91b541dfdfa2c442eed0aac21",
+      "size": 511592,
+      "url": "https://raw.githubusercontent.com/googlefonts/roboto-2/38062f4b4a0be4346d07a928408da21602545e9e/src/hinted/Roboto-Medium.ttf",
+      "project": "Roboto",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "roboto-license.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "size": 11357,
+      "url": "https://raw.githubusercontent.com/googlefonts/roboto-2/38062f4b4a0be4346d07a928408da21602545e9e/LICENSE",
+      "project": "Roboto",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "roboto-coverage.json",
+      "sha256": "ff2e1d381ee0b2b7395bea97fc08afaa2bc44d46f4b7118b8833c51f570baf00",
+      "size": 3405,
+      "generated_from": [
+        "roboto-regular.ttf",
+        "roboto-medium.ttf"
+      ],
+      "generator": "fontcmap.py",
+      "project": "Roboto",
+      "license": "Apache-2.0"
+    }
+  ],
+  "projects": [
+    {
+      "project": "Roboto",
+      "commit": "38062f4b4a0be4346d07a928408da21602545e9e",
+      "license": "Apache-2.0",
+      "coverage": "roboto-coverage.json"
     }
   ]
 }

@@ -32,6 +32,8 @@ struct Values {
     unsigned windowWidth = 1280;
     unsigned windowHeight = 720;
     bool integerFit = true;
+    std::string theme = "retronix";
+    unsigned uiScale = 100;
     std::vector<LibraryRoot> libraryRoots;
     Input::Profiles bindings = Input::DefaultProfiles();
 };

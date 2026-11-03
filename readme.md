@@ -156,6 +156,15 @@ matches; the library also works offline with placeholders, cached covers and
 local PNG artwork. Favorites, recent games, search, region/year/genre filters
 and remembered variant/copy choices are saved in the library database.
 
+**Three interface themes** are available in Settings → Display → Theme & Appearance:
+**Retronix** preserves the original pixel interface; **Retronix HD** keeps its
+familiar structure with smooth typography; **Modern** uses a dark desktop library
+with sidebar navigation and a responsive cover grid. Retronix is the default.
+Theme changes preview immediately, and Save & Apply keeps them in the INI;
+Discard restores the saved appearance. HD and Modern offer 100%, 125%, 150%
+and 200% interface sizing, independent of game scaling. Small windows limit
+the effective size so controls remain reachable. No restart is needed.
+
 **Settings** edits the same INI file used for manual configuration. It includes
 display/audio controls, ROM folders, online access and full keyboard/controller
 remapping for both players. Changes stay in a draft until **Save & Apply**;
