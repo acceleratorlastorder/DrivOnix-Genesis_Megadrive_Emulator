@@ -44,6 +44,8 @@ Display, audio and interface
   volume=100
 
   [interface]
+  theme=retronix
+  ui_scale=100
   show_bios=false
   window_width=1280
   window_height=720
@@ -56,6 +58,14 @@ using whole pixels; disable it to use the explicit scale. New profiles default
 to a 1280x720 window. Older files containing display.scale but no integer_fit or
 interface.window_width retain fixed scaling and get a compatible window size.
 The interface window dimensions must be within 640x360 and 7680x4320.
+
+Theme & Appearance on the Display tab previews retronix, retronix_hd or modern.
+Retronix keeps the original pixel interface. Retronix HD uses smooth text and
+native window layouts; Modern adds a sidebar and spacious cards. ui_scale accepts
+100, 125, 150 or 200 percent for the native themes. Small windows limit the
+effective scale to keep every control reachable, while retaining the preference
+for larger windows. Retronix ignores ui_scale. Theme previews stay in the draft:
+Save & Apply keeps them and Discard restores the saved appearance.
 
 show_bios opts into the existing boot sequence. Online metadata may be disabled
 without disabling local games. volume is host playback gain (0..100), and disabling

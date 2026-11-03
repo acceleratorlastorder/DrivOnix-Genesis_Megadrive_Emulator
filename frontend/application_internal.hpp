@@ -37,7 +37,7 @@ namespace Frontend { namespace Detail {
 using Clock=std::chrono::steady_clock;
 using Id=Library::Id;
 enum class Page { Library,Details,Copies,Archive,Browser,Paused,Settings,Bindings,Capture,
-                  Conflict,Text,Filters,Match,About,Error,Loading,Unsaved,SaveFailure };
+                  Conflict,Text,Filters,Match,About,Error,Loading,Unsaved,SaveFailure,Appearance };
 enum class BrowserMode { Root,Game,Artwork };
 struct TextureDelete{void operator()(sfTexture* value)const{if(value)sfTexture_destroy(value);}};
 using Texture=std::unique_ptr<sfTexture,TextureDelete>;
@@ -77,6 +77,13 @@ private:
     void DrawLibrary();void DrawDetails();void DrawCopies();void DrawArchive();
     void DrawBrowser();void DrawPaused();void DrawSettings();void DrawBindings();
     void DrawTextEditor();void DrawFilters();void DrawMatch();void DrawError();
+    void DrawAppearance();bool PreviewAppearance();void SyncAppearance();
+    void ApplyAppearance(const Settings::Values& values);bool SettingsPage(Page page) const;
+    const Ui::LayoutContext& Layout() const {return ui_.Context();}
+    std::size_t Capacity(Ui::ListKind kind) const {return Ui::ListCapacity(ui_.Context(),kind);}
+    void DrawThemedLibrary();void DrawThemedDetails();void DrawThemedCopies();void DrawThemedArchive();
+    void DrawThemedBrowser();void DrawThemedPaused();void DrawThemedAbout();void DrawThemedLoading();void DrawThemedSaveFailure();
+    void DrawThemedSettings();void DrawThemedBindings();void DrawThemedTextEditor();void DrawThemedFilters();void DrawThemedMatch();void DrawThemedError();
     void SetPage(Page page,bool resetFocus=true);
     void Back();
     void EditText(const std::string& title,const std::string& value,std::function<void(std::string)> finish,Page back);
@@ -149,6 +156,10 @@ private:
     const Metadata::Catalog* catalogSeen_=nullptr;
     std::string coverViewport_;
     uint64_t seenRevision_=0;
+    bool fontsReady_=false,smoothFontsReady_=false,appearancePreview_=false;
+    std::string appearanceError_;
+    std::size_t libraryCapacity_=12;
+    std::string pendingLibraryFocus_;
 };
 
 }}

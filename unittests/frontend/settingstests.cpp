@@ -207,6 +207,45 @@ void ParserTests() {
          "Existing settings did not receive controller defaults");
 }
 
+void AppearanceTests() {
+    using Settings::Document;
+    const Settings::Values defaults;
+    Need(defaults.theme=="retronix"&&defaults.uiScale==100,"Appearance defaults changed legacy behavior");
+    const auto generated=Document().Serialize();
+    Need(generated.find("theme=retronix\n")!=std::string::npos&&generated.find("ui_scale=100\n")!=std::string::npos,
+         "New profiles did not persist documented appearance defaults");
+    for(const auto* theme:{"retronix","retronix_hd","modern"})for(const auto scale:{100u,125u,150u,200u}){
+        const auto parsed=Document::Parse(std::string("[interface]\ntheme=")+theme+"\nui_scale="+std::to_string(scale));
+        Need(parsed.Get().theme==theme&&parsed.Get().uiScale==scale,"An advertised theme/scale combination did not parse");
+    }
+    const std::string original="; legacy profile\r\n[display]\r\nscale=3\r\nfullscreen=false\r\n"
+        "[audio]\r\nenabled=true\r\nvolume=100\r\n[input]\r\nenabled=true\r\ndeadzone=25\r\nplayer1=0\r\nplayer2=1\r\n";
+    auto legacy=Document::Parse(original);
+    Need(legacy.Get().theme=="retronix"&&legacy.Get().uiScale==100&&!legacy.Get().integerFit&&legacy.Get().windowWidth==960,
+         "Appearance defaults changed legacy scale migration");
+    Need(legacy.Serialize()==original,"Missing appearance defaults altered an existing INI");
+    auto values=legacy.Get();values.theme="modern";values.uiScale=150;legacy.Apply(values);
+    const auto modern=legacy.Serialize();const auto reloaded=Document::Parse(modern);
+    Need(reloaded.Get().theme=="modern"&&reloaded.Get().uiScale==150&&modern.find("; legacy profile\r\n")!=std::string::npos,
+         "An old profile could not save a theme without losing its comment/newline style");
+    auto styled=Document::Parse("[interface]\n Theme = \"RETRONIX_HD\" ; favorite\n ui_scale = 0125 # size\ncustom=keep\n");
+    Need(styled.Get().theme=="retronix_hd"&&styled.Get().uiScale==125,"Case-insensitive quoted themes or numeric formatting failed");
+    values=styled.Get();values.theme="modern";values.uiScale=200;styled.Apply(values);
+    const auto changed=styled.Serialize();
+    Need(changed.find(" Theme = modern ; favorite")!=std::string::npos&&changed.find(" ui_scale = 200 # size")!=std::string::npos&&
+         changed.find("custom=keep")!=std::string::npos,"Appearance edits lost comments or unknown keys");
+    for(const auto* bad:{"", "retro", "modern.exe", "retronix hd"})
+        Throws([&]{Document::Parse(std::string("; preceding line\n[interface]\ntheme=")+bad+"\n[future]\nvalue=1\n");},"line 3 (interface.theme)");
+    for(const auto* bad:{"0","99","101","126","175","201","100%","-1","1.5",""})
+        Throws([&]{Document::Parse(std::string("[interface]\nui_scale=")+bad+"\n[future]\nvalue=1\n");},"line 2 (interface.ui_scale)");
+    Throws([&]{Document::Parse("[interface]\ntheme=modern\nTHEME=retronix\n");},"duplicate");
+    Throws([&]{Document::Parse("[interface]\nui_scale=100\nUI_SCALE=150\n");},"duplicate");
+    values=styled.Get();values.theme="Modern";Throws([&]{styled.Apply(values);},"interface.theme");
+    Need(styled.Get().theme=="modern"&&styled.Get().uiScale==200,"Invalid theme Apply partially replaced live settings");
+    values=styled.Get();values.uiScale=175;Throws([&]{styled.Apply(values);},"interface.ui_scale");
+    Need(styled.Get().uiScale==200,"Invalid appearance size Apply changed live settings");
+}
+
 #ifndef _WIN32
 struct Mode {
     std::string path;
@@ -246,10 +285,12 @@ void FileTests(Fixture& fixture) {
     Need(!document.Exists() && document.Path() == path, "Missing settings did not produce bound defaults");
     document.Save();
     Need(document.Exists(), "First save did not establish document baseline");
-    auto values = document.Get(); values.scale = 4; values.volume = 19;
+    auto values = document.Get(); values.scale = 4; values.volume = 19; values.theme="retronix_hd";values.uiScale=150;
     document.Apply(values); document.Save(); document.Save();
     Need(Document::Load(path).Get().scale == 4 && Document::Load(path).Get().volume == 19,
          "Settings save/reload failed");
+    Need(Document::Load(path).Get().theme=="retronix_hd"&&Document::Load(path).Get().uiScale==150,
+         "Appearance did not survive atomic save and a fresh file load");
     const auto persisted = Read(path);
     auto stale = Document::Load(path);
     values = stale.Get(); values.volume = 35; stale.Apply(values);
@@ -278,7 +319,7 @@ void FileTests(Fixture& fixture) {
     const auto denied = fixture.File("denied/user.ini");
     auto protectedDocument = Document::Load(denied); protectedDocument.Save();
     const auto previous = Read(denied);
-    values = protectedDocument.Get(); values.volume = 23; protectedDocument.Apply(values);
+    values = protectedDocument.Get(); values.volume = 23;values.theme="modern";values.uiScale=200;protectedDocument.Apply(values);
 #ifdef _WIN32
     {
         ReadLock lock(denied);
@@ -304,6 +345,8 @@ void FileTests(Fixture& fixture) {
     NoTemporaryFiles(deniedDirectory);
     protectedDocument.Save();
     Need(Document::Load(denied).Get().volume == 23, "Retry after save failure did not persist changed settings");
+    Need(Document::Load(denied).Get().theme=="modern"&&Document::Load(denied).Get().uiScale==200,
+         "A failed settings write or its retry discarded pending appearance values");
 #ifndef _WIN32
     if (geteuid() != 0) {
         values = protectedDocument.Get(); values.volume = 79; protectedDocument.Apply(values);
@@ -325,6 +368,7 @@ int main(int argc, char** argv) {
     try {
         Need(argc == 2, "Expected settings fixture base directory");
         ParserTests();
+        AppearanceTests();
         Fixture fixture(argv[1]);
         FileTests(fixture);
         std::cout << "INI parsing, validation, comment preservation, Unicode paths, atomic save/reload and failure/retry checks passed\n";

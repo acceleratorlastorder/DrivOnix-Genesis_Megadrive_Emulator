@@ -4,7 +4,15 @@ Retro frontend
 Application owns the only desktop window and event loop. Its library, folder
 browser, archive choices, settings, text editor, remapping, loading and pause
 pages share the original BIOS logo, RGB accents and pinned Unifont glyphs.
-Canvas renders a 640x360 logical interface into a letterboxed, resizable window.
+Retronix renders its original 640x360 logical interface in a letterboxed window.
+Retronix HD and Modern render at native window resolution with smooth Roboto
+fonts and the existing verified Unicode fallback. Manual interface sizing is
+clamped to a usable logical minimum; it does not change game pixel scaling.
+ThemeSpec owns semantic colors/styles; LayoutContext owns dimensions and scale;
+PageLayout supplies cover rectangles and shared page capacities. Native text
+is rasterized at its final pixel size, without enlarging a low-resolution UI.
+Modern uses a sidebar on desktop-sized windows and compact navigation in small
+ones; forms use clipped, independently scrolling panels with focus auto-reveal.
 Spatial focus and hit testing use the same controls for keyboard, mouse and
 controller navigation. Missing covers use local retro placeholders.
 
@@ -58,3 +66,16 @@ Linux, verifies packaged asset/license hashes, and runs Linux sanitizers.
 No ROM collection, commercial artwork, save states, cheats, netplay or per-game
 settings profiles are included. CPU/video compatibility limits remain those
 of the console modules; a new frontend does not certify every Mega Drive game.
+
+Appearance previews are settings drafts. Save applies the same validated INI
+transaction as all other preferences; discard restores the saved theme and
+interface size. Resource loading is staged before changing renderer state.
+Missing smooth fonts leave Retronix usable and report the preview failure.
+Responsive query, draw and paging capacities share one calculation, and a
+pending focus anchor restores the selected game across asynchronous re-queries.
+Scroll panels prefer their own rows on vertical navigation, allow horizontal
+movement across panels, and reject pointer hits outside their visible viewport.
+The regression driver runs each theme, covers preview/save/discard/reopen while
+a game remains paused, and exercises compact forms and generated-art libraries
+at 640x360, 1080p, 4K and portrait sizes. Native Windows/Linux CI, sanitizers and
+installed-package checks include all fonts, coverage maps and license bytes.

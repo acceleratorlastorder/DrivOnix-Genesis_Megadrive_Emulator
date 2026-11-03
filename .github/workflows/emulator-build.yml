@@ -59,7 +59,9 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           xvfb-run -a -s "-screen 0 1280x1024x24" python3 unittests/frontend/test_linux_frontend.py --emulator /usr/bin/drivonix --report-dir build/linux-frontend-report
-          xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/application_tests --report-dir build/application-report
+          xvfb-run -a -s "-screen 0 3840x2160x24" ./build/emulator/application_tests --report-dir build/application-report
+          xvfb-run -a -s "-screen 0 3840x2160x24" ./build/emulator/application_tests --theme retronix_hd --report-dir build/application-report-hd
+          xvfb-run -a -s "-screen 0 3840x2160x24" ./build/emulator/application_tests --theme modern --report-dir build/application-report-modern
           xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/ui_tests assets/fonts build/ui-report
           xvfb-run -a -s "-screen 0 1280x1024x24" ./build/emulator/display_settings_tests
       - name: Exercise the real metadata HTTPS transport
@@ -69,7 +71,9 @@ jobs:
           cmake -S . -B build/frontend-sanitized -DCMAKE_BUILD_TYPE=Debug -DDRIVONIX_SANITIZERS=ON
           cmake --build build/frontend-sanitized --parallel 2
           ctest --test-dir build/frontend-sanitized --output-on-failure
-          ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 1280x1024x24" ./build/frontend-sanitized/application_tests --report-dir build/application-sanitized-report
+          ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 3840x2160x24" ./build/frontend-sanitized/application_tests --report-dir build/application-sanitized-report
+          ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 3840x2160x24" ./build/frontend-sanitized/application_tests --theme retronix_hd --report-dir build/application-sanitized-hd
+          ALSOFT_DRIVERS=null LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 3840x2160x24" ./build/frontend-sanitized/application_tests --theme modern --report-dir build/application-sanitized-modern
           LIBGL_ALWAYS_SOFTWARE=1 ASAN_OPTIONS=detect_leaks=0 xvfb-run -a -s "-screen 0 1280x1024x24" ./build/frontend-sanitized/ui_tests assets/fonts build/ui-sanitized-report
       - name: Save verified Linux packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -88,7 +92,11 @@ jobs:
           path: |
             build/linux-frontend-report/
             build/application-report/
+            build/application-report-hd/
+            build/application-report-modern/
             build/application-sanitized-report/
+            build/application-sanitized-hd/
+            build/application-sanitized-modern/
             build/ui-report/
             build/z80-report/
           if-no-files-found: error
@@ -144,4 +152,6 @@ jobs:
           name: drivonix-windows-evidence
           path: |
             build/emulator/application-report/
+            build/emulator/application-report-hd/
+            build/emulator/application-report-modern/
             build/windows-install-report/

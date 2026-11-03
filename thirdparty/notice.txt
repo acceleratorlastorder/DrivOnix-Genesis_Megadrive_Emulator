@@ -42,3 +42,8 @@ dependency notices. windows-notices/manifest.json records the exact source
 versions, upstream notice URLs and SHA-256 hashes used by the Windows build
 helper. That helper checks these files before copying them into the package's
 share/drivonix/licenses/sfml-dependencies directory.
+
+Smooth interface fonts: Roboto Regular/Medium (Google Fonts roboto-2),
+pinned at commit 38062f4b4a0be4346d07a928408da21602545e9e.
+Apache License 2.0 and exact provenance/hashes are included in assets/fonts/.
+Unicode fallback retains the original GNU Unifont assets and license.

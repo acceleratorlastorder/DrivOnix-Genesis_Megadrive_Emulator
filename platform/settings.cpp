@@ -28,7 +28,8 @@ using Key = std::pair<std::string,std::string>;
 using CanonicalValues = std::map<Key,std::string>;
 const Key Scalars[]={{"display","scale"},{"display","fullscreen"},{"audio","enabled"},{"audio","volume"},
     {"input","enabled"},{"input","deadzone"},{"input","player1"},{"input","player2"},
-    {"interface","show_bios"},{"metadata","online"},{"interface","window_width"},{"interface","window_height"},{"display","integer_fit"}};
+    {"interface","show_bios"},{"metadata","online"},{"interface","window_width"},{"interface","window_height"},{"display","integer_fit"},
+    {"interface","theme"},{"interface","ui_scale"}};
 bool Space(char c) {return c==' '||c=='\t'||c=='\r'||c=='\f'||c=='\v';}
 std::string Trim(const std::string& text) {
     std::size_t first=0,last=text.size();while(first<last&&Space(text[first]))++first;while(last>first&&Space(text[last-1]))--last;
@@ -104,7 +105,8 @@ CanonicalValues Canonical(const Settings::Values& v) {
     const auto boolean=[](bool b){return b?std::string("true"):std::string("false");};
     const std::string values[]={std::to_string(v.scale),boolean(v.fullscreen),boolean(v.audioEnabled),std::to_string(v.volume),
         boolean(v.controllersEnabled),std::to_string(v.controllerDeadzone),std::to_string(v.controller1),std::to_string(v.controller2),
-        boolean(v.showBios),boolean(v.onlineMetadata),std::to_string(v.windowWidth),std::to_string(v.windowHeight),boolean(v.integerFit)};
+        boolean(v.showBios),boolean(v.onlineMetadata),std::to_string(v.windowWidth),std::to_string(v.windowHeight),boolean(v.integerFit),
+        v.theme,std::to_string(v.uiScale)};
     for(unsigned i=0;i<sizeof(Scalars)/sizeof(Scalars[0]);++i)result.emplace(Scalars[i],values[i]);
     for(unsigned player=0;player<2;++player)for(const auto device:{Input::Device::Keyboard,Input::Device::Controller}) {
         const auto section=std::string(device==Input::Device::Keyboard?"keyboard.player":"controller.player")+std::to_string(player+1);
@@ -261,6 +263,10 @@ void Validate(const Values& values) {
         throw std::invalid_argument("input.player1 and input.player2 must be between -1 and 7");
     if(values.windowWidth<640||values.windowWidth>7680||values.windowHeight<360||values.windowHeight>4320)
         throw std::invalid_argument("interface.window_width/height must be within 640x360 and 7680x4320");
+    if(values.theme!="retronix"&&values.theme!="retronix_hd"&&values.theme!="modern")
+        throw std::invalid_argument("interface.theme must be retronix, retronix_hd or modern");
+    if(values.uiScale!=100&&values.uiScale!=125&&values.uiScale!=150&&values.uiScale!=200)
+        throw std::invalid_argument("interface.ui_scale must be 100, 125, 150 or 200");
     if(values.libraryRoots.size()>256)throw std::invalid_argument("At most 256 library roots are supported");
     std::set<std::string> ids;
     for(const auto& root:values.libraryRoots) {
@@ -330,6 +336,14 @@ Document Document::Parse(const std::string& text) {
                     case 10:result.values_.windowWidth=Number(value,number,fullKey);break;
                     case 11:result.values_.windowHeight=Number(value,number,fullKey);break;
                     case 12:result.values_.integerFit=Boolean(value,number,fullKey);break;
+                    case 13:result.values_.theme=Lower(value);
+                        if(result.values_.theme!="retronix"&&result.values_.theme!="retronix_hd"&&result.values_.theme!="modern")
+                            ParseError(number,fullKey,"must be retronix, retronix_hd or modern");
+                        break;
+                    case 14:result.values_.uiScale=Number(value,number,fullKey);
+                        if(result.values_.uiScale!=100&&result.values_.uiScale!=125&&result.values_.uiScale!=150&&result.values_.uiScale!=200)
+                            ParseError(number,fullKey,"must be 100, 125, 150 or 200");
+                        break;
                     default:
                         if(RootSection(section)) {
                             const auto id=section.substr(8);auto root=std::find_if(result.values_.libraryRoots.begin(),result.values_.libraryRoots.end(),[&](const LibraryRoot& r){return r.id==id;});
